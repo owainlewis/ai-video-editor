@@ -54,7 +54,7 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   mkdirSync(work, { recursive: true });
   for (const f of readdirSync(work)) rmSync(join(work, f), { recursive: true });
   const parts = sections(r);
-  const files: { file: string; s: Section }[] = [];
+  const files: { file: string; s: Section; key: string }[] = [];
   for (const [k, s] of parts.entries()) {
     onStage(`Rendering graphics ${k + 1}/${parts.length}`);
     const props = join(work, `props-${k}.json`);
@@ -63,7 +63,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const from = Math.round(s.start * fps), to = Math.max(from, Math.round(s.end * fps) - 1);
     run("npx", ["remotion", "render", "effects/index.ts", comp.id, file, `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
       ...(s.alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])], { env: { REEL_PRORES: "1" }, log });
-    files.push({ file, s: { ...s, start: from / fps } });
+    // The cut-out is found by the section's own times; the overlay starts on the original's frame.
+    files.push({ file, s: { ...s, start: from / fps }, key: s.behind ? matteKey(s.start, s.end) : "" });
   }
 
   // Each section is a timed input laid over the original from its first frame; outside its time it
@@ -74,12 +75,11 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const chain: string[] = [];
   let n = 1, v = 0;
   const window = (s: Section) => `enable='between(t,${s.start.toFixed(3)},${(s.end + 1 / fps).toFixed(3)})'`;
-  for (const { file, s } of files) {
+  for (const { file, s, key } of files) {
     inputs.push("-itsoffset", s.start.toFixed(6), "-i", file);
     chain.push(`[v${v}][${n++}:v]overlay=eof_action=pass:${window(s)}[v${v + 1}]`);
     v++;
     if (s.behind) {
-      const key = matteKey(s.start, s.end);
       const length = (s.end - s.start).toFixed(4);
       inputs.push("-ss", s.start.toFixed(6), "-t", length, "-itsoffset", s.start.toFixed(6), "-i", original);
       inputs.push("-itsoffset", s.start.toFixed(6), "-i", mattePaths(dir, key).mask);
