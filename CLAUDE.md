@@ -39,7 +39,7 @@ Never render the whole video while editing. Owain exports from the editor when h
 - Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a cinematic `title`; no lower thirds, Owain does not like them, unless he asks), `media` (the visual alone, briefly).
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
-- `behind`: one long word (6 to 14 letters) across the room at head height, with Owain cut out in front of it. `{ "layout": "behind", "visual": { "kind": "title", "text": "correctness" } }`. Use it rarely, for the one word a section is about. The cut-out is made automatically (or `npm run studio -- mattes <slug>`); it must be on camera.
+- `behind` exists but Owain did not like it (2026-10-24): never use or suggest it unless he asks.
 
 ## B-roll
 

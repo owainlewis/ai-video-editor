@@ -5,6 +5,7 @@ Newest first. "Where" says what enforces it.
 
 | Date | Note | Rule | Where |
 | --- | --- | --- | --- |
+| 2026-10-24 | "I don't think I like it" (the behind-me word, after seeing the demo) | Do not use or suggest `behind` graphics unless Owain asks. The layout stays in the code for now. | `CLAUDE.md` |
 | 2026-10-24 | "I actually don't like the 12x because there's a lot of noise around it - it would work for a longer word I think that spans the screen." | Behind graphics are one long word (6 to 14 letters) spanning the frame at head height, above the microphone, with no label. Owain's head covers a letter or two. `check` warns on short words and phrases. | `engine/resolve.ts`, `effects/Wide.tsx` |
 | 2026-10-24 | "Build the behind-me effect into Studio as a graphic option, with the export handling it." | A `behind` layout (YouTube): the speaker is cut out with Apple Vision person segmentation for just that section (cached in build/behind/), the word goes between the background and him. The player uses a transparent cut-out; the export cuts him out of the original 4K with the matte. | `media/matte.ts`, `media/matte.swift`, `effects/Wide.tsx`, `media/export.ts` |
 | 2026-10-24 | "These are nice but perhaps a little sparse/plain/dull." (16:9 graphics drawn at reel sizes, small in a big empty panel) | On 16:9, side and full-frame graphics lay out at the 900 px they are designed for and scale up to fill the panel, so type and lines grow with it. | `effects/Wide.tsx` |
