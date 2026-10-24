@@ -5,6 +5,7 @@ export type Issue = { level: "error" | "warn"; message: string };
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
 export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
+export type LibraryClip = { id: string; duration: number; description: string; tags: string[]; thumb: string };
 export type Version = { n: number; at: string; by: string };
 export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status };
 export type Project = {
@@ -23,6 +24,7 @@ export type Project = {
 };
 export type Event =
   | { type: "plan" | "status"; slug: string }
+  | { type: "library"; slug?: undefined }
   | { type: "chat"; slug: string; message: ChatMessage | { role: "status"; text: string } };
 
 const json = async <T,>(res: Response): Promise<T> => {
@@ -33,6 +35,7 @@ const json = async <T,>(res: Response): Promise<T> => {
 
 export const api = {
   projects: () => fetch("/api/projects").then((r) => json<ProjectSummary[]>(r)),
+  library: () => fetch("/api/library").then((r) => json<{ busy: boolean; clips: LibraryClip[] }>(r)),
   project: (slug: string) => fetch(`/api/projects/${slug}`).then((r) => json<Project>(r)),
   upload: (file: File, onProgress: (f: number) => void, to = "/api/upload", params: Record<string, string> = {}) =>
     new Promise<{ slug?: string; path?: string }>((ok, fail) => {

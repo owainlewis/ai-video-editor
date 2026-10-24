@@ -40,6 +40,15 @@ Never render the whole video while editing. Owain exports from the editor when h
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
 
+## B-roll
+
+Owain's own shots live in one library for every project: `library/broll/` (shots in `.clips/`, described in `index.json`).
+
+- Find shots with `npm run studio -- broll <words>` (searches descriptions and tags).
+- Use one with `{ "kind": "video", "src": "broll:<id>" }`; it is copied into the project when the plan resolves. Each shot once per video.
+- Put b-roll on human or abstract lines, never as evidence for a claim.
+- New clips added in the editor are split into shots and described automatically. To describe any left blank: `npm run studio -- broll describe`.
+
 ## Notes from Owain
 
 When Owain asks for a change in the chat panel you get the project, the selected section (times and the words said in it) or the playhead, and his note.

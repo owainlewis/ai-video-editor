@@ -8,6 +8,7 @@ import { chunkWords, lintOnCamera, lintShots, resolveShots, sfxEvents } from "..
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
+import { useClip } from "./broll.ts";
 import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
 
 export type Issue = { level: "error" | "warn"; message: string };
@@ -35,6 +36,15 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
 
+  // Library shots ("broll:<id>") are copied into the project so the renderer can serve them.
+  for (const s of shots) {
+    const v = s.visual;
+    if (v?.kind === "video" && v.src.startsWith("broll:")) {
+      const rel = useClip(dir, v.src.slice(6));
+      if (!rel) issues.push({ level: "error", message: `no b-roll ${v.src} in the library` });
+      else s.visual = { ...v, src: rel };
+    }
+  }
   const seen = new Set<string>();
   for (const s of shots) {
     const v = s.visual;

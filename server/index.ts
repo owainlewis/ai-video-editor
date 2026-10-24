@@ -14,6 +14,7 @@ import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { snapshot, undo, versions } from "./history.ts";
 import { trashProject } from "./trash.ts";
 import { listAssets, saveAsset } from "./assets.ts";
+import { BROLL, loadLibrary } from "../media/broll.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -38,9 +39,11 @@ const body = (req: IncomingMessage) =>
     });
   });
 
-function serveFile(projects: string, req: IncomingMessage, res: ServerResponse): boolean {
-  const file = normalize(join(projects, decodeURIComponent((req.url ?? "").split(/[?#]/)[0])));
-  if (!file.startsWith(projects + sep) || !existsSync(file) || !statSync(file).isFile()) return false;
+function serveFile(root: string, req: IncomingMessage, res: ServerResponse, prefix = ""): boolean {
+  const path = decodeURIComponent((req.url ?? "").split(/[?#]/)[0]);
+  if (!path.startsWith(prefix + "/")) return false;
+  const file = normalize(join(root, path.slice(prefix.length)));
+  if (!file.startsWith(root + sep) || !existsSync(file) || !statSync(file).isFile()) return false;
   const size = statSync(file).size;
   const type = TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
   const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range ?? "");
@@ -88,6 +91,9 @@ export async function startServer(port = 4747) {
       broadcast({ type: "plan", slug });
     }, 150));
   };
+  let libraryBusy = false;
+  mkdirSync(BROLL, { recursive: true });
+  watch(BROLL, (_e, file) => String(file) === "index.json" && broadcast({ type: "library" }));
   watch(projects, { recursive: true }, (_e, file) => {
     const parts = String(file ?? "").split(/[/\\]/);
     if (parts.length !== 2) return;
@@ -129,6 +135,27 @@ export async function startServer(port = 4747) {
       mkdirSync(join(projects, slug), { recursive: true });
       job(slug, ["ingest", file, "--slug", slug, ...(canvas ? ["--canvas", canvas] : []), ...(title ? ["--title", title] : [])]);
       return send(res, 200, { slug });
+    }
+
+    // The shared b-roll library. Adding a clip splits it into shots and has Claude describe them,
+    // in a detached job; editors hear "library" when the index changes.
+    if (parts[0] === "library") {
+      if (req.method === "POST") {
+        const clean = (url.searchParams.get("name") ?? "clip.mp4").replace(/[^\w.-]+/g, "-");
+        if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(clean)) return send(res, 400, { error: "only video clips go in the b-roll library" });
+        mkdirSync(BROLL, { recursive: true });
+        let file = join(BROLL, clean);
+        for (let i = 2; existsSync(file); i++) file = join(BROLL, clean.replace(/(\.\w+)$/, `-${i}$1`));
+        await new Promise<void>((ok, fail) => req.pipe(createWriteStream(file)).on("finish", ok).on("error", fail));
+        const log = openSync(join(BROLL, "job.log"), "a");
+        libraryBusy = true;
+        broadcast({ type: "library" });
+        const p = spawn("npx", ["tsx", "cli.ts", "broll", "index"], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+        p.on("exit", () => ((libraryBusy = false), broadcast({ type: "library" })));
+        p.unref();
+        return send(res, 200, { ok: true });
+      }
+      return send(res, 200, { busy: libraryBusy, clips: loadLibrary().map((c) => ({ ...c, thumb: `library/${c.id}-thumb.jpg` })) });
     }
 
     if (parts[0] === "projects" && !parts[1]) {
@@ -217,6 +244,7 @@ export async function startServer(port = 4747) {
   server.on("request", (req, res) => {
     if (req.url?.startsWith("/api/"))
       return void api(req, res).catch((e) => send(res, typeof e.code === "number" ? e.code : 500, { error: String(e.message ?? e) }));
+    if (serveFile(join(BROLL, ".clips"), req, res, "/library")) return;
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });

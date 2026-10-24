@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Word } from "../engine/schema";
-import { api, type Asset, clock } from "./api";
+import { api, type Asset, clock, type LibraryClip } from "./api";
 import { toSentences } from "./Timeline";
 
 // The left panel: the project's assets (drop b-roll and images in; click one to mention it in a
@@ -10,7 +10,7 @@ export const Library: React.FC<{
   assets: Asset[];
   words: Word[];
   time: number;
-  onUse: (a: Asset) => void;
+  onUse: (ref: string) => void;
   onSeek: (t: number) => void;
 }> = ({ slug, assets, words, time, onUse, onSeek }) => {
   const [tab, setTab] = useState<"assets" | "script">("assets");
@@ -18,6 +18,27 @@ export const Library: React.FC<{
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState("");
   const sentences = useMemo(() => toSentences(words), [words]);
+  const [clips, setClips] = useState<LibraryClip[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const load = () => api.library().then((l) => (setClips(l.clips), setBusy(l.busy))).catch(() => {});
+    load();
+    return api.events((e) => e.type === "library" && load());
+  }, []);
+  const shown = clips.filter((c) => !query.trim() || query.toLowerCase().split(/\s+/).every((w) => `${c.id} ${c.description} ${c.tags.join(" ")}`.toLowerCase().includes(w)));
+  const addToLibrary = async (files: FileList | null) => {
+    setError("");
+    for (const f of Array.from(files ?? [])) {
+      setUploading(f.name);
+      try {
+        await api.upload(f, () => {}, "/api/library");
+      } catch (e) {
+        setError(String((e as Error).message));
+      }
+    }
+    setUploading(null);
+  };
 
   const add = async (files: FileList | null) => {
     setError("");
@@ -53,21 +74,39 @@ export const Library: React.FC<{
             add(e.dataTransfer.files);
           }}
         >
+          <h4>This project</h4>
           <label className="add">
             <input type="file" accept="video/*,image/*" multiple hidden onChange={(e) => add(e.target.files)} />
-            {uploading ? `Adding ${uploading}…` : "Drop b-roll or images here, or click to add"}
+            {uploading ? `Adding ${uploading}…` : "Drop clips or images for this project"}
           </label>
           {error && <p className="error small">{error}</p>}
           <div className="grid">
             {assets.map((a) => (
-              <button key={a.path} className="asset" onClick={() => onUse(a)} title={`Mention ${a.path} in your note`}>
+              <button key={a.path} className="asset" onClick={() => onUse(a.path)} title={`Mention ${a.path} in your note`}>
                 <img src={`/${a.thumb}`} alt="" loading="lazy" />
                 <span className="name">{a.name}</span>
                 {a.duration !== undefined && <span className="dur">{clock(a.duration)}</span>}
               </button>
             ))}
           </div>
-          {assets.length === 0 && <p className="muted small">No assets yet. Add b-roll, screenshots or logos, then ask Claude to use them.</p>}
+          <h4>
+            B-roll library <span className="muted">· every project</span>
+          </h4>
+          <input className="search" placeholder="Search: typing, desk, overhead…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <label className="add">
+            <input type="file" accept="video/*" multiple hidden onChange={(e) => addToLibrary(e.target.files)} />
+            {busy ? "Splitting into shots and describing them…" : "Add clips to the library"}
+          </label>
+          <div className="grid">
+            {shown.map((c) => (
+              <button key={c.id} className="asset" onClick={() => onUse(`broll:${c.id}`)} title={c.description || c.id}>
+                <img src={`/${c.thumb}`} alt="" loading="lazy" />
+                <span className="name">{c.description || c.id}</span>
+                <span className="dur">{clock(c.duration)}</span>
+              </button>
+            ))}
+          </div>
+          {clips.length > 0 && shown.length === 0 && <p className="muted small">No b-roll matches "{query}".</p>}
         </div>
       ) : (
         <div className="script">

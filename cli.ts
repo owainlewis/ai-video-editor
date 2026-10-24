@@ -5,6 +5,7 @@
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
+//   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
 //   npm run studio -- render <slug>                mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -12,6 +13,7 @@ import { ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
+import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
 import { readJson, ROOT, writeJson } from "./media/tools.ts";
 import { startServer } from "./server/index.ts";
@@ -69,6 +71,19 @@ async function main() {
       const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
       console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
       for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
+      return;
+    }
+    case "broll": {
+      // broll index | broll describe | broll [search words]
+      if (target === "index") {
+        const index = indexLibrary(log);
+        const n = describeLibrary(log);
+        console.log(`${index.length} shots in library/broll${n ? `; described ${n} new ones` : ""}`);
+        return;
+      }
+      if (target === "describe") return void console.log(`Described ${describeLibrary(log)} shots`);
+      for (const c of searchLibrary(args.slice(1).filter((a) => !a.startsWith("--")).join(" ")))
+        console.log(`  broll:${c.id.padEnd(14)} ${c.duration.toFixed(1).padStart(5)}s  light ${String(c.brightness).padStart(3)}  ${c.description || "(not described)"}  [${c.tags.join(", ")}]`);
       return;
     }
     case "render": {
