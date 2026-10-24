@@ -1,0 +1,9 @@
+node_modules/
+projects/*
+!projects/.gitkeep
+library/*
+!library/README.md
+.cache/
+*.log
+.DS_Store
+__pycache__/

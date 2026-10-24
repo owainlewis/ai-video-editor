@@ -1,0 +1,106 @@
+// Turn a project's plan (edit.json) into what the compositions render (build/edit.resolved.json),
+// with every check the house rules need. The editor runs this on every change to the plan, so
+// the player always shows the plan as it is, and problems show next to it.
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { Edit, type Resolved, type Word } from "../engine/schema.ts";
+import { chunkWords, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { frameRect } from "../effects/camera.ts";
+import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
+import { slotIssues } from "../styles/blueprint/style.ts";
+import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
+
+export type Issue = { level: "error" | "warn"; message: string };
+
+// Where the placeholder speaker's face sits in its 1080x1920 frame (see effects/Speaker.tsx).
+const PLACEHOLDER_FACE = { x: 0.5, y: 0.3, h: 0.17 };
+
+export const LIBRARY = join(ROOT, "library");
+
+export function resolveProject(projects: string, slug: string): { resolved?: Resolved; issues: Issue[] } {
+  const dir = join(projects, slug);
+  const meta = readJson<{ duration: number; size?: [number, number]; script?: boolean }>(join(dir, "project.json"));
+  const words = readJson<Word[]>(join(dir, "transcript.json"));
+  const parsed = Edit.safeParse(readJson(join(dir, "edit.json")));
+  if (!parsed.success) return { issues: parsed.error.issues.map((i) => ({ level: "error", message: `edit.json ${i.path.join(".")}: ${i.message}` })) };
+  const plan = parsed.data;
+  const youtube = plan.canvas === "youtube";
+  const face = meta.script ? PLACEHOLDER_FACE : (plan.face ?? (youtube ? { x: 0.5, y: 0.38, h: 0.3 } : undefined));
+  if (!face) return { issues: [{ level: "error", message: 'edit.json needs "face": measure it on checks/frame.jpg' }] };
+
+  const { shots, issues } = resolveShots(plan, words, meta.duration, FPS);
+  issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
+  const scanned = join(dir, "build/camera.json");
+  if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
+
+  const seen = new Set<string>();
+  for (const s of shots) {
+    const v = s.visual;
+    if (s.layout === "cutaway" && v?.kind !== "video") issues.push({ level: "error", message: `cutaway at "${s.anchor}" needs a video visual` });
+    const srcs = !v ? [] : v.kind === "image" || v.kind === "video" ? [v.src] : v.kind === "logos" || v.kind === "logowall" || v.kind === "windows" ? v.items.map((i) => i.src) : v.kind === "cta" && v.src ? [v.src] : [];
+    // The style's cards are sized for their slots' max lengths.
+    if (v && !s.keep) for (const m of slotIssues(v)) issues.push({ level: "warn", message: `"${s.anchor}": ${m}` });
+    for (const src of srcs) if (!existsSync(join(dir, src))) issues.push({ level: "error", message: `missing asset ${src}` });
+    if (v?.kind === "windows") s.visual = { ...v, items: v.items.map((it) => ({ ...it, ...(existsSync(join(dir, it.src)) ? { size: imageSize(join(dir, it.src)) } : {}) })) };
+    if (v?.kind === "image" && existsSync(join(dir, v.src))) {
+      const size = imageSize(join(dir, v.src));
+      s.visual = { ...v, size };
+      // Captures are taken at 2x, so page text of 16 CSS px is 32 image px; under ~30 px on the
+      // 1080 frame it is unreadable on a phone.
+      if (size && v.to && !youtube) {
+        const top = s.header ? HEADER.top + 120 + 30 : 150;
+        const bottom = (s.layout === "split" ? splitGeom(plan.split).panelBottom : MEDIA.panelBottom) - 20;
+        const { k } = frameRect(v.to, size[0], size[1], 900, bottom - top - (v.frame === "browser" ? 64 : 0));
+        if (k * 32 < 30) issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} ends too wide; 16px page text shows at ${Math.round(k * 32)}px. Tighten "to".` });
+      }
+    }
+    if (v?.kind === "video" && existsSync(join(dir, v.src))) {
+      s.visual = { ...v, size: probeSize(join(dir, v.src)) };
+      const left = probeDuration(join(dir, v.src)) - v.start;
+      if (!v.loop && s.end - s.start > left + 0.04) issues.push({ level: "error", message: `"${s.anchor}": shot is ${(s.end - s.start).toFixed(2)}s but ${v.src} has ${left.toFixed(2)}s from start ${v.start}` });
+    }
+    // A kept shot carries on the same clip; that is one use, not two.
+    if (v?.kind === "video" && !s.keep) {
+      if (seen.has(v.src)) issues.push({ level: "error", message: `b-roll ${v.src} is used twice` });
+      seen.add(v.src);
+    }
+  }
+  if (plan.music) {
+    const track = plan.music.track ? join(LIBRARY, "music", plan.music.track) : "";
+    const any = existsSync(join(LIBRARY, "music")) && readdirSync(join(LIBRARY, "music"), { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
+    if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music"}; the video will have no bed` });
+  }
+  if (existsSync(join(dir, "source/voice.wav"))) {
+    const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
+    if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
+  }
+  const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
+  for (const a of plan.accents) if (!spoken.includes(a.toLowerCase())) issues.push({ level: "warn", message: `accent word not spoken: "${a}"` });
+
+  const resolved: Resolved = {
+    slug,
+    title: plan.title,
+    duration: meta.duration,
+    fps: FPS,
+    video: meta.script ? "" : `${slug}/source/talking.mp4`,
+    videoSize: meta.size ?? [1080, 1920],
+    audio: existsSync(join(dir, "build/mix.wav")) ? `${slug}/build/mix.wav` : null,
+    face,
+    grade: plan.grade,
+    split: plan.split,
+    canvas: plan.canvas,
+    style: plan.style,
+    captions: plan.captions ?? !youtube,
+    preview: {
+      ...(existsSync(join(dir, "build/preview.mp4")) ? { video: `${slug}/build/preview.mp4` } : {}),
+      ...(existsSync(join(dir, "build/preview.m4a")) ? { audio: `${slug}/build/preview.m4a` } : {}),
+    },
+    shots,
+    chunks: chunkWords(words, plan.accents, shots.map((s) => s.start).slice(1), FPS),
+    sfx: sfxEvents(shots),
+  };
+  writeJson(join(dir, "build/edit.resolved.json"), resolved);
+  writeJson(join(dir, "build/audio.json"), { duration: meta.duration, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx });
+  return { resolved, issues };
+}
