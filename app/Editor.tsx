@@ -85,6 +85,9 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       title={r.title}
       actions={
         <>
+          <button className="quiet" onClick={() => api.remove(slug, r.title).then((done) => done && (location.hash = "#/")).catch((e) => setError(String(e.message)))}>
+            Delete
+          </button>
           <button onClick={() => api.post(slug, "undo")} disabled={(p.versions?.length ?? 0) < 2} title="Go back to the previous version of the plan">
             Undo
           </button>

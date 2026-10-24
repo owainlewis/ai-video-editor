@@ -3,15 +3,16 @@
 // from the editor, from Claude in the chat panel or from Claude Code in a terminal, it saves a
 // version, re-resolves the plan and tells the open editors to reload.
 import { spawn } from "node:child_process";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 import { createServer as createVite } from "vite";
 import { resolveProject } from "../media/project.ts";
-import { slugFor } from "../media/ingest.ts";
+import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { snapshot, undo, versions } from "./history.ts";
+import { trashProject } from "./trash.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -95,7 +96,12 @@ export async function startServer(port = 4747) {
 
   // Long jobs (ingest, render) run as CLI processes so the server stays responsive. They report
   // through the project's status.json.
-  const job = (args: string[]) => spawn("npx", ["tsx", "cli.ts", ...args], { cwd: ROOT, stdio: "ignore", detached: false });
+  // Detached, so restarting the server never kills an import or a render halfway (2026-10-24).
+  const job = (slug: string, args: string[]) => {
+    mkdirSync(join(projects, slug), { recursive: true });
+    const log = openSync(join(projects, slug, "job.log"), "a");
+    spawn("npx", ["tsx", "cli.ts", ...args], { cwd: ROOT, stdio: ["ignore", log, log], detached: true }).unref();
+  };
 
   const api = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -117,7 +123,7 @@ export async function startServer(port = 4747) {
       const file = join(projects, ".uploads", `${slug}${extname(name) || ".mp4"}`);
       await new Promise<void>((ok, fail) => req.pipe(createWriteStream(file)).on("finish", ok).on("error", fail));
       mkdirSync(join(projects, slug), { recursive: true });
-      job(["ingest", file, "--slug", slug]);
+      job(slug, ["ingest", file, "--slug", slug]);
       return send(res, 200, { slug });
     }
 
@@ -126,7 +132,7 @@ export async function startServer(port = 4747) {
         .filter((d) => d.isDirectory() && !d.name.startsWith("."))
         .map((d) => {
           const dir = join(projects, d.name);
-          const status = existsSync(join(dir, "status.json")) ? readJson<{ stage: string; done: boolean; error?: string }>(join(dir, "status.json")) : null;
+          const status = liveStatus(dir);
           const meta = existsSync(join(dir, "project.json")) ? readJson<{ duration: number; size: [number, number] }>(join(dir, "project.json")) : null;
           const plan = existsSync(join(dir, "edit.json")) ? readJson<{ title?: string; canvas?: string }>(join(dir, "edit.json")) : null;
           return { slug: d.name, title: plan?.title ?? d.name, canvas: plan?.canvas ?? "reel", duration: meta?.duration, status, modified: statSync(dir).mtimeMs };
@@ -137,11 +143,17 @@ export async function startServer(port = 4747) {
 
     if (parts[0] !== "projects" || !parts[1]) return send(res, 404, { error: "not found" });
     const slug = parts[1];
+    // Delete works on any project folder, even one whose import failed before project.json.
+    if (parts[2] === "delete" && req.method === "POST") {
+      trashProject(projects, slug, isRunning(slug));
+      broadcast({ type: "status", slug });
+      return send(res, 200, { ok: true });
+    }
     const dir = dirOf(slug);
     const action = parts[2];
 
     if (!action && req.method === "GET") {
-      const status = existsSync(join(dir, "status.json")) ? readJson(join(dir, "status.json")) : null;
+      const status = liveStatus(dir);
       if (!ready(slug)) return send(res, 200, { slug, status });
       // The first version of a project; later ones come from the watcher and from finished notes.
       if (!versions(dir).length) snapshot(dir, "edit");
@@ -173,7 +185,10 @@ export async function startServer(port = 4747) {
     }
     if (action === "stop") return stop(slug), send(res, 200, { ok: true });
     if (action === "undo") return send(res, 200, { ok: undo(dir) });
-    if (action === "render") return job(["render", slug]), send(res, 200, { ok: true });
+    if (action === "render") {
+      if (!liveStatus(dir)?.done && existsSync(join(dir, "status.json"))) return send(res, 409, { error: "a job is already running" });
+      return job(slug, ["render", slug]), send(res, 200, { ok: true });
+    }
     return send(res, 404, { error: "not found" });
   };
 
@@ -190,7 +205,7 @@ export async function startServer(port = 4747) {
 
   server.on("request", (req, res) => {
     if (req.url?.startsWith("/api/"))
-      return void api(req, res).catch((e) => send(res, e.code === 404 ? 404 : 500, { error: String(e.message ?? e) }));
+      return void api(req, res).catch((e) => send(res, typeof e.code === "number" ? e.code : 500, { error: String(e.message ?? e) }));
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });

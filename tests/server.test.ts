@@ -1,11 +1,12 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cleanWords, starterPlan } from "../media/ingest.ts";
+import { cleanWords, liveStatus, starterPlan } from "../media/ingest.ts";
 import { Edit } from "../engine/schema.ts";
 import { promptFor } from "../server/agent.ts";
 import { snapshot, undo, versions } from "../server/history.ts";
+import { trashProject } from "../server/trash.ts";
 
 const words = [
   { text: "Anthropic", start: 0, end: 0.9 },
@@ -72,5 +73,38 @@ describe("plan checks", () => {
     const shot = (stages: { label?: string }[]) => ({ start: 0, end: 2, layout: "split" as const, anchor: "a", visual: { kind: "pipeline", stages } as never });
     expect(lintShots([shot([{ label: "A" }, {}])], 2, "mixed").map((i) => i.message).join()).toMatch(/unnamed stages/);
     expect(lintShots([shot([{ label: "A" }, { label: "B" }])], 2, "mixed").map((i) => i.message).join()).not.toMatch(/unnamed stages/);
+  });
+});
+
+describe("deleting a project", () => {
+  const setup = (status?: object) => {
+    const projects = mkdtempSync(join(tmpdir(), "studio-"));
+    mkdirSync(join(projects, "demo"));
+    writeFileSync(join(projects, "demo", "edit.json"), "{}");
+    if (status) writeFileSync(join(projects, "demo", "status.json"), JSON.stringify(status));
+    mkdirSync(join(projects, ".uploads"));
+    writeFileSync(join(projects, ".uploads", "demo.mp4"), "x");
+    return projects;
+  };
+  it("moves the project and its upload into .trash, erasing nothing", () => {
+    const projects = setup({ stage: "Ready", done: true });
+    const dest = trashProject(projects, "demo", false);
+    expect(existsSync(join(projects, "demo"))).toBe(false);
+    expect(readFileSync(join(dest, "edit.json"), "utf8")).toBe("{}");
+    expect(existsSync(join(dest, "upload-demo.mp4"))).toBe(true);
+  });
+  it("treats a job whose process is gone as interrupted, so it can be deleted", () => {
+    const projects = setup({ stage: "Transcribing", done: false, pid: 999999 });
+    expect(liveStatus(join(projects, "demo"))).toMatchObject({ stage: "Interrupted", done: true });
+    expect(() => trashProject(projects, "demo", false)).not.toThrow();
+  });
+  it("keeps a live job running", () => {
+    expect(liveStatus(join(setup({ stage: "Transcribing", done: false, pid: process.pid }), "demo"))).toMatchObject({ stage: "Transcribing", done: false });
+  });
+  it("refuses while an import, export or note is running, and rejects bad names", () => {
+    expect(() => trashProject(setup({ stage: "Transcribing", done: false }), "demo", false)).toThrow(/still running/);
+    expect(() => trashProject(setup(), "demo", true)).toThrow(/still working/);
+    expect(() => trashProject(setup(), "../demo", false)).toThrow(/no project/);
+    expect(() => trashProject(setup(), ".trash", false)).toThrow(/no project/);
   });
 });

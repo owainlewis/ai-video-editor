@@ -9,10 +9,28 @@ import { ffmpeg, type Log, probeDuration, probeSize, readJson, run, speechEnd, w
 // Names Whisper otherwise mishears ("CodeCode" for Claude Code).
 const VOCAB = "Claude Code, Codex, Claude, Anthropic, OpenAI, GitHub, MCP, LLM, AI agents, Cursor, Gemini.";
 
-export type Status = { stage: string; done: boolean; error?: string; at: string };
+export type Status = { stage: string; done: boolean; error?: string; at: string; pid?: number };
 
+// A running job records its process, so the editor can tell a live job from one that died.
 export const setStatus = (dir: string, stage: string, extra: Partial<Status> = {}) =>
-  writeJson(join(dir, "status.json"), { stage, done: false, ...extra, at: new Date().toISOString() });
+  writeJson(join(dir, "status.json"), { stage, done: false, pid: process.pid, ...extra, at: new Date().toISOString() });
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// The project's job status, with a job whose process is gone shown as interrupted.
+export function liveStatus(dir: string): Status | null {
+  if (!existsSync(join(dir, "status.json"))) return null;
+  const status = readJson<Status>(join(dir, "status.json"));
+  if (!status.done && status.pid && !alive(status.pid)) return { ...status, stage: "Interrupted", done: true, error: `${status.stage} stopped before it finished. Start it again.` };
+  return status;
+}
 
 export const slugFor = (file: string) =>
   basename(file, extname(file)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "clip";

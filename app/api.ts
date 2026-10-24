@@ -42,6 +42,13 @@ export const api = {
     }),
   post: (slug: string, action: string, payload: unknown = {}) =>
     fetch(`/api/projects/${slug}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }).then((r) => json<{ ok?: boolean }>(r)),
+  // Moves the project to projects/.trash/ after the person confirms. Returns false if they cancel.
+  remove: async (slug: string, title: string) => {
+    if (!confirm(`Delete "${title}"?\n\nIt moves to projects/.trash, so it can be recovered from there.`)) return false;
+    const r = await fetch(`/api/projects/${slug}/delete`, { method: "POST" });
+    await json(r);
+    return true;
+  },
   events: (on: (e: Event) => void) => {
     const es = new EventSource("/api/events");
     es.onmessage = (m) => on(JSON.parse(m.data));

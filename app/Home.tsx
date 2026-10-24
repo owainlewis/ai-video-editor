@@ -55,6 +55,13 @@ export const Home: React.FC = () => {
         <ul className="projects">
           {projects.map((p) => (
             <li key={p.slug}>
+              <button
+                className="delete"
+                title="Delete this project"
+                onClick={() => api.remove(p.slug, p.title).then((done) => { if (done) load(); }).catch((e) => setError(String(e.message)))}
+              >
+                Delete
+              </button>
               <a href={`#/p/${p.slug}`}>
                 <strong>{p.title}</strong>
                 <span>
