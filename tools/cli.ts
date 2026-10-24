@@ -3,6 +3,7 @@
 //
 //   npm run reel -- new <slug> <video> [--broll a.mp4 b.mp4]   portrait for reels, landscape for YouTube
 //   npm run reel -- script <slug> <script.txt> [--engine kokoro] [--voice am_michael] [--silent]   a reel from a script, no footage
+//   npm run reel -- export <slug>                     YouTube: each graphic as a ProRes clip, plus timecodes for Final Cut
 //   npm run reel -- scan <slug> --ref 6,1215          where the speaker is on camera (YouTube): graphics only go there
 //   npm run reel -- transcribe <slug>
 //   npm run reel -- tighten <slug> [--cut 7.2-10.9 ...] [--gap 0.55] [--speed 1.05]   trim pauses to a breath, cut ranges; then transcribe again
@@ -534,6 +535,7 @@ function cmdAudio(slug: string) {
 }
 
 const remotion = (argv: string[], _style?: string) => run("npx", ["remotion", ...argv]);
+const remotionProRes = (argv: string[]) => run("npx", ["remotion", ...argv], { env: { REEL_PRORES: "1" } });
 
 function cmdRender(slug: string) {
   const dir = project(slug);
@@ -544,6 +546,92 @@ function cmdRender(slug: string) {
   const out = join(dir, "renders", draft ? "draft.mp4" : "final.mp4");
   remotion(["render", "src/index.ts", compositionFor(resolved.canvas).id, out, `--props=${join(dir, "build/edit.resolved.json")}`, ...(draft ? ["--scale=0.5", "--crf=26"] : [])], resolved.style);
   console.log(`\nRendered ${out} (${resolved.duration.toFixed(1)}s)`);
+}
+
+// Export the graphics as clips for Final Cut instead of rendering the whole video: Owain keeps his
+// own timeline and grade, and drops each clip on top at its timecode (2026-10-24). Overlays (lower
+// thirds, titles) are transparent ProRes 4444; side and media graphics, which reframe the speaker,
+// are ProRes 422 HQ with the footage in them. Clips match the source frame rate, at 2x (4K).
+// Writes export/NN-<layout>-<kind>.mov, export/timecodes.md and export/timeline.fcpxml.
+function cmdExport(slug: string) {
+  const dir = project(slug);
+  const r = cmdValidate(slug, true);
+  const out = join(dir, "export");
+  mkdirSync(out, { recursive: true });
+  for (const f of readdirSync(out)) if (/\.(mov|md|json|fcpxml)$/.test(f)) execFileSync("rm", [join(out, f)]);
+  // The rate of Owain's own timeline: the original file's, since `new` conforms the working copy to 30 fps.
+  const meta = readJson<{ original?: string }>(join(dir, "project.json"));
+  const source = meta.original && existsSync(meta.original) ? meta.original : join(dir, "source/talking.mp4");
+  const rate = spawnSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", source], { encoding: "utf8" }).stdout.trim();
+  const [num, den] = rate.split("/").map(Number);
+  const fps = num / (den || 1);
+  const scale = flag("scale") ?? "2";
+  const clips = r.shots.flatMap((head, i) => {
+    if (!head.visual || head.keep || head.layout === "full" || head.layout === "punch") return [];
+    let last = i;
+    while (r.shots[last + 1]?.keep) last++;
+    return [{ head, start: head.start, end: r.shots[last].end }];
+  });
+  const tc = (t: number) => {
+    const f = Math.round(t * fps), base = Math.round(fps);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(Math.floor(f / base / 3600))}:${pad(Math.floor(f / base / 60) % 60)}:${pad(Math.floor(f / base) % 60)}:${pad(f % base)}`;
+  };
+  const rows: string[] = [];
+  clips.forEach((c, k) => {
+    const alpha = c.head.layout === "over";
+    const name = `${String(k + 1).padStart(2, "0")}-${c.head.layout}-${c.head.visual!.kind}.mov`;
+    const props = join(out, `props-${k + 1}.json`);
+    writeJson(props, { ...r, fps, alpha });
+    const from = Math.round(c.start * fps), to = Math.max(from, Math.round(c.end * fps) - 1);
+    remotionProRes(["render", "src/index.ts", compositionFor(r.canvas).id, join(out, name), `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
+      ...(alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])]);
+    execFileSync("rm", [props]);
+    rows.push(`| ${name} | ${tc(c.start)} | ${tc(c.end)} | ${(c.end - c.start).toFixed(1)}s | ${alpha ? "overlay (alpha), on top of your picture" : "replaces your picture for its length"} | ${c.head.anchor} |`);
+  });
+  // An FCPXML project: the original video on the spine, each clip connected on lane 1 at its frame.
+  // Times are whole frames of the source rate, as Final Cut requires.
+  const fd = `${den || 1}/${num}s`;
+  const at = (frames: number) => `${frames * (den || 1)}/${num}s`;
+  const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const url = (p: string) => "file://" + encodeURI(resolve(p));
+  const [vw, vh] = (spawnSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source], { encoding: "utf8" }).stdout.trim().split(",").map(Number));
+  const total = Math.round(probeDuration(source) * fps);
+  const made = clips.map((c, k) => {
+    const file = join(out, `${String(k + 1).padStart(2, "0")}-${c.head.layout}-${c.head.visual!.kind}.mov`);
+    const frames = parseInt(spawnSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", file], { encoding: "utf8" }).stdout, 10);
+    return { file, frames, offset: Math.round(c.start * fps), name: basename(file, ".mov") };
+  });
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" frameDuration="${fd}" width="${vw}" height="${vh}"/>
+    <asset id="r2" name="${esc(basename(source))}" start="0s" duration="${at(total)}" hasVideo="1" hasAudio="1" format="r1" audioSources="1" audioChannels="2" audioRate="48000">
+      <media-rep kind="original-media" src="${esc(url(source))}"/>
+    </asset>
+${made.map((m, k) => `    <asset id="r${k + 3}" name="${esc(m.name)}" start="0s" duration="${at(m.frames)}" hasVideo="1" format="r1">
+      <media-rep kind="original-media" src="${esc(url(m.file))}"/>
+    </asset>`).join("\n")}
+  </resources>
+  <library>
+    <event name="${esc(r.title)}">
+      <project name="${esc(r.title)} (graphics)">
+        <sequence format="r1" duration="${at(total)}" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+            <asset-clip ref="r2" offset="0s" name="${esc(basename(source))}" start="0s" duration="${at(total)}" tcFormat="NDF">
+${made.map((m, k) => `              <asset-clip ref="r${k + 3}" lane="1" offset="${at(m.offset)}" name="${esc(m.name)}" start="0s" duration="${at(m.frames)}"/>`).join("\n")}
+            </asset-clip>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>
+`;
+  writeFileSync(join(out, "timeline.fcpxml"), xml);
+  writeFileSync(join(out, "timecodes.md"), `# ${r.title}\n\nSource frame rate ${rate} (${fps.toFixed(3)} fps). Timecodes are from the start of the rough cut, non-drop.\nPlace each clip on a connected lane above the picture at its In point.\n\n| Clip | In | Out | Length | What it does | Starts on |\n|---|---|---|---|---|---|\n${rows.join("\n")}\n`);
+  console.log(`Exported ${clips.length} clips to ${out}\n` + rows.join("\n"));
 }
 
 function cmdStills(slug: string) {
@@ -689,6 +777,7 @@ async function main() {
     case "audio": cmdValidate(slug, true); return cmdAudio(slug);
     case "stills": return cmdStills(slug);
     case "render": return cmdRender(slug);
+    case "export": return cmdExport(slug);
     case "check": return cmdCheck(slug);
     case "review": return cmdReview(slug);
     case "feedback": return cmdFeedback(slug);

@@ -148,7 +148,7 @@ export const Wide: React.FC<Resolved> = (r) => {
   const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : 1;
 
   return (
-    <AbsoluteFill style={{ background: "#0E0E0D" }}>
+    <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }}>
       {onCanvas && <SceneCanvas tone={tone} time={time} width={WW} height={WH} />}
       {r.shots.map((head, i) => {
         const visual = head.visual;
@@ -175,11 +175,11 @@ export const Wide: React.FC<Resolved> = (r) => {
           </Sequence>
         );
       })}
-      <Speaker r={r} shot={shot} prev={prev} time={time} dim={dim} />
+      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} prev={prev} time={time} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
-      {r.audio && <Audio src={staticFile(r.audio)} />}
+      {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}
     </AbsoluteFill>
   );
 };

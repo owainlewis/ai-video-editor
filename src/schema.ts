@@ -307,6 +307,8 @@ export type Resolved = {
   // Pixel size of the speaker footage: 1080x1920 portrait or 1920x1080 landscape.
   videoSize: [number, number];
   audio: string | null;
+  // Export only: draw the overlays alone on a transparent frame, for Final Cut (reel export).
+  alpha?: boolean;
   face: { x: number; y: number; h: number };
   grade: { brightness: number; contrast: number; saturate: number };
   split: "half" | "inset";
