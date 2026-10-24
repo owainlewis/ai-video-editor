@@ -34,10 +34,10 @@ const json = async <T,>(res: Response): Promise<T> => {
 export const api = {
   projects: () => fetch("/api/projects").then((r) => json<ProjectSummary[]>(r)),
   project: (slug: string) => fetch(`/api/projects/${slug}`).then((r) => json<Project>(r)),
-  upload: (file: File, onProgress: (f: number) => void, to = "/api/upload") =>
+  upload: (file: File, onProgress: (f: number) => void, to = "/api/upload", params: Record<string, string> = {}) =>
     new Promise<{ slug?: string; path?: string }>((ok, fail) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${to}?name=${encodeURIComponent(file.name)}`);
+      xhr.open("POST", `${to}?${new URLSearchParams({ name: file.name, ...params })}`);
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
       xhr.onload = () => (xhr.status < 300 ? ok(JSON.parse(xhr.responseText)) : fail(new Error(xhr.responseText)));
       xhr.onerror = () => fail(new Error("upload failed"));

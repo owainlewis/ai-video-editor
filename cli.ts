@@ -1,6 +1,6 @@
 // Studio's command line. The editor uses it for long jobs; Claude uses it to check and preview edits.
 //   npm run dev                                   start the editor at http://localhost:4747
-//   npm run studio -- ingest <file> [--slug s]     import a clip: working copy, preview, transcript, starter plan
+//   npm run studio -- ingest <file> [--slug s] [--canvas reel|youtube] [--title t]   import a clip
 //   npm run studio -- check <slug>                 resolve the plan, print the shots and every issue
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
@@ -35,7 +35,8 @@ async function main() {
     case "ingest": {
       if (!target || !existsSync(target)) throw new Error("ingest needs a video file");
       const slug = flag("slug") ?? slugFor(target);
-      await ingest(projects, resolve(target), slug, log);
+      const canvas = flag("canvas");
+      await ingest(projects, resolve(target), slug, log, { canvas: canvas === "reel" || canvas === "youtube" ? canvas : undefined, title: flag("title") });
       console.log(`Imported projects/${slug}. Open it in the editor, or run: npm run studio -- check ${slug}`);
       return;
     }

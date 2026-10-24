@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { api, clock, type ProjectSummary } from "./api";
+import { NewProject } from "./NewProject";
 
 // Projects, newest first, and a drop zone for a new clip.
 export const Home: React.FC = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [upload, setUpload] = useState<{ name: string; progress: number } | null>(null);
   const [error, setError] = useState("");
-  const [over, setOver] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const load = () => api.projects().then(setProjects).catch((e) => setError(String(e.message)));
   useEffect(() => {
@@ -14,43 +14,23 @@ export const Home: React.FC = () => {
     return api.events((e) => e.type === "status" && load());
   }, []);
 
-  const send = async (file: File) => {
-    setError("");
-    setUpload({ name: file.name, progress: 0 });
-    try {
-      const { slug } = await api.upload(file, (p) => setUpload({ name: file.name, progress: p }));
-      if (slug) location.hash = `#/p/${slug}`;
-    } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setUpload(null);
-    }
-  };
-
   return (
     <div className="home">
       <header className="bar">
         <span className="brand">Studio</span>
       </header>
       <main>
-        <label
-          className={`drop ${over ? "over" : ""}`}
-          onDragOver={(e) => (e.preventDefault(), setOver(true))}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setOver(false);
-            const f = e.dataTransfer.files[0];
-            if (f) send(f);
-          }}
-        >
-          <input type="file" accept="video/*" hidden onChange={(e) => e.target.files?.[0] && send(e.target.files[0])} />
-          {upload ? (
-            <span>Uploading {upload.name}… {Math.round(upload.progress * 100)}%</span>
-          ) : (
-            <span>Drop a clip here, or click to choose one</span>
-          )}
-        </label>
+        <div className="home-head">
+          <h1>Projects</h1>
+          <button className="primary" onClick={() => setCreating(true)}>
+            New project
+          </button>
+        </div>
+        {projects.length === 0 && (
+          <button className="drop" onClick={() => setCreating(true)}>
+            Start your first project
+          </button>
+        )}
         {error && <p className="error">{error}</p>}
         <ul className="projects">
           {projects.map((p) => (
@@ -75,6 +55,7 @@ export const Home: React.FC = () => {
           ))}
         </ul>
       </main>
+      {creating && <NewProject onClose={() => setCreating(false)} />}
     </div>
   );
 };

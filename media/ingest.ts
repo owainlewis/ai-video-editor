@@ -35,7 +35,9 @@ export function liveStatus(dir: string): Status | null {
 export const slugFor = (file: string) =>
   basename(file, extname(file)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "clip";
 
-export async function ingest(projects: string, file: string, slug: string, log: Log = () => {}) {
+export type Choices = { canvas?: "reel" | "youtube"; title?: string };
+
+export async function ingest(projects: string, file: string, slug: string, log: Log = () => {}, choices: Choices = {}) {
   const dir = join(projects, slug);
   for (const d of ["source", "build", "renders", "checks", "history"]) mkdirSync(join(dir, d), { recursive: true });
   try {
@@ -70,7 +72,7 @@ export async function ingest(projects: string, file: string, slug: string, log: 
     setStatus(dir, "Transcribing");
     const words = transcribe(dir, log);
 
-    if (!existsSync(join(dir, "edit.json"))) writeJson(join(dir, "edit.json"), starterPlan(slug, words, size));
+    if (!existsSync(join(dir, "edit.json"))) writeJson(join(dir, "edit.json"), starterPlan(slug, words, size, choices));
     writeJson(join(dir, "status.json"), { stage: "Ready", done: true, at: new Date().toISOString() });
   } catch (e) {
     writeJson(join(dir, "status.json"), { stage: "Failed", done: true, error: String((e as Error).message ?? e), at: new Date().toISOString() });
@@ -111,17 +113,17 @@ export function cleanWords(raw: Word[], end: number): Word[] {
 
 // The plan a new clip starts from: the speaker full frame, nothing added yet. Landscape footage is
 // a YouTube video (16:9, no word captions); portrait is a reel (Owain, 2026-10-24).
-export function starterPlan(slug: string, words: Word[], size: [number, number]) {
+export function starterPlan(slug: string, words: Word[], size: [number, number], choices: Choices = {}) {
   const opening = words.slice(0, 3).map((w) => w.text).join(" ");
-  const youtube = size[0] > size[1];
+  const youtube = choices.canvas ? choices.canvas === "youtube" : size[0] > size[1];
   return {
-    title: slug.replace(/-/g, " "),
+    title: choices.title?.trim() || slug.replace(/-/g, " "),
     canvas: youtube ? "youtube" : "reel",
     style: "ivory",
     format: "mixed",
     split: "half",
     // A first guess at where the face is; refine it from checks/frame.jpg.
-    face: youtube ? { x: 0.5, y: 0.3, h: 0.36 } : { x: 0.5, y: 0.3, h: 0.2 },
+    face: size[0] > size[1] ? { x: 0.5, y: 0.3, h: 0.36 } : { x: 0.5, y: 0.3, h: 0.2 },
     accents: [],
     music: false,
     shots: [{ at: opening || "start", layout: "full" }],

@@ -118,13 +118,16 @@ export async function startServer(port = 4747) {
 
     if (parts[0] === "upload" && req.method === "POST") {
       const name = url.searchParams.get("name") ?? "clip.mp4";
-      let slug = slugFor(name);
-      for (let i = 2; existsSync(join(projects, slug)); i++) slug = `${slugFor(name)}-${i}`;
+      const title = url.searchParams.get("title") ?? "";
+      const canvas = url.searchParams.get("canvas") === "reel" ? "reel" : url.searchParams.get("canvas") === "youtube" ? "youtube" : "";
+      const base = slugFor(title || name);
+      let slug = base;
+      for (let i = 2; existsSync(join(projects, slug)); i++) slug = `${base}-${i}`;
       mkdirSync(join(projects, ".uploads"), { recursive: true });
       const file = join(projects, ".uploads", `${slug}${extname(name) || ".mp4"}`);
       await new Promise<void>((ok, fail) => req.pipe(createWriteStream(file)).on("finish", ok).on("error", fail));
       mkdirSync(join(projects, slug), { recursive: true });
-      job(slug, ["ingest", file, "--slug", slug]);
+      job(slug, ["ingest", file, "--slug", slug, ...(canvas ? ["--canvas", canvas] : []), ...(title ? ["--title", title] : [])]);
       return send(res, 200, { slug });
     }
 

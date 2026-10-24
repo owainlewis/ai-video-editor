@@ -132,3 +132,29 @@ button.small { padding: 3px 8px; font-size: 12px; }
 .sentence.now { color: var(--ink); border-color: #4a524e; }
 .selection { position: absolute; top: 22px; bottom: 0; background: rgba(183, 205, 191, 0.14); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); pointer-events: none; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #f1efe9; pointer-events: none; }
+
+/* New project */
+.home-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.home-head h1 { font: italic 28px Signifier, Georgia, serif; margin: 0; }
+button.drop { width: 100%; font-size: 15px; }
+.modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(4px); }
+.modal { width: min(560px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5); }
+.modal h2 { margin: 0; font: italic 26px Signifier, Georgia, serif; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field > span { font-size: 12px; color: var(--muted); }
+.field input { font: inherit; color: var(--ink); background: #121413; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.field input:focus { outline: none; border-color: #4a524e; }
+.formats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.format { flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border-radius: 12px; text-align: left; }
+.format.on { border-color: var(--accent); background: rgba(183, 205, 191, 0.08); }
+.format i { display: block; border: 1.5px solid var(--muted); border-radius: 4px; margin-bottom: 8px; }
+.format i.reel { width: 22px; height: 38px; }
+.format i.youtube { width: 52px; height: 30px; }
+.format.on i { border-color: var(--accent); }
+.format b { font-size: 15px; }
+.format small { color: var(--muted); font-size: 12px; }
+.drop.small { height: 96px; font-size: 13px; }
+.drop.has { border-style: solid; color: var(--ink); }
+.progress { position: relative; height: 28px; border-radius: 8px; background: #121413; overflow: hidden; font-size: 12px; }
+.progress div { position: absolute; inset: 0 auto 0 0; background: rgba(183, 205, 191, 0.25); transition: width 0.2s; }
+.progress span { position: relative; display: block; line-height: 28px; padding: 0 10px; }
