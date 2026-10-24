@@ -4,6 +4,7 @@ import type { Resolved, Word } from "../engine/schema";
 export type Issue = { level: "error" | "warn"; message: string };
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
 export type Status = { stage: string; done: boolean; error?: string } | null;
+export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
 export type Version = { n: number; at: string; by: string };
 export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status };
 export type Project = {
@@ -17,6 +18,7 @@ export type Project = {
   chat?: ChatMessage[];
   working?: boolean;
   camera?: [number, number][];
+  assets?: Asset[];
   render?: { file: string; at: number } | null;
 };
 export type Event =
@@ -32,10 +34,10 @@ const json = async <T,>(res: Response): Promise<T> => {
 export const api = {
   projects: () => fetch("/api/projects").then((r) => json<ProjectSummary[]>(r)),
   project: (slug: string) => fetch(`/api/projects/${slug}`).then((r) => json<Project>(r)),
-  upload: (file: File, onProgress: (f: number) => void) =>
-    new Promise<{ slug: string }>((ok, fail) => {
+  upload: (file: File, onProgress: (f: number) => void, to = "/api/upload") =>
+    new Promise<{ slug?: string; path?: string }>((ok, fail) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/upload?name=${encodeURIComponent(file.name)}`);
+      xhr.open("POST", `${to}?name=${encodeURIComponent(file.name)}`);
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
       xhr.onload = () => (xhr.status < 300 ? ok(JSON.parse(xhr.responseText)) : fail(new Error(xhr.responseText)));
       xhr.onerror = () => fail(new Error("upload failed"));

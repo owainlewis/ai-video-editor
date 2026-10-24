@@ -19,7 +19,7 @@ export const Home: React.FC = () => {
     setUpload({ name: file.name, progress: 0 });
     try {
       const { slug } = await api.upload(file, (p) => setUpload({ name: file.name, progress: p }));
-      location.hash = `#/p/${slug}`;
+      if (slug) location.hash = `#/p/${slug}`;
     } catch (e) {
       setError(String((e as Error).message));
     } finally {

@@ -4,7 +4,8 @@ import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
 import type { Resolved } from "../engine/schema";
-import { api, type ChatMessage, clock, type Project } from "./api";
+import { api, type ChatMessage, clock, type Issue, type Project } from "./api";
+import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
 
 // The player plays the light preview copies, not the 4K master.
@@ -21,6 +22,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [selection, setSelection] = useState<Range | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [working, setWorking] = useState(false);
+  const [note, setNote] = useState("");
   const player = useRef<PlayerRef>(null);
 
   const load = useCallback(
@@ -77,7 +79,13 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
 
   const comp = compositionFor(r.canvas);
   const errors = p.issues?.filter((i) => i.level === "error") ?? [];
-  const warns = p.issues?.filter((i) => i.level === "warn") ?? [];
+  const music = (() => {
+    try {
+      return !!JSON.parse(p.plan ?? "{}").music;
+    } catch {
+      return false;
+    }
+  })();
   const rendering = p.status && !p.status.done && p.status.stage.startsWith("Render");
 
   return (
@@ -104,6 +112,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
     >
       <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
+        <Library slug={slug} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(a) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${a.path} `)} />
         <section className="stage">
           <Player
             ref={player}
@@ -127,17 +136,13 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           selection={selection}
           time={time}
           words={p.words}
+          note={note}
+          setNote={setNote}
+          issues={p.issues ?? []}
           onClear={() => setSelection(null)}
         />
         <section className="bottom">
-          {(errors.length > 0 || warns.length > 0) && (
-            <div className="issues">
-              {errors.map((i, k) => <span key={k} className="error">{i.message}</span>)}
-              {warns.slice(0, 3).map((i, k) => <span key={k} className="warn">{i.message}</span>)}
-              {warns.length > 3 && <span className="muted">and {warns.length - 3} more warnings</span>}
-            </div>
-          )}
-          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} onSeek={seek} onSelect={setSelection} />
+          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} />
         </section>
       </div>
     </Shell>
@@ -163,9 +168,12 @@ const Chat: React.FC<{
   selection: Range | null;
   time: number;
   words: { text: string; start: number }[];
+  note: string;
+  setNote: (n: string) => void;
+  issues: Issue[];
   onClear: () => void;
-}> = ({ slug, messages, working, selection, time, words, onClear }) => {
-  const [note, setNote] = useState("");
+}> = ({ slug, messages, working, selection, time, words, note, setNote, issues, onClear }) => {
+  const [showChecks, setShowChecks] = useState(false);
   const [error, setError] = useState("");
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -177,7 +185,7 @@ const Chat: React.FC<{
     if (!note.trim() || working) return;
     setError("");
     try {
-      await api.post(slug, "chat", { note, selection, playhead: time });
+      await api.post(slug, "chat", { note, selection: selection && { start: selection.start, end: selection.end }, playhead: time });
       setNote("");
     } catch (e) {
       setError(String((e as Error).message));
@@ -200,10 +208,20 @@ const Chat: React.FC<{
         ))}
         {working && <div className="msg tool">Claude is working…</div>}
       </div>
+      {issues.length > 0 && (
+        <div className="checks">
+          <button className="quiet small" onClick={() => setShowChecks((v) => !v)}>
+            {issues.some((i) => i.level === "error") ? "⚠ " : ""}
+            {issues.length} check{issues.length > 1 ? "s" : ""} {showChecks ? "▾" : "▸"}
+          </button>
+          {showChecks && issues.map((i, k) => <p key={k} className={`${i.level} small`}>{i.message}</p>)}
+        </div>
+      )}
       <div className="compose">
         {selection ? (
           <div className="chip">
             <span>
+              {selection.label ? `${selection.label}, ` : ""}
               {clock(selection.start)} to {clock(selection.end)}
               {said ? `: "${said.length > 90 ? said.slice(0, 90) + "…" : said}"` : ""}
             </span>

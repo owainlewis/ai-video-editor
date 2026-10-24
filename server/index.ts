@@ -13,6 +13,7 @@ import { readJson, ROOT } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { snapshot, undo, versions } from "./history.ts";
 import { trashProject } from "./trash.ts";
+import { listAssets, saveAsset } from "./assets.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -168,11 +169,17 @@ export async function startServer(port = 4747) {
         versions: versions(dir),
         chat: loadChat(dir).messages,
         working: isRunning(slug),
+        assets: listAssets(dir, slug),
         camera: existsSync(join(dir, "build/camera.json")) ? readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges : undefined,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
     }
     if (req.method !== "POST") return send(res, 405, { error: "method" });
+    if (action === "assets") {
+      const path = await saveAsset(dir, url.searchParams.get("name") ?? "asset", req);
+      broadcast({ type: "plan", slug });
+      return send(res, 200, { path });
+    }
     const input = await body(req);
     if (action === "chat") {
       const note = String(input.note ?? "").trim();
