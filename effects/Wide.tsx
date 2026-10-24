@@ -20,20 +20,9 @@ export const SIDE = { x: 120, y: 110, w: WINDOW.x - 72 - 120, h: WH - 220 };
 export const MEDIA = { x: 160, y: 90, w: WW - 320, h: WH - 180 };
 // The width the shared visuals are designed at (the reel's panel).
 const DESIGN_W = 900;
-// How long the speaker takes to move between full frame and the window: one eased move.
-const MOVE = 0.5;
 
 const speakerBox = (layout: ResolvedShot["layout"]): Box =>
   layout === "side" ? WINDOW : layout === "media" || layout === "cutaway" ? { ...WINDOW, o: 0 } : FULL;
-
-const lerp = (a: Box, b: Box, p: number): Box => ({
-  x: a.x + (b.x - a.x) * p,
-  y: a.y + (b.y - a.y) * p,
-  w: a.w + (b.w - a.w) * p,
-  h: a.h + (b.h - a.h) * p,
-  r: a.r + (b.r - a.r) * p,
-  o: a.o + (b.o - a.o) * p,
-});
 
 // Where the footage sits inside a box: covering it, with the face kept in view. In the small
 // window the head fills about 40% of its height.
@@ -49,12 +38,11 @@ const crop = (r: Resolved, box: Box) => {
   return { x, y, vw, vh };
 };
 
-const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; prev?: ResolvedShot; time: number; dim: number }> = ({ r, shot, prev, time, dim }) => {
-  const p = interpolate(time, [shot.start, shot.start + MOVE], [0, 1], { ...clamp, easing: ease });
-  const box = lerp(speakerBox(prev?.layout ?? shot.layout), speakerBox(shot.layout), p);
-  const a = crop(r, speakerBox(prev?.layout ?? shot.layout));
-  const b = crop(r, speakerBox(shot.layout));
-  const c = { x: a.x + (b.x - a.x) * p, y: a.y + (b.y - a.y) * p, vw: a.vw + (b.vw - a.vw) * p, vh: a.vh + (b.vh - a.vh) * p };
+// The speaker cuts between full frame and the window: no zoom or move between them (Owain,
+// 2026-10-24: "the transitions are janky when we zoom between the graphic and footage").
+const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; dim: number }> = ({ r, shot, dim }) => {
+  const box = speakerBox(shot.layout);
+  const c = crop(r, box);
   const grade = `brightness(${r.grade.brightness * dim}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})`;
   return (
     <div
@@ -141,7 +129,6 @@ export const Wide: React.FC<Resolved> = (r) => {
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
   const shot = r.shots[index] ?? r.shots[r.shots.length - 1];
-  const prev = r.shots[index - 1];
   // Paper by default: the shared visuals are drawn for it. "dark" suits the soft tech visuals.
   const tone: Tone = shot.tone ?? "light";
   const onCanvas = shot.layout === "side" || shot.layout === "media";
@@ -168,7 +155,6 @@ export const Wide: React.FC<Resolved> = (r) => {
           );
         if (s.layout !== "side" && s.layout !== "media") return null;
         const area = s.layout === "side" ? SIDE : MEDIA;
-        const p = reveal(time, s.start, 0.5);
         // The visuals are designed for a 900 px panel (the reel's). On 16:9 they are laid out at that
         // width and scaled up to fill the panel, so type and lines grow with it instead of sitting
         // small in empty space (Owain, 2026-10-24: "a little sparse/plain").
@@ -176,7 +162,7 @@ export const Wide: React.FC<Resolved> = (r) => {
         const vw = area.w / k, vh = area.h / k;
         return (
           <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
-            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, opacity: p, filter: `blur(${(1 - p) * 10}px)`, color: pal(tone).ink }}>
+            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone).ink }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: vw, height: vh, transform: `scale(${k})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} />
               </div>
@@ -184,7 +170,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           </Sequence>
         );
       })}
-      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} prev={prev} time={time} dim={dim} />}
+      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}

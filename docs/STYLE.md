@@ -24,7 +24,7 @@ Owain edits the rough cut by hand. The plan only lays graphics and text over it,
 | --- | --- |
 | `full` | the picture as cut. Most of the video. |
 | `over` | the picture with a quiet overlay: a `lower` third (serif title, sans line, no box) or a cinematic `title` (one small serif line in the centre, the picture dims a little). |
-| `side` | the visual on warm near-black, the speaker in a small rounded window on the right. One eased move in and out. |
+| `side` | the visual on warm near-black, the speaker in a small rounded window on the right. A hard cut in and out, no zoom. |
 | `media` | the visual alone. Keep it short; the speaker is away. |
 | `cutaway` | b-roll edge to edge. |
 

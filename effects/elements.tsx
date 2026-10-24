@@ -30,7 +30,8 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
   const top = titleH + 70;
   const plotH = h - top - foot - 40;
   const plotW = w - 40;
-  const enter = prog(time, shot.start, 0.5);
+  // The frame (title, axes, source) is there on the cut; only the data animates (Owain, 2026-10-24).
+  const enter = 1;
   const y = (val: number) => top + plotH - (val / max) * plotH;
   const p = (i: number) => prog(time, times[i], 0.7);
 
@@ -71,7 +72,8 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
             );
           })
         : (() => {
-            const xs = v.points.map((_, i) => 20 + 30 + ((plotW - 60 - 260) * i) / Math.max(1, n - 1));
+            // Room on the left for the start value, which sits beside its point, clear of line and axes.
+            const xs = v.points.map((_, i) => 20 + 150 + ((plotW - 180 - 260) * i) / Math.max(1, n - 1));
             const pts = v.points.map((pt, i) => `${xs[i]},${y(pt.value)}`).join(" ");
             // Bare charts draw a smooth curve through the points (Catmull-Rom as cubic Beziers).
             const P = v.points.map((pt, i) => ({ x: xs[i], y: y(pt.value) }));
@@ -82,9 +84,24 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
             }).join(" ");
             const draw = interpolate(time, [times[0], times[n - 1] + 0.7], [0, 1], { ...clamp, easing: ease });
             const lastOn = p(hi);
+            // The head of the line: a dot that climbs with it, and a faint fill under the drawn part.
+            const headX = xs[0] + (xs[n - 1] - xs[0]) * draw;
+            const seg = Math.min(n - 2, Math.max(0, xs.findIndex((x, i) => i > 0 && headX <= x) - 1));
+            const f = (headX - xs[seg]) / Math.max(1, xs[seg + 1] - xs[seg]);
+            const headY = y(v.points[seg].value) + (y(v.points[seg + 1].value) - y(v.points[seg].value)) * f;
+            const base = top + plotH;
+            const clipId = `chart-${shot.start}`.replace(".", "-");
             return (
               <>
                 <svg width={w} height={h} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+                  <defs>
+                    <clipPath id={clipId}><rect x={0} y={0} width={headX} height={h} /></clipPath>
+                    <linearGradient id={`${clipId}-fill`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor={c.accent} stopOpacity={0.16} />
+                      <stop offset="1" stopColor={c.accent} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <path d={`${look.chart === "bare" ? smooth : `M${pts.replace(/ /g, " L")}`} L${xs[n - 1]} ${base} L${xs[0]} ${base} Z`} fill={`url(#${clipId}-fill)`} clipPath={`url(#${clipId})`} />
                   {look.chart === "bare" ? (
                     <path d={smooth} fill="none" stroke={c.accent} strokeWidth={5} strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - draw} />
                   ) : (
@@ -93,7 +110,14 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
                   {v.points.map((pt, i) => (
                     <circle key={i} cx={xs[i]} cy={y(pt.value)} r={i === hi ? 13 : 9} fill={i === hi ? c.accent : c.card} stroke={c.accent} strokeWidth={4} opacity={p(i)} />
                   ))}
+                  {draw > 0 && draw < 1 && <circle cx={headX} cy={headY} r={9} fill={c.accent} />}
                 </svg>
+                {/* The other points' values, small to the left of them; the highlight gets the big label. */}
+                {v.points.map((pt, i) =>
+                  i === hi ? null : (
+                    <div key={i} style={{ position: "absolute", left: xs[i] - 160, width: 136, textAlign: "right", top: y(pt.value) - 20, fontFamily: t.label, fontWeight: 600, fontSize: 30, color: c.ink, opacity: p(i) }}>{fmt(pt.value, v.unit)}</div>
+                  ),
+                )}
                 {v.points.map((pt, i) => (
                   <div key={i} style={{ position: "absolute", left: xs[i] - 70, width: 140, top: top + plotH + 16, textAlign: "center", fontFamily: t.label, fontWeight: 500, fontSize: 26, color: c.muted, opacity: p(i) }}>{pt.label}</div>
                 ))}
