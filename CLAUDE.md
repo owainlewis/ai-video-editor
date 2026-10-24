@@ -25,7 +25,7 @@ Never render the whole video while editing. Owain exports from the editor when h
 ## How a plan works
 
 - `shots` run in order. Each starts on a spoken phrase (`at`, a few exact words from the transcript) and lasts until the next.
-- `layout`: `full` (speaker), `punch` (speaker, closer), `split` (a visual on top, speaker below), `media` (the visual alone), `cutaway` (b-roll edge to edge), `scene` (a full-frame card); on YouTube, `side` (visual with the speaker in a window) and `over` (lower third or title over the picture).
+- `layout`: `full` (speaker), `punch` (speaker, closer), `split` (a visual on top, speaker below), `media` (the visual alone), `cutaway` (b-roll edge to edge), `scene` (a full-frame card); on YouTube, `side` (visual with the speaker in a window) and `over` (a cinematic title over the picture).
 - `visual`: one of the kinds in `engine/schema.ts` (title, list, steps, chart, stat, kpi, compare, pipeline, constraint, checklist, levels, quote, image, video and more). Items and reveals take their own `at` so they land on their word.
 - `keep: true` continues the previous shot's visual (swap the `header` without a new graphic).
 - `header`: the headline above a split, with one `*accent*` word.
@@ -36,7 +36,7 @@ Never render the whole video while editing. Owain exports from the editor when h
 `"canvas": "youtube"` (16:9). Owain cuts the video himself; the plan only adds graphics over it and never re-cuts it. Most of a long video is screen recording and b-roll, so:
 
 - **Graphics go only where Owain is on camera.** If `build/camera.json` is missing, run `npm run studio -- frames <slug>`, look at the sheets, pick two or three times where he is on camera, then `npm run studio -- scan <slug> --ref <t1>,<t2>`. `check` errors on any graphic off camera.
-- Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a `lower` third on an ivory card, or a cinematic `title`), `media` (the visual alone, briefly).
+- Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a cinematic `title`; no lower thirds, Owain does not like them, unless he asks), `media` (the visual alone, briefly).
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
 

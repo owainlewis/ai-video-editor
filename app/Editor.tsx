@@ -86,7 +86,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       return false;
     }
   })();
-  const rendering = p.status && !p.status.done && p.status.stage.startsWith("Render");
+  const rendering = p.status && !p.status.done;
 
   return (
     <Shell

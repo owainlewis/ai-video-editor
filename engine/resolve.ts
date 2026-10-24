@@ -252,6 +252,8 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     if ((s.layout === "side" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title")
       issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
+    // Owain does not like lower thirds (2026-10-24): only when he asks for one.
+    if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
     if (s.layout === "over" && len < 2.5) issues.push({ level: "warn", message: `${label}: an overlay for ${len.toFixed(1)}s is too quick to read` });
     if (s.layout !== "full" && s.layout !== "punch" && !s.keep && len > 12) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; past 12s give it a reveal, a keep or return to the speaker` });
     away = s.layout === "media" || s.layout === "cutaway" ? away + len : 0;

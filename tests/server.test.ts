@@ -112,3 +112,12 @@ describe("deleting a project", () => {
     expect(() => trashProject(setup(), ".trash", false)).toThrow(/no project/);
   });
 });
+
+describe("YouTube export", () => {
+  it("renders only the graphic sections, merging a visual with its keep shots", async () => {
+    const { sections } = await import("../media/export.ts");
+    const shot = (start: number, end: number, layout: string, extra: object = {}) => ({ start, end, layout, anchor: "a", ...extra });
+    const r = { shots: [shot(0, 5, "full"), shot(5, 9, "side", { visual: { kind: "list" } }), shot(9, 12, "side", { keep: true }), shot(12, 20, "full"), shot(20, 24, "over", { visual: { kind: "title" } })] } as never;
+    expect(sections(r)).toEqual([{ start: 5, end: 12, alpha: false }, { start: 20, end: 24, alpha: true }]);
+  });
+});

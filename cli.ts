@@ -11,8 +11,9 @@ import { join, resolve } from "node:path";
 import { ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
+import { exportOverOriginal } from "./media/export.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
-import { ROOT, writeJson } from "./media/tools.ts";
+import { readJson, ROOT, writeJson } from "./media/tools.ts";
 import { startServer } from "./server/index.ts";
 
 const args = process.argv.slice(2);
@@ -74,11 +75,16 @@ async function main() {
       const dir = join(projects, slug);
       setStatus(dir, "Rendering");
       try {
+        // YouTube videos keep the original picture and only render the graphic sections; reels are
+        // short and graphics-heavy, so every frame is rendered.
+        const youtube = readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube";
         let last = -1;
-        const out = await renderFinal(projects, slug, (done, total) => {
-          const pct = Math.floor((100 * done) / total);
-          if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
-        }, log);
+        const out = youtube
+          ? await exportOverOriginal(projects, slug, (stage) => setStatus(dir, stage), log)
+          : await renderFinal(projects, slug, (done, total) => {
+              const pct = Math.floor((100 * done) / total);
+              if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
+            }, log);
         writeJson(join(dir, "status.json"), { stage: "Rendered", done: true, at: new Date().toISOString() });
         console.log(`Rendered ${out}`);
       } catch (e) {
