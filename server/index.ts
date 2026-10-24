@@ -17,6 +17,7 @@ import { dropBroll } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
+import { EFFECTS, effectList } from "../media/effects.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -161,6 +162,8 @@ export async function startServer(port = 4747) {
       return send(res, 200, { busy: libraryBusy, clips: loadLibrary().map((c) => ({ ...c, thumb: `library/${c.id}-thumb.jpg` })) });
     }
 
+    if (parts[0] === "effects") return send(res, 200, effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube"));
+
     if (parts[0] === "projects" && !parts[1]) {
       const list = readdirSync(projects, { withFileTypes: true })
         .filter((d) => d.isDirectory() && !d.name.startsWith("."))
@@ -262,6 +265,7 @@ export async function startServer(port = 4747) {
     if (req.url?.startsWith("/api/"))
       return void api(req, res).catch((e) => send(res, typeof e.code === "number" ? e.code : 500, { error: String(e.message ?? e) }));
     if (serveFile(join(BROLL, ".clips"), req, res, "/library")) return;
+    if (serveFile(EFFECTS, req, res, "/effects")) return;
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });

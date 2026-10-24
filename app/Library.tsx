@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { Word } from "../engine/schema";
-import { api, type Asset, clock, type LibraryClip } from "./api";
+import { api, type Asset, clock, type Effect, type LibraryClip } from "./api";
 import { CLIP, toSentences } from "./Timeline";
 
 // The left panel: the project's assets (drop b-roll and images in; click one to mention it in a
@@ -12,8 +12,13 @@ export const Library: React.FC<{
   time: number;
   onUse: (ref: string) => void;
   onSeek: (t: number) => void;
-}> = ({ slug, assets, words, time, onUse, onSeek }) => {
-  const [tab, setTab] = useState<"assets" | "script">("assets");
+  canvas: string;
+}> = ({ slug, assets, words, time, onUse, onSeek, canvas }) => {
+  const [tab, setTab] = useState<"assets" | "effects" | "script">("assets");
+  const [effects, setEffects] = useState<Effect[]>([]);
+  useEffect(() => {
+    api.effects(canvas).then(setEffects).catch(() => {});
+  }, [canvas]);
   const [over, setOver] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -64,6 +69,9 @@ export const Library: React.FC<{
       <div className="tabs">
         <button className={tab === "assets" ? "on" : ""} onClick={() => setTab("assets")}>
           Assets
+        </button>
+        <button className={tab === "effects" ? "on" : ""} onClick={() => setTab("effects")}>
+          Effects
         </button>
         <button className={tab === "script" ? "on" : ""} onClick={() => setTab("script")}>
           Script
@@ -117,6 +125,19 @@ export const Library: React.FC<{
             ))}
           </div>
           {clips.length > 0 && shown.length === 0 && <p className="muted small">No b-roll matches "{query}".</p>}
+        </div>
+      ) : tab === "effects" ? (
+        <div className="assets">
+          <p className="muted small">Every graphic in your style. Click one to ask for it in your note.</p>
+          <div className="effects">
+            {effects.map((e) => (
+              <button key={e.id} className="effect" onClick={() => onUse(`the ${e.kind} graphic (${e.id})`)} title={e.summary}>
+                <img src={`/${e.thumb}`} alt="" loading="lazy" />
+                <b>{e.kind}</b>
+                <span>{e.summary}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="script">

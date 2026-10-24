@@ -68,4 +68,4 @@ When Owain asks for a change in the chat panel you get the project, the selected
 
 ## Code
 
-`engine/` (plan schema and timing, pure), `effects/` (Remotion compositions and visuals), `styles/` (Ivory and the card catalog), `media/` (import, project resolution, render), `audio/` (the mix, Python), `server/` (local API, version history, the chat bridge), `app/` (the editor UI). After changing code run `npm run typecheck` and `npm test`.
+`engine/` (plan schema and timing, pure), `effects/` (Remotion compositions and visuals), `styles/` (Ivory and the card catalog), `media/` (import, project resolution, render), `audio/` (the mix, Python), `server/` (local API, version history, the chat bridge), `app/` (the editor UI). After changing code run `npm run typecheck` and `npm test`. After changing a visual or the style, run `npm run studio -- effects --force` so the Effects tab shows it.

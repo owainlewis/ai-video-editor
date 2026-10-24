@@ -18,6 +18,8 @@ const FULL: Box = { x: 0, y: 0, w: WW, h: WH, r: 0, o: 1 };
 const WINDOW: Box = { x: WW - 48 - 330, y: (WH - 440) / 2, w: 330, h: 440, r: 22, o: 1 };
 export const SIDE = { x: 120, y: 110, w: WINDOW.x - 72 - 120, h: WH - 220 };
 export const MEDIA = { x: 160, y: 90, w: WW - 320, h: WH - 180 };
+// The width the shared visuals are designed at (the reel's panel).
+const DESIGN_W = 900;
 // How long the speaker takes to move between full frame and the window: one eased move.
 const MOVE = 0.5;
 
@@ -167,10 +169,17 @@ export const Wide: React.FC<Resolved> = (r) => {
         if (s.layout !== "side" && s.layout !== "media") return null;
         const area = s.layout === "side" ? SIDE : MEDIA;
         const p = reveal(time, s.start, 0.5);
+        // The visuals are designed for a 900 px panel (the reel's). On 16:9 they are laid out at that
+        // width and scaled up to fill the panel, so type and lines grow with it instead of sitting
+        // small in empty space (Owain, 2026-10-24: "a little sparse/plain").
+        const k = Math.min(area.w / DESIGN_W, area.h / 520);
+        const vw = area.w / k, vh = area.h / k;
         return (
           <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
-            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, display: "flex", alignItems: "center", justifyContent: "center", opacity: p, filter: `blur(${(1 - p) * 10}px)`, color: pal(tone).ink }}>
-              <VisualView slug={r.slug} shot={s} time={time} w={area.w} h={area.h} v={visual} />
+            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, opacity: p, filter: `blur(${(1 - p) * 10}px)`, color: pal(tone).ink }}>
+              <div style={{ position: "absolute", left: 0, top: 0, width: vw, height: vh, transform: `scale(${k})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} />
+              </div>
             </div>
           </Sequence>
         );

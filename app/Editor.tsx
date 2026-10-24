@@ -113,7 +113,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
     >
       <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
-        <Library slug={slug} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
+        <Library slug={slug} canvas={r.canvas} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
           <Player
             ref={player}
