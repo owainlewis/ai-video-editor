@@ -10,8 +10,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ingest, setStatus, slugFor } from "./media/ingest.ts";
-import { missingMattes, resolveProject } from "./media/project.ts";
-import { makeMatte, matteKey, pruneMattes } from "./media/matte.ts";
+import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
@@ -74,14 +73,6 @@ async function main() {
       const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
       console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
       for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
-      return;
-    }
-    case "mattes": {
-      // Cut the speaker out for every behind section that has no cut-out yet.
-      const slug = need(target);
-      for (const m of missingMattes(projects, slug)) console.log(`  matted ${makeMatte(join(projects, slug), m.start, m.end, log)}`);
-      const { resolved } = resolveProject(projects, slug);
-      pruneMattes(join(projects, slug), (resolved?.shots ?? []).filter((s) => s.layout === "behind").map((s) => matteKey(s.start, s.end)));
       return;
     }
     case "effects": {

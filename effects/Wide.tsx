@@ -1,6 +1,6 @@
 import React from "react";
 import { Audio, Video } from "@remotion/media";
-import { AbsoluteFill, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
@@ -115,36 +115,6 @@ const Lower: React.FC<{ title: string; sub?: string; shot: ResolvedShot; time: n
   );
 };
 
-// One long word across the room at head height, behind Owain (layout "behind"). Sized to span the
-// frame; kept above the microphone. It rises and sharpens in, holds, and fades out.
-const BehindWord: React.FC<{ text: string; shot: ResolvedShot; time: number; face: Resolved["face"] }> = ({ text, shot, time, face }) => {
-  const a = reveal(time, shot.start + 0.15, 0.7);
-  const out = interpolate(time, [shot.end - 0.5, shot.end], [1, 0], clamp);
-  const letters = text.replace(/\*/g, "").length;
-  const size = Math.min(WH * 0.3, (WW * 0.94) / Math.max(1, letters * 0.56));
-  const centre = Math.min(face.y * WH, WH * 0.36);
-  return (
-    <AbsoluteFill style={{ alignItems: "center", opacity: a * out }}>
-      <div
-        style={{
-          position: "absolute",
-          top: centre - size * 0.55 + (1 - a) * 40,
-          fontFamily: t.sans,
-          fontWeight: 700,
-          fontSize: size,
-          lineHeight: 1,
-          letterSpacing: -size * 0.045,
-          color: "#F4F1EA",
-          whiteSpace: "nowrap",
-          filter: `blur(${(1 - a) * 12}px)`,
-        }}
-      >
-        <Accented text={text} />
-      </div>
-    </AbsoluteFill>
-  );
-};
-
 // A cinematic title over the picture: one small, tightly set serif line in the centre.
 const OverTitle: React.FC<{ text: string; kicker?: string; shot: ResolvedShot; time: number }> = ({ text, kicker, shot, time }) => {
   const a = reveal(time, shot.start + 0.2, 0.8);
@@ -177,10 +147,7 @@ export const Wide: React.FC<Resolved> = (r) => {
   const onCanvas = shot.layout === "side" || shot.layout === "media";
   // A cinematic title dims the picture a little so the line holds. No scrim, no gradient.
   const titled = shot.layout === "over" && shot.visual?.kind === "title";
-  const behind = shot.layout === "behind";
-  // A title dims the picture so the line holds; behind dims only the room, since Owain is drawn
-  // again, undimmed, in front of the word.
-  const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : behind ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.78, 0.78, 1], clamp) : 1;
+  const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : 1;
 
   return (
     <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }}>
@@ -218,12 +185,6 @@ export const Wide: React.FC<Resolved> = (r) => {
         );
       })}
       {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} prev={prev} time={time} dim={dim} />}
-      {behind && shot.visual?.kind === "title" && <BehindWord text={shot.visual.text} shot={shot} time={time} face={r.face} />}
-      {behind && shot.matte && !r.alpha && (
-        <Sequence from={Math.round(shot.start * r.fps)} durationInFrames={Math.max(1, Math.round((shot.end - shot.start) * r.fps))} name="behind: speaker cut-out">
-          <OffthreadVideo src={staticFile(shot.matte)} transparent muted style={{ position: "absolute", left: 0, top: 0, width: WW, height: WH }} />
-        </Sequence>
-      )}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}

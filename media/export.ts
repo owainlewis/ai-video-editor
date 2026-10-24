@@ -8,11 +8,10 @@ import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { mixAudio } from "./render.ts";
-import { makeMatte, mattePaths, matteKey } from "./matte.ts";
-import { missingMattes, resolveProject } from "./project.ts";
+import { resolveProject } from "./project.ts";
 import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
-export type Section = { start: number; end: number; alpha: boolean; behind?: boolean };
+export type Section = { start: number; end: number; alpha: boolean };
 
 // The parts of the video a graphic touches. A visual and the keep shots after it are one section;
 // sections that touch are merged so the picture never flickers between them. Overlays (titles over
@@ -23,10 +22,9 @@ export function sections(r: Resolved): Section[] {
     if (s.keep || s.layout === "full") return;
     let last = i;
     while (r.shots[last + 1]?.keep) last++;
-    const behind = s.layout === "behind";
-    const next: Section = { start: s.start, end: r.shots[last].end, alpha: s.layout === "over" || behind, ...(behind ? { behind: true } : {}) };
+    const next = { start: s.start, end: r.shots[last].end, alpha: s.layout === "over" };
     const prev = out[out.length - 1];
-    if (prev && !behind && !prev.behind && next.start - prev.end < 0.05 && prev.alpha === next.alpha) prev.end = next.end;
+    if (prev && next.start - prev.end < 0.05 && prev.alpha === next.alpha) prev.end = next.end;
     else out.push(next);
   });
   return out;
@@ -36,8 +34,6 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const dir = join(projects, slug);
   const first = resolveProject(projects, slug);
   if (!first.resolved || first.issues.some((i) => i.level === "error")) throw new Error(first.issues.filter((i) => i.level === "error").map((i) => i.message).join("\n"));
-  // Behind sections need the speaker's cut-out; make any that are missing first.
-  for (const m of missingMattes(projects, slug)) onStage("Cutting you out"), makeMatte(dir, m.start, m.end, log);
   onStage("Mixing audio");
   mixAudio(projects, slug, log);
   const { resolved } = resolveProject(projects, slug);
@@ -54,7 +50,7 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   mkdirSync(work, { recursive: true });
   for (const f of readdirSync(work)) rmSync(join(work, f), { recursive: true });
   const parts = sections(r);
-  const files: { file: string; s: Section; key: string }[] = [];
+  const files: { file: string; s: Section }[] = [];
   for (const [k, s] of parts.entries()) {
     onStage(`Rendering graphics ${k + 1}/${parts.length}`);
     const props = join(work, `props-${k}.json`);
@@ -63,34 +59,14 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const from = Math.round(s.start * fps), to = Math.max(from, Math.round(s.end * fps) - 1);
     run("npx", ["remotion", "render", "effects/index.ts", comp.id, file, `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
       ...(s.alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])], { env: { REEL_PRORES: "1" }, log });
-    // The cut-out is found by the section's own times; the overlay starts on the original's frame.
-    files.push({ file, s: { ...s, start: from / fps }, key: s.behind ? matteKey(s.start, s.end) : "" });
+    files.push({ file, s: { ...s, start: from / fps } });
   }
 
   // Each section is a timed input laid over the original from its first frame; outside its time it
-  // passes the picture through untouched. A behind section then lays Owain back on top: the original
-  // frames for that stretch, cut out with the matte (scaled to the original's size), so his pixels
-  // stay full resolution.
-  const inputs: string[] = [];
-  const chain: string[] = [];
-  let n = 1, v = 0;
-  const window = (s: Section) => `enable='between(t,${s.start.toFixed(3)},${(s.end + 1 / fps).toFixed(3)})'`;
-  for (const { file, s, key } of files) {
-    inputs.push("-itsoffset", s.start.toFixed(6), "-i", file);
-    chain.push(`[v${v}][${n++}:v]overlay=eof_action=pass:${window(s)}[v${v + 1}]`);
-    v++;
-    if (s.behind) {
-      const length = (s.end - s.start).toFixed(4);
-      inputs.push("-ss", s.start.toFixed(6), "-t", length, "-itsoffset", s.start.toFixed(6), "-i", original);
-      inputs.push("-itsoffset", s.start.toFixed(6), "-i", mattePaths(dir, key).mask);
-      const [o, m] = [n++, n++];
-      // Pull the matte in a few pixels and soften it, so no undimmed wall shows as a halo round his head.
-      chain.push(`[${m}:v]scale=${w}:-2,format=gray,erosion,erosion,erosion,gblur=sigma=2[m${o}]`, `[${o}:v]format=rgba[o${o}]`, `[o${o}][m${o}]alphamerge[f${o}]`);
-      chain.push(`[v${v}][f${o}]overlay=eof_action=pass:${window(s)}[v${v + 1}]`);
-      v++;
-    }
-  }
-  const graph = `[0:v]null[v0]${chain.length ? ";" + chain.join(";") : ""}`;
+  // passes the picture through untouched.
+  const inputs = files.flatMap(({ file, s }) => ["-itsoffset", s.start.toFixed(6), "-i", file]);
+  const chain = files.map(({ s }, k) => `[v${k}][${k + 1}:v]overlay=eof_action=pass:enable='between(t,${s.start.toFixed(3)},${(s.end + 1 / fps).toFixed(3)})'[v${k + 1}]`);
+  const graph = files.length ? `[0:v]null[v0];${chain.join(";")}` : "[0:v]null[v0]";
   const audio = join(dir, "build/mix.wav");
   const out = join(dir, "renders/final.mp4");
   mkdirSync(join(dir, "renders"), { recursive: true });
@@ -98,7 +74,7 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   let last = -1;
   await ffmpegProgress([
     "-i", original, ...inputs, "-i", audio,
-    "-filter_complex", graph, "-map", `[v${v}]`, "-map", `${n}:a`,
+    "-filter_complex", graph, "-map", `[v${files.length}]`, "-map", `${files.length + 1}:a`,
     ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
     "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", out,
   ], probeDuration(original), (f) => {

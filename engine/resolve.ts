@@ -253,14 +253,6 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title")
       issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
-    // Behind: one long word spanning the frame, with Owain in front of it. A number with a label read
-    // as noise; a long word survives his head covering a letter or two (Owain, 2026-10-24).
-    if (s.layout === "behind") {
-      const word = s.visual?.kind === "title" ? s.visual.text.replace(/\*/g, "").trim() : "";
-      if (!word) issues.push({ level: "error", message: `${label}: behind takes a title with one word` });
-      else if (/\s/.test(word)) issues.push({ level: "warn", message: `${label}: behind reads best as one word, not "${word}"` });
-      else if (word.length < 6 || word.length > 14) issues.push({ level: "warn", message: `${label}: behind needs a word of 6 to 14 letters to span the frame ("${word}" has ${word.length})` });
-    }
     if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
     if (s.layout === "over" && len < 2.5) issues.push({ level: "warn", message: `${label}: an overlay for ${len.toFixed(1)}s is too quick to read` });
     if (s.layout !== "full" && s.layout !== "punch" && !s.keep && len > 12) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; past 12s give it a reveal, a keep or return to the speaker` });
@@ -279,7 +271,7 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
   if (canvas === "youtube") return lintWide(shots, duration);
   const issues: Issue[] = [];
   for (const s of shots)
-    if (s.layout === "side" || s.layout === "over" || s.layout === "behind") issues.push({ level: "error", message: `"${s.anchor}": ${s.layout} is a YouTube layout; set "canvas": "youtube"` });
+    if (s.layout === "side" || s.layout === "over") issues.push({ level: "error", message: `"${s.anchor}": ${s.layout} is a YouTube layout; set "canvas": "youtube"` });
   const speaker = (l: string) => l !== "media" && l !== "cutaway" && l !== "scene";
   const total = (pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
   let away = 0;

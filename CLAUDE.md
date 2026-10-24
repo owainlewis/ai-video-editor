@@ -39,7 +39,6 @@ Never render the whole video while editing. Owain exports from the editor when h
 - Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a cinematic `title`; no lower thirds, Owain does not like them, unless he asks), `media` (the visual alone, briefly).
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
-- `behind` exists but Owain did not like it (2026-10-24): never use or suggest it unless he asks.
 
 ## B-roll
 

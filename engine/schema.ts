@@ -210,7 +210,6 @@ export const Layout = z.enum([
   "split", // visual on top, speaker below, caption on the seam
   "media", // visual fills the frame, voice continues
   "cutaway", // b-roll fills the whole frame edge to edge, voice continues
-  "behind", // YouTube: a big number or short title on the wall, with the speaker cut out in front of it
   "scene", // a full-frame graphic scene: big headline on top, the visual below, light or dark
   // YouTube (16:9) only:
   "side", // the visual in a card, the speaker in a small rounded window at the side, voice continues
@@ -292,8 +291,6 @@ export type ResolvedShot = {
   visual?: ResolvedVisual;
   sfx?: z.infer<typeof SfxKind>;
   anchor: string;
-  // For "behind": the speaker cut out with transparency (project-relative), once it has been made.
-  matte?: string;
   keep?: boolean;
   tone?: "light" | "dark";
   enter?: { from: "tile" | "card" | "input" | "rect"; index: number; rect?: [number, number, number, number] };
