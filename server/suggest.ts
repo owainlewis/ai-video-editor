@@ -39,7 +39,7 @@ export function decide(projects: string, slug: string, id: string, accept: boole
   const items = loadSuggestions(dir);
   const s = items.find((x) => x.id === id);
   if (!s) throw Object.assign(new Error(`no suggestion ${id}`), { code: 404 });
-  if (accept) placeOver(projects, slug, { at: "", layout: s.layout, visual: s.visual }, s.start, s.end);
+  if (accept) placeOver(projects, slug, { at: "", layout: s.layout, visual: s.visual }, s.start, s.end - s.start);
   s.status = accept ? "accepted" : "rejected";
   if (note) s.note = note;
   save(dir, items);

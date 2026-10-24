@@ -68,7 +68,8 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
       s.visual = { ...v, size: probeSize(join(dir, v.src)) };
-      const left = probeDuration(join(dir, v.src)) - v.start;
+      // A slowed clip lasts longer on screen.
+      const left = (probeDuration(join(dir, v.src)) - v.start) / (v.rate ?? 1);
       if (!v.loop && s.end - s.start > left + 0.04) issues.push({ level: "error", message: `"${s.anchor}": shot is ${(s.end - s.start).toFixed(2)}s but ${v.src} has ${left.toFixed(2)}s from start ${v.start}` });
     }
     // A kept shot carries on the same clip; that is one use, not two.

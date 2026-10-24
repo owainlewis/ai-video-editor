@@ -237,7 +237,8 @@ export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], 
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");
-    return [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): ${s.layout} graphic is not on camera; graphics go on the talking head only${near ? ` (on camera nearby: ${near})` : ""}` }];
+    const what = s.layout === "cutaway" ? "b-roll covers the talking head, not a screen recording or other b-roll" : "graphics go on the talking head only";
+    return [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): not on camera; ${what}${near ? ` (on camera nearby: ${near})` : ""}` }];
   });
 
 // YouTube (16:9) over a hand-edited rough cut: sparse and calm. Graphics hold longer, the

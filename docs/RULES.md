@@ -5,6 +5,7 @@ Newest first. "Where" says what enforces it.
 
 | Date | Note | Rule | Where |
 | --- | --- | --- | --- |
+| 2026-10-24 | "You can't drag b-roll into the timeline it says something about word too short." | A drop measures the clip from where the b-roll really starts (the next word after the drop), not from the drop point, and needs only 0.4 s. When no word ends inside a short clip, the clip is slowed (to no less than 0.65x, the `rate` field) to reach the next word. B-roll off camera now says where it can go. Tested: 44 of 44 drops of 1.2 s and 2 s clips across a 40 s take. | `server/insert.ts`, `effects/Visuals.tsx`, `engine/schema.ts` |
 | 2026-10-24 | "Remove the behind-me code entirely." | Removed: the behind layout, the speaker cut-outs (Apple Vision mattes) and their export path. Do not suggest text behind the speaker again. | (removed) |
 | 2026-10-24 | "I don't think I like it" (the behind-me word, after seeing the demo) | Do not use or suggest `behind` graphics unless Owain asks. The layout stays in the code for now. | `CLAUDE.md` |
 | 2026-10-24 | "I actually don't like the 12x because there's a lot of noise around it - it would work for a longer word I think that spans the screen." | Behind graphics are one long word (6 to 14 letters) spanning the frame at head height, above the microphone, with no label. Owain's head covers a letter or two. `check` warns on short words and phrases. | `engine/resolve.ts`, `effects/Wide.tsx` |

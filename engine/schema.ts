@@ -32,7 +32,8 @@ export const Visual = z.discriminatedUnion("kind", [
   // B-roll footage: a project file, or "broll:<id>" for a clip from the library.
   // `start` is the offset into the clip in seconds.
   // `loop` repeats a short clip (a library's own preview loop) to fill the shot.
-  z.object({ kind: z.literal("video"), src: z.string(), start: z.number().default(0), loop: z.boolean().default(false) }),
+  // `rate` below 1 slows a clip a little so a short shot can cover the next spoken word.
+  z.object({ kind: z.literal("video"), src: z.string(), start: z.number().default(0), loop: z.boolean().default(false), rate: z.number().min(0.5).max(2).default(1) }),
   // One or more official logos, never redrawn.
   z.object({
     kind: z.literal("logos"),

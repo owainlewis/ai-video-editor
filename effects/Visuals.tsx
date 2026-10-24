@@ -168,7 +168,7 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
     return (
       <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: cw, height: ch, overflow: "hidden", borderRadius: 22, boxShadow: c.shadow, background: c.card }}>
-          <Video src={src(slug, v.src)} muted loop={v.loop} trimBefore={Math.round(v.start * 30)} objectFit="cover" style={{ width: "100%", height: "100%" }} />
+          <Video src={src(slug, v.src)} muted loop={v.loop} playbackRate={v.rate} trimBefore={Math.round(v.start * 30)} objectFit="cover" style={{ width: "100%", height: "100%" }} />
         </div>
       </div>
     );
@@ -181,6 +181,7 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
         src={src(slug, v.src)}
         muted
         loop={v.loop}
+        playbackRate={v.rate}
         trimBefore={Math.round(v.start * 30)}
         objectFit="cover"
         style={{ width: "100%", height: "100%", scale: String(1.02 + 0.05 * p), filter }}
