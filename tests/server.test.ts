@@ -61,6 +61,10 @@ describe("import", () => {
     const raw = [{ text: "from", start: 0, end: 0.3 }, { text: "2", start: 0.3, end: 0.5 }, { text: ",500", start: 0.5, end: 0.8 }, { text: "ship.", start: 0.9, end: 1.2 }, { text: "Ship.", start: 1.4, end: 1.41 }];
     expect(cleanWords(raw, 1.3).map((w) => w.text)).toEqual(["from", "2,500", "ship."]);
   });
+  it("starts landscape footage as a YouTube video and portrait as a reel", () => {
+    expect(Edit.parse(starterPlan("demo", words, [3840, 2160]))).toMatchObject({ canvas: "youtube" });
+    expect(Edit.parse(starterPlan("demo", words, [1080, 1920]))).toMatchObject({ canvas: "reel" });
+  });
   it("starts a valid plan anchored on the opening words", () => {
     const plan = Edit.parse(starterPlan("demo", words, [1080, 1920]));
     expect(plan.shots[0]).toMatchObject({ at: "Anthropic just released", layout: "full" });

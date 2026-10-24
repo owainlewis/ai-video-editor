@@ -3,12 +3,15 @@
 //   npm run studio -- ingest <file> [--slug s]     import a clip: working copy, preview, transcript, starter plan
 //   npm run studio -- check <slug>                 resolve the plan, print the shots and every issue
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
+//   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
+//   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- render <slug>                mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
+import { frameSheets, scanCamera } from "./media/scan.ts";
 import { ROOT, writeJson } from "./media/tools.ts";
 import { startServer } from "./server/index.ts";
 
@@ -53,6 +56,19 @@ async function main() {
       for (const f of stills(projects, need(target), times, log)) console.log(f);
       return;
     }
+    case "frames": {
+      for (const f of frameSheets(join(projects, need(target)), parseInt(flag("every") ?? "15"), log)) console.log(f);
+      console.log("Look at the sheets, pick two or three times where the speaker is on camera, then run scan with --ref.");
+      return;
+    }
+    case "scan": {
+      const refs = (flag("ref") ?? "").split(",").map(Number).filter((n) => n >= 0 && !Number.isNaN(n));
+      const ranges = scanCamera(join(projects, need(target)), refs);
+      const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
+      console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
+      for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
+      return;
+    }
     case "render": {
       const slug = need(target);
       const dir = join(projects, slug);
@@ -72,7 +88,7 @@ async function main() {
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, stills <slug> --at <s>, render <slug>");
+      console.log("Commands: serve, ingest <file>, check <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug>");
   }
 }
 

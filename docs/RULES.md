@@ -5,6 +5,8 @@ Newest first. "Where" says what enforces it.
 
 | Date | Note | Rule | Where |
 | --- | --- | --- | --- |
+| 2026-10-24 | "The time line is messed up with the text overlapping (maybe remove?)" | The timeline shows what is said as one block per sentence, which never overlaps, instead of a label per word. YouTube projects also get an "on camera" lane from the scan. | `app/Timeline.tsx` `toSentences` |
+| 2026-10-24 | "The video defaulted to a reel but this one is for YouTube." | Landscape footage starts as a YouTube project (16:9, no word captions); portrait starts as a reel. | `media/ingest.ts` `starterPlan` (tested) |
 | 2026-10-24 | "I uploaded a video but it's stuck on preparing footage." (A 27 min 4K video, still encoding with no progress shown.) | Import reads the footage once and writes the working copy, the preview and the voice in one pass, with the Mac's hardware encoder (libx264 when it is missing), and reports "Preparing footage NN%". A 40 s 4K clip went from 88 s to 38 s. | `media/ingest.ts`, `media/tools.ts` `ffmpegProgress` |
 | 2026-10-24 | "Add the ability to delete a project." | Delete moves the project and its upload into `projects/.trash/`; nothing is erased. It asks first, and refuses while an import, export or note is running. | `server/trash.ts` (tested), `app/Home.tsx`, `app/Editor.tsx` |
 | 2026-10-24 | (self-review) Restarting the server killed Owain's 8.3 GB import halfway, and the project sat on "Preparing footage" forever. | Imports and exports run detached, with a log in the project, so a server restart never kills them. Each job records its process; one that died shows as "Interrupted" and can be started again or deleted. | `server/index.ts` `job`, `media/ingest.ts` `liveStatus` (tested) |

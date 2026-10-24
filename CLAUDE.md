@@ -31,6 +31,15 @@ Never render the whole video while editing. Owain exports from the editor when h
 - `header`: the headline above a split, with one `*accent*` word.
 - `accents`: four to six words in the whole video that carry the meaning.
 
+## YouTube videos
+
+`"canvas": "youtube"` (16:9). Owain cuts the video himself; the plan only adds graphics over it and never re-cuts it. Most of a long video is screen recording and b-roll, so:
+
+- **Graphics go only where Owain is on camera.** If `build/camera.json` is missing, run `npm run studio -- frames <slug>`, look at the sheets, pick two or three times where he is on camera, then `npm run studio -- scan <slug> --ref <t1>,<t2>`. `check` errors on any graphic off camera.
+- Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a `lower` third on an ivory card, or a cinematic `title`), `media` (the visual alone, briefly).
+- About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
+- No word captions unless asked (`"captions": true`).
+
 ## Notes from Owain
 
 When Owain asks for a change in the chat panel you get the project, the selected section (times and the words said in it) or the playhead, and his note.

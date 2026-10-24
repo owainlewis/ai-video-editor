@@ -168,6 +168,7 @@ export async function startServer(port = 4747) {
         versions: versions(dir),
         chat: loadChat(dir).messages,
         working: isRunning(slug),
+        camera: existsSync(join(dir, "build/camera.json")) ? readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges : undefined,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
     }

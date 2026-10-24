@@ -109,17 +109,19 @@ export function cleanWords(raw: Word[], end: number): Word[] {
     }, []);
 }
 
-// The plan a new clip starts from: the speaker full frame, nothing added yet.
+// The plan a new clip starts from: the speaker full frame, nothing added yet. Landscape footage is
+// a YouTube video (16:9, no word captions); portrait is a reel (Owain, 2026-10-24).
 export function starterPlan(slug: string, words: Word[], size: [number, number]) {
   const opening = words.slice(0, 3).map((w) => w.text).join(" ");
+  const youtube = size[0] > size[1];
   return {
     title: slug.replace(/-/g, " "),
-    canvas: "reel",
+    canvas: youtube ? "youtube" : "reel",
     style: "ivory",
     format: "mixed",
     split: "half",
     // A first guess at where the face is; refine it from checks/frame.jpg.
-    face: size[0] > size[1] ? { x: 0.5, y: 0.3, h: 0.36 } : { x: 0.5, y: 0.3, h: 0.2 },
+    face: youtube ? { x: 0.5, y: 0.3, h: 0.36 } : { x: 0.5, y: 0.3, h: 0.2 },
     accents: [],
     music: false,
     shots: [{ at: opening || "start", layout: "full" }],

@@ -137,7 +137,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
               {warns.length > 3 && <span className="muted">and {warns.length - 3} more warnings</span>}
             </div>
           )}
-          <Timeline r={r} words={p.words} time={time} selection={selection} onSeek={seek} onSelect={setSelection} />
+          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} onSeek={seek} onSelect={setSelection} />
         </section>
       </div>
     </Shell>

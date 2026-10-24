@@ -16,6 +16,7 @@ export type Project = {
   versions?: Version[];
   chat?: ChatMessage[];
   working?: boolean;
+  camera?: [number, number][];
   render?: { file: string; at: number } | null;
 };
 export type Event =

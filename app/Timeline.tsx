@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import type { Resolved, Word } from "../engine/schema";
 import { clock } from "./api";
 
@@ -12,10 +12,12 @@ export const Timeline: React.FC<{
   words: Word[];
   time: number;
   selection: Range | null;
+  camera?: [number, number][];
   onSeek: (t: number) => void;
   onSelect: (r: Range | null) => void;
-}> = ({ r, words, time, selection, onSeek, onSelect }) => {
+}> = ({ r, words, time, selection, camera, onSeek, onSelect }) => {
   const box = useRef<HTMLDivElement>(null);
+  const sentences = useMemo(() => toSentences(words), [words]);
   const pps = Math.max(64, Math.min(140, 1400 / Math.max(1, r.duration)));
   const width = r.duration * pps;
   const at = (clientX: number) => {
@@ -69,11 +71,25 @@ export const Timeline: React.FC<{
             </div>
           ))}
         </div>
-        <div className="lane words">
-          {words.map((w, i) => (
-            <span key={i} className={time >= w.start && time < w.end ? "now" : ""} style={{ left: w.start * pps }}>
-              {w.text}
-            </span>
+        {camera && (
+          <div className="lane camera" title="Where you are on camera. Graphics go only here.">
+            {camera.map(([a, b], i) => (
+              <div key={i} style={{ left: a * pps, width: (b - a) * pps }}>
+                on camera
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="lane said">
+          {sentences.map((x, i) => (
+            <div
+              key={i}
+              className={time >= x.start && time < x.end ? "now" : ""}
+              style={{ left: x.start * pps, width: Math.max(4, (x.end - x.start) * pps - 3) }}
+              title={`${clock(x.start)} ${x.text}`}
+            >
+              {x.text}
+            </div>
           ))}
         </div>
         {selection && <div className="selection" style={{ left: selection.start * pps, width: (selection.end - selection.start) * pps }} />}
@@ -82,3 +98,20 @@ export const Timeline: React.FC<{
     </div>
   );
 };
+
+// What is said, one block per sentence: readable at any zoom, unlike one label per word. A
+// sentence ends at . ? or !, at a pause over 0.8 s, or after 30 words.
+export function toSentences(words: Word[]) {
+  const out: { start: number; end: number; text: string }[] = [];
+  let cur: Word[] = [];
+  const flush = () => {
+    if (cur.length) out.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map((w) => w.text).join(" ") });
+    cur = [];
+  };
+  words.forEach((w, i) => {
+    cur.push(w);
+    const next = words[i + 1];
+    if (/[.?!]$/.test(w.text) || !next || next.start - w.end > 0.8 || cur.length >= 30) flush();
+  });
+  return out;
+}
