@@ -28,7 +28,7 @@ Owain edits the rough cut by hand. The plan only lays graphics and text over it,
 | `media` | the visual alone. Keep it short; the speaker is away. |
 | `cutaway` | b-roll edge to edge. |
 
-About one graphic every 20 to 60 seconds. Graphics hold 4 to 12 seconds and build with reveals or `keep`. No word captions unless `"captions": true`. `validate` checks these.
+Graphics only where the speaker is on camera, never over b-roll or a screen recording: run `reel scan` and `validate` enforces it. Within those stretches, about one graphic every 20 to 60 seconds. Graphics hold 4 to 12 seconds and build with reveals or `keep`. No word captions unless `"captions": true`. `validate` checks these.
 
 ## Style library
 

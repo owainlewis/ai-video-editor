@@ -3,6 +3,7 @@
 //
 //   npm run reel -- new <slug> <video> [--broll a.mp4 b.mp4]   portrait for reels, landscape for YouTube
 //   npm run reel -- script <slug> <script.txt> [--engine kokoro] [--voice am_michael] [--silent]   a reel from a script, no footage
+//   npm run reel -- scan <slug> --ref 6,1215          where the speaker is on camera (YouTube): graphics only go there
 //   npm run reel -- transcribe <slug>
 //   npm run reel -- tighten <slug> [--cut 7.2-10.9 ...] [--gap 0.55] [--speed 1.05]   trim pauses to a breath, cut ranges; then transcribe again
 //   npm run reel -- capture <slug> <url> --name <name> [--width 1280] [--height 1600] [--full] [--selector css] [--wait ms]
@@ -27,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { Edit, type Resolved, type Word } from "../src/schema.ts";
 import { frameRect } from "../src/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../src/theme.ts";
-import { chunkWords, estimateWords, lintShots, resolveShots, sfxEvents } from "./resolve.ts";
+import { cameraRanges, lintOnCamera, chunkWords, estimateWords, lintShots, resolveShots, sfxEvents } from "./resolve.ts";
 import { indexLibrary, listLibrary, useClip } from "./broll.ts";
 import { compositionFor } from "../src/canvas.ts";
 import { formatFeedback } from "../review/model.ts";
@@ -264,6 +265,28 @@ function cmdTighten(slug: string) {
   console.log(`Removed ${removed.toFixed(1)}s in ${merged.length} cuts: ${total.toFixed(1)}s -> ${probeDuration(video).toFixed(1)}s. Next: transcribe again.`);
 }
 
+// Where the speaker is on camera. Samples the picture twice a second at 32x18 grey and compares
+// each sample with talking-head frames at the --ref times (seconds). Writes build/camera.json,
+// which validate uses to keep graphics off b-roll and screen recordings.
+function cmdScan(slug: string) {
+  const dir = project(slug);
+  const refs = (flag("ref") ?? "").split(",").map(Number).filter((n) => n >= 0 && !Number.isNaN(n));
+  if (!refs.length) throw new Error("scan needs --ref with a few times (seconds) where you are on camera, e.g. --ref 6,1215");
+  const src = existsSync(join(dir, "build/preview.mp4")) ? join(dir, "build/preview.mp4") : join(dir, "source/talking.mp4");
+  const rate = 2, W = 32, H = 18;
+  const raw = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", src, "-vf", `fps=${rate},scale=${W}:${H},format=gray`, "-f", "rawvideo", "-"], { maxBuffer: 1 << 30 });
+  const n = Math.floor(raw.length / (W * H));
+  const frame = (i: number) => raw.subarray(i * W * H, (i + 1) * W * H);
+  const ref = refs.map((t) => frame(Math.min(n - 1, Math.round(t * rate))));
+  const diff = (a: Uint8Array, b: Uint8Array) => a.reduce((sum, v, k) => sum + Math.abs(v - b[k]), 0) / a.length;
+  const dist = Array.from({ length: n }, (_, i) => Math.min(...ref.map((r) => diff(frame(i), r))));
+  const ranges = cameraRanges(dist, rate);
+  writeJson(join(dir, "build/camera.json"), { refs, rate, ranges });
+  const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
+  console.log(`On camera ${total.toFixed(0)}s of ${(n / rate).toFixed(0)}s, in ${ranges.length} stretches:`);
+  for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
+}
+
 function cmdTranscribe(slug: string) {
   const dir = project(slug);
   const tmp = join(dir, "build/whisper");
@@ -400,6 +423,9 @@ function cmdValidate(slug: string, quiet = false): Resolved {
   if (!face) throw new Error('edit.json needs "face": measure it on checks/frame.jpg');
   const { shots, issues } = resolveShots(plan, words, meta.duration, FPS);
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
+  const scanned = join(dir, "build/camera.json");
+  if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  else if (youtube && !meta.script) issues.push({ level: "warn", message: "no camera scan; run `reel scan` so graphics stay on the talking head" });
   if (youtube && !plan.face && !meta.script) issues.push({ level: "warn", message: 'no "face" set; the side window frames the centre. Measure it on checks/frame.jpg' });
   if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
 
@@ -655,6 +681,7 @@ async function main() {
     case "new": return cmdNew(slug, third);
     case "script": return cmdScript(slug, third);
     case "transcribe": return cmdTranscribe(slug);
+    case "scan": return cmdScan(slug);
     case "tighten": return cmdTighten(slug);
     case "capture": return cmdCapture(slug, third);
     case "fetch": return cmdFetch(slug, third);

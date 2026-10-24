@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../src/schema.ts";
 import { isKeyword } from "../src/Captions.tsx";
-import { chunkWords, estimateWords, findPhrase, lintShots, resolveShots } from "../tools/resolve.ts";
+import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, resolveShots } from "../tools/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -238,5 +238,25 @@ describe("keyword captions", () => {
   it("skip filler words and keep content words", () => {
     expect(["the", "a", "is", "of", "and", "It's"].some(isKeyword)).toBe(false);
     expect(["factory", "massive", "30,000", "Claude", "agents."].every(isKeyword)).toBe(true);
+  });
+});
+
+describe("on camera", () => {
+  it("finds talking-head stretches, splits at a cutaway and trims the edges", () => {
+    // Two samples a second: on camera 0-6 s, a 1.5 s cutaway, on camera again 7.5-12 s.
+    const dist = [...Array(12).fill(4), ...Array(3).fill(80), ...Array(9).fill(4)];
+    expect(cameraRanges(dist, 2)).toEqual([[0.5, 5.5], [8, 11.5]]);
+  });
+  it("bridges a half-second blip and drops runs too short to hold a graphic", () => {
+    expect(cameraRanges([4, 4, 4, 4, 80, 4, 4, 4, 4], 2)).toEqual([[0.5, 4]]);
+    expect(cameraRanges([80, 4, 4, 80], 2)).toEqual([]);
+  });
+  it("errors on a graphic over b-roll or a screen recording, never on the plain picture", () => {
+    const shot = (start: number, end: number, layout: "full" | "side" | "over") => ({ start, end, layout, anchor: `${start}`, visual: layout === "full" ? undefined : ({ kind: "title", text: "x" } as never) });
+    const ranges: [number, number][] = [[10, 20]];
+    expect(lintOnCamera([shot(0, 10, "full"), shot(11, 18, "side"), shot(18, 30, "full")], ranges)).toEqual([]);
+    const bad = lintOnCamera([shot(5, 12, "over"), shot(25, 28, "side")], ranges);
+    expect(bad.map((i) => i.level)).toEqual(["error", "error"]);
+    expect(bad[0].message).toMatch(/not on camera.*10.0-20.0s/);
   });
 });

@@ -249,16 +249,16 @@ export const ConstraintVisual: React.FC<Props & { v: V<"constraint"> }> = ({ sho
   const x = g.x;
   const bx = x(v.bottleneck);
   const flowStart = stageT[0] + 0.3;
-  // Dots: one every 0.11 s, moving at a steady pace. Before the bottleneck tightens every dot
-  // passes; after it, only one in four does and the rest join the queue in front of it.
-  const speed = step * 1.6;
-  const every = 0.11;
+  // Dots: evenly spaced on the line, at a calm pace (Owain, 2026-10-24: "the dots were a bit messy
+  // and too fast"). Before the bottleneck tightens every dot passes; after it, one in four does and
+  // the rest join the queue in front of it. A dot is hidden while it is inside a stage.
+  const speed = step * 0.9;
+  const every = 0.24;
   const count = Math.max(0, Math.floor((time - flowStart) / every) + 1);
   const dots: { x: number; y: number; o: number; queued: boolean }[] = [];
   let queued = 0;
   for (let k = Math.max(0, count - 160); k < count; k++) {
     const born = flowStart + k * every;
-    const lane = Math.sin(k * 12.9898) * 0.5;
     const travelled = (time - born) * speed;
     const arrive = born + (bx - r(v.bottleneck) - x(0)) / speed;
     const blocked = arrive >= tightT && k % 4 !== 0;
@@ -269,15 +269,13 @@ export const ConstraintVisual: React.FC<Props & { v: V<"constraint"> }> = ({ sho
       const col = Math.floor(slot / g.queueRows);
       if (col >= g.queueCols) continue;
       const row = slot % g.queueRows;
-      dots.push({ x: bx - r(v.bottleneck) - 18 - col * g.qx, y: cy + (row - (g.queueRows - 1) / 2) * g.qy + lane * 4, o: 0.9, queued: true });
+      dots.push({ x: bx - r(v.bottleneck) - 18 - col * g.qx, y: cy + (row - (g.queueRows - 1) / 2) * g.qy, o: 0.9, queued: true });
       continue;
     }
     // Dots end inside the last stage.
     if (px > x(n - 1)) continue;
-    // Through the bottleneck, dots squeeze to the centre line.
-    const near = Math.max(0, 1 - Math.abs(px - bx) / (step * 0.5));
-    const spread = (px < bx ? 26 : 18) * (1 - near * 0.85);
-    dots.push({ x: px, y: cy + lane * spread, o: Math.min(1, (time - born) * 3), queued: false });
+    if (v.stages.some((_, i) => Math.abs(px - x(i)) < r(i) - g.dot)) continue;
+    dots.push({ x: px, y: cy, o: Math.min(1, (time - born) * 2), queued: false });
   }
   const enter = prog(time, shot.start, 0.5);
   return (

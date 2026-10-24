@@ -147,6 +147,7 @@ npm run reel -- transcribe <slug>
 ```
 
 - Set `"canvas": "youtube"` in `edit.json`. Measure `face` on `checks/frame.jpg` for the side window.
+- Run `npm run reel -- scan <slug> --ref <seconds>` with two or three times where the speaker is on camera. Graphics go only inside the stretches it prints; `validate` errors otherwise.
 - Read the whole transcript first and pick the moments that earn a graphic: a number, a list, a structure, a before and after, a chapter. About one every 20 to 60 s. Everything else is `full`.
 - Start with `{ "at": "<first words>", "layout": "full" }`, then add `over` (lower thirds, chapter titles), `side` (a visual with the speaker in a window) and a return to `full` after each graphic.
 - Review it on the board (`npm run reel -- review <slug>`), then `render`.

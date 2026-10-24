@@ -214,6 +214,32 @@ const longestStill = (s: ResolvedShot) => {
   return Math.max(...beats.slice(1).map((b, i) => b - beats[i]));
 };
 
+// On-camera stretches from a picture scan: each sample's distance to the talking-head look, turned
+// into [start, end] ranges. Short gaps (a blink, a gesture) are bridged; short runs are dropped.
+export const cameraRanges = (dist: number[], rate: number, threshold = 20, minRun = 2, bridge = 0.5): [number, number][] => {
+  const out: [number, number][] = [];
+  dist.forEach((d, i) => {
+    if (d >= threshold) return;
+    const t = i / rate;
+    const last = out[out.length - 1];
+    if (last && t - last[1] <= bridge + 1 / rate) last[1] = t + 1 / rate;
+    else out.push([t, t + 1 / rate]);
+  });
+  // Samples can sit up to one interval inside a cut, so trim each edge by half a second to be safe.
+  return out.map(([a, b]): [number, number] => [a + 0.5, b - 0.5]).filter(([a, b]) => b - a >= minRun);
+};
+
+// Graphics go on the talking head only, never over b-roll or a screen recording (Owain,
+// 2026-10-24). Every shot that adds a visual must sit inside an on-camera stretch.
+export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
+  shots.flatMap((s, i) => {
+    if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
+    const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
+    if (inside) return [];
+    const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");
+    return [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): ${s.layout} graphic is not on camera; graphics go on the talking head only${near ? ` (on camera nearby: ${near})` : ""}` }];
+  });
+
 // YouTube (16:9) over a hand-edited rough cut: sparse and calm. Graphics hold longer, the
 // speaker is rarely away, and most of the video is the picture as cut.
 export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {

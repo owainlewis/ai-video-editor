@@ -78,20 +78,37 @@ const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; prev?: ResolvedShot; 
 
 const reveal = (time: number, at: number, dur = 0.6) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
-// A lower third: serif title, sans line under it, a short rule that draws first. No box, no scrim.
+// A lower third on a small ivory paper card: serif title, sans line under it, a short pine rule
+// that draws first. A card, not bare type, because Owain's videos are mostly screen shares on white
+// pages, where light type with a shadow disappears (2026-10-24).
 const Lower: React.FC<{ title: string; sub?: string; shot: ResolvedShot; time: number }> = ({ title, sub, shot, time }) => {
-  const rule = reveal(time, shot.start, 0.5);
-  const a = reveal(time, shot.start + 0.15);
-  const b = reveal(time, shot.start + 0.3);
+  const c = pal("light");
+  const card = reveal(time, shot.start, 0.5);
+  const rule = reveal(time, shot.start + 0.1, 0.5);
+  const a = reveal(time, shot.start + 0.2);
+  const b = reveal(time, shot.start + 0.35);
   const out = interpolate(time, [shot.end - 0.4, shot.end], [1, 0], clamp);
-  const shadow = "0 1px 2px rgba(0,0,0,0.5), 0 2px 18px rgba(0,0,0,0.35)";
   return (
-    <div style={{ position: "absolute", left: 120, bottom: 120, opacity: out, color: "#ECEEF1" }}>
-      <div style={{ width: 64, height: 2, background: "#ECEEF1", scale: `${rule} 1`, transformOrigin: "left", marginBottom: 22 }} />
-      <div style={{ fontFamily: t.serif, fontSize: 64, lineHeight: 1.05, letterSpacing: -1.2, textShadow: shadow, opacity: a, filter: `blur(${(1 - a) * 8}px)` }}>
+    <div
+      style={{
+        position: "absolute",
+        left: 96,
+        bottom: 96,
+        padding: "30px 40px 32px",
+        background: c.bg,
+        border: `1px solid ${c.line}`,
+        borderRadius: 14,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.18), 0 18px 48px rgba(0,0,0,0.22)",
+        opacity: out * card,
+        translate: `0 ${(1 - card) * 14}px`,
+        color: c.ink,
+      }}
+    >
+      <div style={{ width: 48, height: 3, background: c.accent, scale: `${rule} 1`, transformOrigin: "left", marginBottom: 20 }} />
+      <div style={{ fontFamily: t.serif, fontSize: 56, lineHeight: 1.05, letterSpacing: -1, opacity: a, filter: `blur(${(1 - a) * 6}px)` }}>
         <Accented text={title} />
       </div>
-      {sub && <div style={{ marginTop: 12, fontFamily: t.sans, fontWeight: 500, fontSize: 28, color: "rgba(236,238,241,0.75)", textShadow: shadow, opacity: b }}>{sub}</div>}
+      {sub && <div style={{ marginTop: 10, fontFamily: t.sans, fontWeight: 500, fontSize: 26, color: c.muted, opacity: b }}>{sub}</div>}
     </div>
   );
 };
