@@ -14,6 +14,7 @@ import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { snapshot, undo, versions } from "./history.ts";
 import { trashProject } from "./trash.ts";
 import { dropBroll } from "./insert.ts";
+import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
 
@@ -100,6 +101,7 @@ export async function startServer(port = 4747) {
     if (parts.length !== 2) return;
     if (parts[1] === "edit.json") planChanged(parts[0]);
     if (parts[1] === "status.json") broadcast({ type: "status", slug: parts[0] });
+    if (parts[1] === "suggestions.json") broadcast({ type: "plan", slug: parts[0] });
   });
 
   // Long jobs (ingest, render) run as CLI processes so the server stays responsive. They report
@@ -201,6 +203,7 @@ export async function startServer(port = 4747) {
         chat: loadChat(dir).messages,
         working: isRunning(slug),
         assets: listAssets(dir, slug),
+        suggestions: loadSuggestions(dir),
         camera: existsSync(join(dir, "build/camera.json")) ? readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges : undefined,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
@@ -220,6 +223,15 @@ export async function startServer(port = 4747) {
         snapshot(dir, "claude");
         broadcast({ type: "plan", slug });
       });
+      return send(res, 200, { ok: true });
+    }
+    if (action === "suggest") {
+      ask(projects, slug, "Suggest graphics for this video", undefined, 0, (m) => broadcast({ type: "chat", slug, message: m }), () => broadcast({ type: "plan", slug }), SUGGEST(slug));
+      return send(res, 200, { ok: true });
+    }
+    if (action === "decide") {
+      decide(projects, slug, String(input.id ?? ""), input.accept === true, String(input.note ?? ""));
+      broadcast({ type: "plan", slug });
       return send(res, 200, { ok: true });
     }
     if (action === "drop") {

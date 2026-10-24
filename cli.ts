@@ -14,6 +14,7 @@ import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
+import { checkSuggestions } from "./server/suggest.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
 import { readJson, ROOT, writeJson } from "./media/tools.ts";
 import { startServer } from "./server/index.ts";
@@ -71,6 +72,13 @@ async function main() {
       const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
       console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
       for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
+      return;
+    }
+    case "suggestions": {
+      const problems = checkSuggestions(join(projects, need(target)));
+      for (const p of problems) console.log(`  ERROR  ${p}`);
+      if (problems.length) process.exitCode = 1;
+      else console.log("Suggestions are valid.");
       return;
     }
     case "broll": {

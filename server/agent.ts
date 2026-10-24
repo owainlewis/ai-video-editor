@@ -42,12 +42,13 @@ End with one or two plain sentences saying what you changed, for the chat panel.
 const running = new Map<string, ReturnType<typeof spawn>>();
 export const isRunning = (slug: string) => running.has(slug);
 
-export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: () => void = () => {}) {
+// `prompt` replaces the usual note context, for requests the editor makes itself (suggestions).
+export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: () => void = () => {}, prompt?: string) {
   if (running.has(slug)) throw new Error("Claude is still working on the last note");
   const project = join(projects, slug);
   const state = loadChat(project);
   const words = readJson<Word[]>(join(project, "transcript.json"));
-  const prompt = promptFor(slug, note, selection, playhead, words);
+  const request = prompt ?? promptFor(slug, note, selection, playhead, words);
   const now = () => new Date().toISOString();
   const add = (m: ChatMessage) => {
     state.messages.push(m);
@@ -56,7 +57,7 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
   };
   add({ role: "user", text: note, at: now() });
 
-  const args = ["-p", prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+  const args = ["-p", request, "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
     "--allowedTools", "Read", "Edit", "Write", "Glob", "Grep", "Bash(npm run studio:*)", "Bash(npm run studio -- *)", "Bash(npm run typecheck)", "Bash(npm test)", "Bash(npx vitest:*)",
     "--append-system-prompt", SYSTEM, ...(state.session ? ["--resume", state.session] : [])];
   const p = spawn("claude", args, { cwd: ROOT, env: process.env });

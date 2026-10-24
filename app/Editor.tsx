@@ -4,7 +4,7 @@ import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
 import type { Resolved } from "../engine/schema";
-import { api, type ChatMessage, clock, type Issue, type Project } from "./api";
+import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
 
@@ -140,10 +140,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           note={note}
           setNote={setNote}
           issues={p.issues ?? []}
+          suggestions={p.suggestions ?? []}
+          onSeek={seek}
           onClear={() => setSelection(null)}
         />
         <section className="bottom">
-          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))} />
+          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))} />
           {dropError && (
             <div className="toast" onClick={() => setDropError("")}>
               {dropError}
@@ -177,8 +179,17 @@ const Chat: React.FC<{
   note: string;
   setNote: (n: string) => void;
   issues: Issue[];
+  suggestions: Suggestion[];
+  onSeek: (t: number) => void;
   onClear: () => void;
-}> = ({ slug, messages, working, selection, time, words, note, setNote, issues, onClear }) => {
+}> = ({ slug, messages, working, selection, time, words, note, setNote, issues, suggestions, onSeek, onClear }) => {
+  const pending = suggestions.filter((s) => s.status === "pending");
+  const [failed, setFailed] = useState<Record<string, string>>({});
+  const decide = (id: string, accept: boolean) =>
+    api
+      .post(slug, "decide", { id, accept, note: accept ? "" : (prompt("Why not? (optional, it helps the next round)") ?? "") })
+      .then(() => setFailed((f) => ({ ...f, [id]: "" })))
+      .catch((e) => setFailed((f) => ({ ...f, [id]: String(e.message) })));
   const [showChecks, setShowChecks] = useState(false);
   const [error, setError] = useState("");
   const list = useRef<HTMLDivElement>(null);
@@ -200,6 +211,33 @@ const Chat: React.FC<{
 
   return (
     <aside className="chat">
+      <div className="suggest-bar">
+        <button onClick={() => api.post(slug, "suggest").catch((e) => setError(String(e.message)))} disabled={working}>
+          Suggest graphics
+        </button>
+        {pending.length > 0 && <span className="muted small">{pending.length} to review</span>}
+      </div>
+      {pending.length > 0 && (
+        <div className="drafts">
+          {pending.map((d) => (
+            <div key={d.id} className="draft-card">
+              <button className="quiet when" onClick={() => onSeek(d.start + 0.05)}>
+                {clock(d.start)} · {d.visual.kind} ({d.layout})
+              </button>
+              <p>{d.reason}</p>
+              {failed[d.id] && <p className="error small">{failed[d.id]}</p>}
+              <div className="row">
+                <button className="small" onClick={() => decide(d.id, false)}>
+                  Reject
+                </button>
+                <button className="small primary" onClick={() => decide(d.id, true)}>
+                  Accept
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="messages" ref={list}>
         {messages.length === 0 && (
           <p className="muted small">

@@ -6,6 +6,7 @@ export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: 
 export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
 export type LibraryClip = { id: string; duration: number; description: string; tags: string[]; thumb: string };
+export type Suggestion = { id: string; start: number; end: number; layout: string; visual: { kind: string }; reason: string; status: "pending" | "accepted" | "rejected"; note?: string };
 export type Version = { n: number; at: string; by: string };
 export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status };
 export type Project = {
@@ -20,6 +21,7 @@ export type Project = {
   working?: boolean;
   camera?: [number, number][];
   assets?: Asset[];
+  suggestions?: Suggestion[];
   render?: { file: string; at: number } | null;
 };
 export type Event =

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Resolved, ResolvedShot, Word } from "../engine/schema";
-import { clock } from "./api";
+import { clock, type Suggestion } from "./api";
 
 export type Range = { start: number; end: number; label?: string };
 
@@ -22,7 +22,8 @@ export const Timeline: React.FC<{
   onSeek: (t: number) => void;
   onSelect: (r: Range | null) => void;
   onDropClip: (ref: string, at: number, length: number) => void;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip }) => {
+  drafts?: Suggestion[];
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [] }) => {
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const sentences = useMemo(() => toSentences(words), [words]);
@@ -95,7 +96,22 @@ export const Timeline: React.FC<{
   );
 
   const tracks: Track[] = [
-    { id: "graphics", label: "Graphics", height: 44, render: (pps) => clips.filter((c) => c.shot.visual && !isBroll(c.shot) && !isText(c.shot)).map((c) => clip(c, pps, "graphic", c.shot.visual!.kind)) },
+    {
+      id: "graphics",
+      label: "Graphics",
+      height: 44,
+      render: (pps) => (
+        <>
+          {clips.filter((c) => c.shot.visual && !isBroll(c.shot) && !isText(c.shot)).map((c) => clip(c, pps, "graphic", c.shot.visual!.kind))}
+          {drafts.map((d) => (
+            <div key={d.id} className="clip draft" style={{ left: d.start * pps, width: Math.max(3, (d.end - d.start) * pps - 2) }} title={`Suggested: ${d.reason}`} onClick={() => onSeek(d.start + 0.05)}>
+              <b>{d.visual.kind}?</b>
+              <span>{d.reason}</span>
+            </div>
+          ))}
+        </>
+      ),
+    },
     { id: "text", label: "Text", height: 34, render: (pps) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "title" ? "title" : "lower third")) },
     { id: "broll", label: "B-roll", height: 34, render: (pps) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll")) },
     {
