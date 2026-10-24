@@ -1,5 +1,5 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,25 @@ export const run = (bin: string, argv: string[], opts: { cwd?: string; env?: Rec
 };
 
 export const ffmpeg = (argv: string[], log?: Log) => run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...argv], { log });
+
+// ffmpeg with progress: calls onProgress with 0..1 as it works through `duration` seconds of input.
+export const ffmpegProgress = (argv: string[], duration: number, onProgress: (f: number) => void, log?: Log) =>
+  new Promise<void>((ok, fail) => {
+    log?.(`$ ffmpeg ${argv.join(" ")}`.slice(0, 200));
+    const p = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats", ...argv], { cwd: ROOT });
+    let err = "";
+    p.stdout.on("data", (c: Buffer) => {
+      const m = [...c.toString().matchAll(/out_time_us=(\d+)/g)].pop();
+      if (m && duration > 0) onProgress(Math.min(1, +m[1] / 1e6 / duration));
+    });
+    p.stderr.on("data", (c: Buffer) => (err = (err + c.toString()).slice(-2000)));
+    p.on("close", (code) => (code === 0 ? ok() : fail(new Error(`ffmpeg failed:\n${err}`))));
+  });
+
+// Whether this Mac's hardware H.264 encoder works; it is several times faster than libx264.
+let hardware: boolean | undefined;
+export const hasHardwareH264 = () =>
+  (hardware ??= spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=black:s=320x240:d=0.2", "-c:v", "h264_videotoolbox", "-f", "null", "-"]).status === 0);
 
 export const probeDuration = (file: string) =>
   parseFloat(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));

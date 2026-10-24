@@ -31,7 +31,7 @@ async function main() {
     case "ingest": {
       if (!target || !existsSync(target)) throw new Error("ingest needs a video file");
       const slug = flag("slug") ?? slugFor(target);
-      ingest(projects, resolve(target), slug, log);
+      await ingest(projects, resolve(target), slug, log);
       console.log(`Imported projects/${slug}. Open it in the editor, or run: npm run studio -- check ${slug}`);
       return;
     }

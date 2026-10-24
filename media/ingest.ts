@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import type { Word } from "../engine/schema.ts";
-import { ffmpeg, type Log, probeDuration, probeSize, readJson, run, speechEnd, writeJson } from "./tools.ts";
+import { ffmpeg, ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeSize, readJson, run, speechEnd, writeJson } from "./tools.ts";
 
 // Names Whisper otherwise mishears ("CodeCode" for Claude Code).
 const VOCAB = "Claude Code, Codex, Claude, Anthropic, OpenAI, GitHub, MCP, LLM, AI agents, Cursor, Gemini.";
@@ -35,23 +35,37 @@ export function liveStatus(dir: string): Status | null {
 export const slugFor = (file: string) =>
   basename(file, extname(file)).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "clip";
 
-export function ingest(projects: string, file: string, slug: string, log: Log = () => {}) {
+export async function ingest(projects: string, file: string, slug: string, log: Log = () => {}) {
   const dir = join(projects, slug);
   for (const d of ["source", "build", "renders", "checks", "history"]) mkdirSync(join(dir, d), { recursive: true });
   try {
     setStatus(dir, "Preparing footage");
     const [sw, sh] = probeSize(file);
+    const length = probeDuration(file);
     // Keep the footage's own shape. 4K landscape stays 4K: a 9:16 reel uses a vertical slice of it.
     const size: [number, number] = sw > sh ? (sw >= 3840 ? [3840, 2160] : [1920, 1080]) : [1080, 1920];
-    const vf = `scale=${size[0]}:${size[1]}:force_original_aspect_ratio=increase,crop=${size[0]}:${size[1]},fps=30,setsar=1`;
-    ffmpeg(["-i", file, "-vf", vf, "-c:v", "libx264", "-crf", "14", "-preset", "medium", "-pix_fmt", "yuv420p", "-an", join(dir, "source/talking.mp4")], log);
-    ffmpeg(["-i", file, "-vn", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s24le", join(dir, "source/voice.wav")], log);
+    // One pass over the footage writes the 30 fps working copy, the editor's preview and the voice.
+    // The preview is at most 1920 on its long side with a keyframe every half second, so scrubbing
+    // is quick; 4K masters and 24-bit WAV do not play well in a browser.
+    const fit = `scale=${size[0]}:${size[1]}:force_original_aspect_ratio=increase,crop=${size[0]}:${size[1]},fps=30,setsar=1`;
+    const small = size[0] >= size[1] ? "scale=min(1920\\,iw):-2" : "scale=-2:min(1920\\,ih)";
+    const hw = hasHardwareH264();
+    const enc = (mbps: number) => (hw ? ["-c:v", "h264_videotoolbox", "-b:v", `${mbps}M`] : ["-c:v", "libx264", "-crf", mbps > 20 ? "16" : "22", "-preset", "veryfast"]);
+    const master = size[0] * size[1] > 1920 * 1080 ? 60 : 24;
+    let last = -1;
+    await ffmpegProgress([
+      "-i", file, "-filter_complex", `[0:v]${fit},split=2[w][p];[p]${small}[pv]`,
+      "-map", "[w]", ...enc(master), "-pix_fmt", "yuv420p", "-an", join(dir, "source/talking.mp4"),
+      "-map", "[pv]", ...enc(8), "-g", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", join(dir, "build/preview.mp4"),
+      "-map", "0:a:0?", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s24le", join(dir, "source/voice.wav"),
+    ], length, (f) => {
+      const pct = Math.floor(f * 100);
+      if (pct !== last) setStatus(dir, `Preparing footage ${pct}%`), (last = pct);
+    }, log);
+    ffmpeg(["-i", join(dir, "source/voice.wav"), "-c:a", "aac", "-b:a", "192k", join(dir, "build/preview.m4a")], log);
     ffmpeg(["-ss", "1", "-i", join(dir, "source/talking.mp4"), "-frames:v", "1", "-q:v", "3", join(dir, "checks/frame.jpg")], log);
     const duration = probeDuration(join(dir, "source/talking.mp4"));
     writeJson(join(dir, "project.json"), { slug, original: resolve(file), size, duration });
-
-    setStatus(dir, "Making a preview copy");
-    makePreview(dir, size, log);
 
     setStatus(dir, "Transcribing");
     const words = transcribe(dir, log);
@@ -62,15 +76,6 @@ export function ingest(projects: string, file: string, slug: string, log: Log = 
     writeJson(join(dir, "status.json"), { stage: "Failed", done: true, error: String((e as Error).message ?? e), at: new Date().toISOString() });
     throw e;
   }
-}
-
-// The editor plays a light copy: at most 1920 on the long side, a keyframe every half second so
-// scrubbing is quick, and AAC audio. 4K masters and 24-bit WAV do not decode well in a browser.
-export function makePreview(dir: string, size: [number, number], log?: Log) {
-  const scale = size[0] >= size[1] ? "scale=min(1920\\,iw):-2" : "scale=-2:min(1920\\,ih)";
-  ffmpeg(["-i", join(dir, "source/talking.mp4"), "-vf", scale, "-an", "-c:v", "libx264", "-profile:v", "high", "-crf", "23", "-preset", "veryfast",
-    "-g", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(dir, "build/preview.mp4")], log);
-  ffmpeg(["-i", join(dir, "source/voice.wav"), "-c:a", "aac", "-b:a", "192k", join(dir, "build/preview.m4a")], log);
 }
 
 export function transcribe(dir: string, log?: Log): Word[] {
