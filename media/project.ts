@@ -9,6 +9,7 @@ import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
 import { useClip } from "./broll.ts";
+import { hasMatte, matteKey } from "./matte.ts";
 import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
 
 export type Issue = { level: "error" | "warn"; message: string };
@@ -86,6 +87,13 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
     const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
     if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
   }
+  // Behind sections need the speaker cut out; the server makes missing cut-outs in the background.
+  for (const s of shots)
+    if (s.layout === "behind") {
+      const key = matteKey(s.start, s.end);
+      if (hasMatte(dir, key)) s.matte = `${slug}/build/behind/${key}.webm`;
+      else issues.push({ level: "warn", message: `"${s.anchor}": cutting you out for the behind graphic (about 20 s per 5 s of video); the editor updates when it is done` });
+    }
   const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
   for (const a of plan.accents) if (!spoken.includes(a.toLowerCase())) issues.push({ level: "warn", message: `accent word not spoken: "${a}"` });
 
@@ -114,4 +122,10 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   writeJson(join(dir, "build/edit.resolved.json"), resolved);
   writeJson(join(dir, "build/audio.json"), { duration: meta.duration, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx });
   return { resolved, issues };
+}
+
+// The behind sections whose cut-out is still missing.
+export function missingMattes(projects: string, slug: string): { start: number; end: number }[] {
+  const { resolved } = resolveProject(projects, slug);
+  return (resolved?.shots ?? []).filter((s) => s.layout === "behind" && !s.matte).map((s) => ({ start: s.start, end: s.end }));
 }

@@ -138,3 +138,20 @@ describe("inserting shots at a time", () => {
     expect(out.map((s) => [s.at, s.layout])).toEqual([["one two", "full"], ["three four five", "cutaway"], ["six seven eight", "punch"]]);
   });
 });
+
+describe("behind graphics", () => {
+  it("takes one long word, warns on short words and phrases, and is YouTube only", async () => {
+    const { lintShots } = await import("../engine/resolve.ts");
+    const shot = (text: string) => ({ start: 0, end: 4, layout: "behind" as const, anchor: "a", visual: { kind: "title", text } as never });
+    const msgs = (text: string, canvas: "reel" | "youtube" = "youtube") => lintShots([shot(text)], 4, "mixed", canvas).map((i) => `${i.level} ${i.message}`).join("\n");
+    expect(msgs("correctness")).not.toMatch(/behind/);
+    expect(msgs("12x")).toMatch(/warn .*6 to 14 letters/);
+    expect(msgs("code review")).toMatch(/warn .*one word/);
+    expect(msgs("correctness", "reel")).toMatch(/error .*YouTube layout/);
+  });
+  it("renders each behind section on its own, as an overlay to be matted", async () => {
+    const { sections } = await import("../media/export.ts");
+    const r = { shots: [{ start: 0, end: 5, layout: "full" }, { start: 5, end: 8, layout: "behind", visual: { kind: "title", text: "correctness" } }, { start: 8, end: 9, layout: "over", visual: { kind: "title" } }] } as never;
+    expect(sections(r)).toEqual([{ start: 5, end: 8, alpha: true, behind: true }, { start: 8, end: 9, alpha: true }]);
+  });
+});

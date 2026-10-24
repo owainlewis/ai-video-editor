@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, openSync, r
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
 import { createServer as createVite } from "vite";
-import { resolveProject } from "../media/project.ts";
+import { missingMattes, resolveProject } from "../media/project.ts";
 import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
@@ -80,6 +80,7 @@ export async function startServer(port = 4747) {
 
   // A plan change: save a version, re-resolve, tell the editors. Debounced, since editors write in bursts.
   const timers = new Map<string, NodeJS.Timeout>();
+  const matting = new Set<string>();
   const planChanged = (slug: string) => {
     clearTimeout(timers.get(slug));
     timers.set(slug, setTimeout(() => {
@@ -88,6 +89,14 @@ export async function startServer(port = 4747) {
       if (!isRunning(slug)) snapshot(join(projects, slug), "edit");
       try {
         resolveProject(projects, slug);
+        // A new behind section needs the speaker cut out: one background job per project at a time.
+        if (!matting.has(slug) && missingMattes(projects, slug).length) {
+          matting.add(slug);
+          const log = openSync(join(projects, slug, "job.log"), "a");
+          const p = spawn("npx", ["tsx", "cli.ts", "mattes", slug], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+          p.on("exit", () => (matting.delete(slug), broadcast({ type: "plan", slug })));
+          p.unref();
+        }
       } catch {
         // Shown on the next load; a half-written plan is normal while someone types.
       }
