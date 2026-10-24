@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { Word } from "../engine/schema";
 import { api, type Asset, clock, type LibraryClip } from "./api";
-import { toSentences } from "./Timeline";
+import { CLIP, toSentences } from "./Timeline";
 
 // The left panel: the project's assets (drop b-roll and images in; click one to mention it in a
 // note) and the script (click a line to jump to it).
@@ -40,6 +40,12 @@ export const Library: React.FC<{
     setUploading(null);
   };
 
+  // A clip dragged onto the timeline carries what it is and how long it runs.
+  const drag = (e: React.DragEvent, ref: string, length: number) => {
+    e.dataTransfer.setData(CLIP, JSON.stringify({ ref, length }));
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
   const add = async (files: FileList | null) => {
     setError("");
     for (const f of Array.from(files ?? [])) {
@@ -66,7 +72,11 @@ export const Library: React.FC<{
       {tab === "assets" ? (
         <div
           className={`assets ${over ? "over" : ""}`}
-          onDragOver={(e) => (e.preventDefault(), setOver(true))}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes(CLIP)) return;
+            e.preventDefault();
+            setOver(true);
+          }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => {
             e.preventDefault();
@@ -82,7 +92,7 @@ export const Library: React.FC<{
           {error && <p className="error small">{error}</p>}
           <div className="grid">
             {assets.map((a) => (
-              <button key={a.path} className="asset" onClick={() => onUse(a.path)} title={`Mention ${a.path} in your note`}>
+              <button key={a.path} className="asset" draggable={a.kind === "video"} onDragStart={(e) => drag(e, a.path, a.duration ?? 3)} onClick={() => onUse(a.path)} title={`Drag onto the timeline, or click to mention ${a.path} in your note`}>
                 <img src={`/${a.thumb}`} alt="" loading="lazy" />
                 <span className="name">{a.name}</span>
                 {a.duration !== undefined && <span className="dur">{clock(a.duration)}</span>}
@@ -99,7 +109,7 @@ export const Library: React.FC<{
           </label>
           <div className="grid">
             {shown.map((c) => (
-              <button key={c.id} className="asset" onClick={() => onUse(`broll:${c.id}`)} title={c.description || c.id}>
+              <button key={c.id} className="asset" draggable onDragStart={(e) => drag(e, `broll:${c.id}`, c.duration)} onClick={() => onUse(`broll:${c.id}`)} title={`${c.description || c.id}. Drag onto the timeline, or click to mention it.`}>
                 <img src={`/${c.thumb}`} alt="" loading="lazy" />
                 <span className="name">{c.description || c.id}</span>
                 <span className="dur">{clock(c.duration)}</span>

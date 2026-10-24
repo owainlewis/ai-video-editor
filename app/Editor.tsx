@@ -23,6 +23,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState("");
+  const [dropError, setDropError] = useState("");
   const player = useRef<PlayerRef>(null);
 
   const load = useCallback(
@@ -142,7 +143,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           onClear={() => setSelection(null)}
         />
         <section className="bottom">
-          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} />
+          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))} />
+          {dropError && (
+            <div className="toast" onClick={() => setDropError("")}>
+              {dropError}
+            </div>
+          )}
         </section>
       </div>
     </Shell>

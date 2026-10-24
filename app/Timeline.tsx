@@ -4,6 +4,9 @@ import { clock } from "./api";
 
 export type Range = { start: number; end: number; label?: string };
 
+// The drag type for a clip from the library panel.
+export const CLIP = "application/x-studio-clip";
+
 type Track = { id: string; label: string; height: number; render: (pps: number) => React.ReactNode };
 
 // The edit as tracks, like an editor: graphics, text, b-roll, the picture, what is said, captions,
@@ -18,7 +21,9 @@ export const Timeline: React.FC<{
   music: boolean;
   onSeek: (t: number) => void;
   onSelect: (r: Range | null) => void;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect }) => {
+  onDropClip: (ref: string, at: number, length: number) => void;
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip }) => {
+  const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const sentences = useMemo(() => toSentences(words), [words]);
   // Fit shows the whole video in the visible width; zoom in from there.
@@ -153,7 +158,26 @@ export const Timeline: React.FC<{
             </div>
           ))}
         </div>
-        <div className="lanes-scroll" ref={box} onPointerDown={down}>
+        <div
+          className="lanes-scroll"
+          ref={box}
+          onPointerDown={down}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes(CLIP)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setGhost((g) => ({ at: at(e.clientX), length: g?.length ?? 3 }));
+          }}
+          onDragLeave={() => setGhost(null)}
+          onDrop={(e) => {
+            const raw = e.dataTransfer.getData(CLIP);
+            setGhost(null);
+            if (!raw) return;
+            e.preventDefault();
+            const { ref, length } = JSON.parse(raw) as { ref: string; length: number };
+            onDropClip(ref, at(e.clientX), length);
+          }}
+        >
           <div className="lanes" style={{ width }}>
             <div className="ruler">
               {ticks.map((t) => (
@@ -169,6 +193,7 @@ export const Timeline: React.FC<{
             ))}
             {selection && <div className="selection" style={{ left: selection.start * pps, width: (selection.end - selection.start) * pps }} />}
             <div className="playhead" style={{ left: time * pps }} />
+            {ghost && <div className="ghost" style={{ left: ghost.at * pps, width: Math.max(6, ghost.length * pps) }} />}
           </div>
         </div>
       </div>

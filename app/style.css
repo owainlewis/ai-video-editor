@@ -161,3 +161,8 @@ button.drop { width: 100%; font-size: 15px; }
 
 .assets h4 { margin: 6px 0 0; font-size: 12px; font-weight: 600; }
 .assets .search { font: inherit; font-size: 12px; color: var(--ink); background: #121413; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+
+.ghost { position: absolute; top: 22px; bottom: 0; background: rgba(120, 150, 210, 0.22); border: 1px dashed #8aa6dd; border-radius: 6px; pointer-events: none; }
+.bottom { position: relative; }
+.toast { position: absolute; right: 16px; bottom: 16px; max-width: 420px; padding: 10px 14px; border-radius: 10px; background: #3a2422; border: 1px solid #6a3a35; color: #f1d5cf; font-size: 13px; cursor: pointer; z-index: 5; }
+.asset[draggable="true"] { cursor: grab; }

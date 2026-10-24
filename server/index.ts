@@ -13,6 +13,7 @@ import { readJson, ROOT } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { snapshot, undo, versions } from "./history.ts";
 import { trashProject } from "./trash.ts";
+import { dropBroll } from "./insert.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
 
@@ -219,6 +220,10 @@ export async function startServer(port = 4747) {
         snapshot(dir, "claude");
         broadcast({ type: "plan", slug });
       });
+      return send(res, 200, { ok: true });
+    }
+    if (action === "drop") {
+      dropBroll(projects, slug, String(input.ref ?? ""), Number(input.at ?? 0), Number(input.length ?? 3));
       return send(res, 200, { ok: true });
     }
     if (action === "stop") return stop(slug), send(res, 200, { ok: true });

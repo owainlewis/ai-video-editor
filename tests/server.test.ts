@@ -121,3 +121,20 @@ describe("YouTube export", () => {
     expect(sections(r)).toEqual([{ start: 5, end: 12, alpha: false }, { start: 20, end: 24, alpha: true }]);
   });
 });
+
+describe("inserting shots at a time", () => {
+  const w = (texts: string[]) => texts.map((text, i) => ({ text, start: i, end: i + 0.9 }));
+  it("finds a phrase that the in-order search lands on, growing it past repeats", async () => {
+    const { phraseAt } = await import("../engine/insert.ts");
+    const words = w(["so", "we", "ship", "it", "so", "we", "ship", "faster"]);
+    expect(phraseAt(words, 4, -1)).toBe("so we ship faster");
+    expect(phraseAt(words, 4, 3)).toBe("so we ship");
+  });
+  it("merges new shots into time order and replaces a shot on the same word", async () => {
+    const { mergeShots } = await import("../engine/insert.ts");
+    const words = w(["one", "two", "three", "four", "five", "six", "seven", "eight"]);
+    const existing = [{ index: 0, shot: { at: "one two", layout: "full" } }, { index: 5, shot: { at: "six seven", layout: "full" } }];
+    const out = mergeShots(words, existing, [{ index: 2, shot: { at: "", layout: "cutaway" } }, { index: 5, shot: { at: "", layout: "punch" } }]);
+    expect(out.map((s) => [s.at, s.layout])).toEqual([["one two", "full"], ["three four five", "cutaway"], ["six seven eight", "punch"]]);
+  });
+});
