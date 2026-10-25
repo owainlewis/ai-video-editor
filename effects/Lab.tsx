@@ -6,6 +6,7 @@
 // (content ~180 ms, moves ~460 ms), one long-tailed ease, 80 ms staggers, a second beat on the
 // spoken word, a background that drifts, never a hard jump inside the stage.
 import React from "react";
+import { ReviewMdPage } from "./frame";
 import { AbsoluteFill, Easing, interpolate, OffthreadVideo, staticFile, useCurrentFrame } from "remotion";
 
 export type LabProps = { idea: string; from: number; dur: number; video: string; t: Record<string, number> };
@@ -289,78 +290,10 @@ const Flow: React.FC<{ t: number; v: LabProps }> = ({ t, v }) => {
   );
 };
 
-// ---------- 7. REVIEW.md in a browser: the docs' own example, rule by rule ----------
-// The file is the example from code.claude.com/docs/en/code-review-customize, word for word.
-const REVIEW_MD: { kind: "h1" | "h2" | "p" | "li"; text: string; mark?: string }[] = [
-  { kind: "h1", text: "Review instructions" },
-  { kind: "h2", text: "What Important means here" },
-  { kind: "p", text: "Reserve Important for findings that would break behavior, leak data, or block a rollback: incorrect logic, unscoped database queries, PII in logs or error messages, and migrations that aren't backward compatible. Style, naming, and refactoring suggestions are Nit at most." },
-  { kind: "h2", text: "Cap the nits" },
-  { kind: "p", text: "Report at most five Nits per review.", mark: "a" },
-  { kind: "h2", text: "Do not report" },
-  { kind: "li", text: "Anything CI already enforces: lint, formatting, type errors" },
-  { kind: "li", text: "Generated files under `src/gen/` and any `*.lock` file", mark: "b" },
-  { kind: "li", text: "Test-only code that intentionally violates production rules" },
-  { kind: "h2", text: "Always check" },
-  { kind: "li", text: "New API routes have an integration test" },
-  { kind: "li", text: "Log lines don't include email addresses, user IDs, or request bodies" },
-  { kind: "li", text: "Database queries are scoped to the caller's tenant", mark: "c" },
-];
-
-// Inline `code` as small mono pills.
-const Inline: React.FC<{ text: string }> = ({ text }) => (
-  <>
-    {text.split(/(`[^`]+`)/).map((p, i) =>
-      p.startsWith("`") ? (
-        <span key={i} style={{ fontFamily: '"SF Mono", Menlo, monospace', fontSize: "0.86em", background: "#ECE8DF", borderRadius: 5, padding: "1px 7px" }}>{p.slice(1, -1)}</span>
-      ) : (
-        <React.Fragment key={i}>{p}</React.Fragment>
-      ),
-    )}
-  </>
+// ---------- 7. REVIEW.md in a browser: the docs' own example, rule by rule (now a plan visual) ----------
+const ReviewMd: React.FC<{ t: number; v: LabProps }> = ({ t, v }) => (
+  <ReviewMdPage t={t} at={v.t.window} marks={new Map([[4, v.t.a], [7, v.t.b], [12, v.t.c]])} />
 );
-
-const ReviewMd: React.FC<{ t: number; v: LabProps }> = ({ t, v }) => {
-  const k = p(t, v.t.window, MOVE, inOut);
-  const ink = "#1F1F1D", muted = "#6E6B65";
-  return (
-    <AbsoluteFill>
-      <Stage t={t} />
-      <div style={{ position: "absolute", left: 300, top: lerp(150, 70, k), width: 1320, height: 880, opacity: k, filter: `blur(${(1 - k) * 10}px)`, borderRadius: 18, overflow: "hidden", background: "#FAF8F3", boxShadow: `0 ${40 * k}px ${110 * k}px rgba(0,0,0,0.55)` }}>
-        {/* Neutral browser chrome: three dots, one tab, an address bar. No brand. */}
-        <div style={{ height: 96, background: "#E9E5DC", borderBottom: "1px solid #D8D3C8", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 26px", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {["#E06C5A", "#E0B04F", "#7CB36B"].map((c) => (
-              <div key={c} style={{ width: 14, height: 14, borderRadius: 7, background: c }} />
-            ))}
-            <div style={{ marginLeft: 22, padding: "6px 18px", borderRadius: "10px 10px 0 0", background: "#FAF8F3", fontFamily: SANS, fontSize: 18, color: ink }}>REVIEW.md</div>
-          </div>
-          <div style={{ height: 34, borderRadius: 17, background: "#FAF8F3", display: "flex", alignItems: "center", padding: "0 18px", fontFamily: SANS, fontSize: 18, color: muted }}>your-repo / REVIEW.md</div>
-        </div>
-        <div style={{ padding: "36px 70px", color: ink, fontFamily: SANS }}>
-          {REVIEW_MD.map((b, i) => {
-            const at = v.t.window + 0.35 + i * 0.12;
-            const markAt = b.mark ? v.t[b.mark] : Infinity;
-            const body = b.mark ? <Mark t={t} at={markAt} color="rgba(183,205,191,0.75)"><Inline text={b.text} /></Mark> : <Inline text={b.text} />;
-            const style: React.CSSProperties =
-              b.kind === "h1" ? { fontSize: 50, fontWeight: 700, letterSpacing: "-0.02em", margin: "0 0 12px" }
-              : b.kind === "h2" ? { fontSize: 32, fontWeight: 700, margin: "20px 0 6px" }
-              : b.kind === "li" ? { fontSize: 27, lineHeight: 1.42, margin: "2px 0 2px 30px", display: "list-item", listStyle: "disc" }
-              : { fontSize: 27, lineHeight: 1.45, margin: "0", color: "#34322E" };
-            return (
-              <In key={i} t={t} at={at} rise={10}>
-                <div style={style}>{body}</div>
-              </In>
-            );
-          })}
-        </div>
-      </div>
-      <In t={t} at={v.t.window + 2.0} style={{ position: "absolute", left: 300, top: 975 }}>
-        <div style={{ fontFamily: SANS, fontSize: 22, color: C.muted, letterSpacing: 0.5 }}>Example REVIEW.md from the Claude Code docs: code.claude.com/docs/en/code-review-customize</div>
-      </In>
-    </AbsoluteFill>
-  );
-};
 
 export const Lab: React.FC<LabProps> = (v) => {
   const t = v.from + useCurrentFrame() / 30;

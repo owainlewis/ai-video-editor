@@ -64,6 +64,16 @@ const catalog: Card[] = [
     noSample: "Lifts a region of real footage; the lab has no stand-in screen recording.",
   },
   {
+    id: "blueprint.t1.reviewmd",
+    kind: "reviewmd",
+    tier: "t1",
+    purpose: "proof",
+    summary: "The docs' example REVIEW.md in a neutral browser window over the Graphite stage; a highlighter marks each named line as it is said.",
+    layouts: ["media"],
+    slots: [{ name: "marks[].line", type: "text", maxChars: 80, note: "a line of engine/reviewmd.ts, word for word" }, at("marks[].at")],
+    noSample: "Shows one fixed document; the lab already has it as the reviewmd idea.",
+  },
+  {
     id: "blueprint.t1.title",
     kind: "title",
     tier: "t1",

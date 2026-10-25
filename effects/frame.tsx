@@ -4,6 +4,7 @@
 import React from "react";
 import { Video } from "@remotion/media";
 import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, staticFile } from "remotion";
+import { REVIEW_MD } from "../engine/reviewmd";
 import type { Resolved, ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
 import { pal } from "./soft";
@@ -12,7 +13,7 @@ import { t as type } from "./theme";
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { r: Resolved; shot: ResolvedShot; time: number };
 
-export const FRAME_KINDS = new Set(["odometer", "lift"]);
+export const FRAME_KINDS = new Set(["odometer", "lift", "reviewmd"]);
 export const isFrame = (s: ResolvedShot) => s.layout === "media" && !!s.visual && (FRAME_KINDS.has(s.visual.kind) || (s.visual.kind === "chapter" && !!s.visual.hit));
 
 // Footage from the shot's own start. Exports read frames exactly (OffthreadVideo), so the picture
@@ -166,10 +167,86 @@ const Lift: React.FC<Props & { v: V<"lift"> }> = ({ r, shot, time, v }) => {
   );
 };
 
+// ---------- REVIEW.md in a browser: the docs' own example, a line marked as each is said ----------
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+// Graphite with a faint grid and crosses that drift about a pixel a second: a stage that is alive.
+export const GridStage: React.FC<{ t: number }> = ({ t }) => {
+  const drift = (t * 1.2) % 64, faint = "rgba(247,243,236,0.14)";
+  return (
+    <AbsoluteFill style={{ background: "#1B1B1A" }}>
+      <AbsoluteFill style={{ backgroundImage: `linear-gradient(${faint} 1px, transparent 1px), linear-gradient(90deg, ${faint} 1px, transparent 1px)`, backgroundSize: "64px 64px", backgroundPosition: `${drift}px ${drift * 0.5}px`, opacity: 0.22 }} />
+      <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%)" }} />
+    </AbsoluteFill>
+  );
+};
+
+// Inline `code` as small mono pills.
+const Inline: React.FC<{ text: string }> = ({ text }) => (
+  <>
+    {text.split(/(`[^`]+`)/).map((p, i) =>
+      p.startsWith("`") ? (
+        <span key={i} style={{ fontFamily: '"SF Mono", Menlo, monospace', fontSize: "0.9em", background: "#ECE8DF", borderRadius: 5, padding: "1px 7px" }}>{p.slice(1, -1)}</span>
+      ) : (
+        <React.Fragment key={i}>{p}</React.Fragment>
+      ),
+    )}
+  </>
+);
+
+// `at` is when the window arrives; `marks` maps a line index to the time its highlight sweeps.
+export const ReviewMdPage: React.FC<{ t: number; at: number; marks: Map<number, number> }> = ({ t, at, marks }) => {
+  const k = prog(t, at, MOVE, easeInOut);
+  const ink = "#1F1F1D", muted = "#6E6B65";
+  return (
+    <AbsoluteFill>
+      <GridStage t={t} />
+      <div style={{ position: "absolute", left: 300, top: lerp(136, 56, k), width: 1320, height: 872, opacity: k, filter: `blur(${(1 - k) * 10}px)`, borderRadius: 18, overflow: "hidden", background: "#FAF8F3", boxShadow: `0 ${40 * k}px ${110 * k}px rgba(0,0,0,0.55)` }}>
+        {/* Neutral browser chrome: three dots, one tab, an address bar. No brand. */}
+        <div style={{ height: 104, background: "#E9E5DC", borderBottom: "1px solid #D8D3C8", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 26px", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {["#E06C5A", "#E0B04F", "#7CB36B"].map((c) => (
+              <div key={c} style={{ width: 14, height: 14, borderRadius: 7, background: c }} />
+            ))}
+            <div style={{ marginLeft: 22, padding: "6px 18px", borderRadius: "10px 10px 0 0", background: "#FAF8F3", fontFamily: SANS, fontSize: 24, color: ink }}>REVIEW.md</div>
+          </div>
+          <div style={{ height: 36, borderRadius: 18, background: "#FAF8F3", display: "flex", alignItems: "center", padding: "0 18px", fontFamily: SANS, fontSize: 24, color: muted }}>your-repo / REVIEW.md</div>
+        </div>
+        <div style={{ padding: "28px 70px", color: ink, fontFamily: SANS }}>
+          {REVIEW_MD.map((b, i) => {
+            const markAt = marks.get(i);
+            const body = markAt !== undefined ? <Mark t={t} at={markAt} color="rgba(183,205,191,0.75)"><Inline text={b.text} /></Mark> : <Inline text={b.text} />;
+            const style: React.CSSProperties =
+              b.kind === "h1" ? { fontSize: 50, fontWeight: 700, letterSpacing: "-0.02em", margin: "0 0 12px" }
+              : b.kind === "h2" ? { fontSize: 32, fontWeight: 700, margin: "20px 0 6px" }
+              : b.kind === "li" ? { fontSize: 27, lineHeight: 1.42, margin: "2px 0 2px 30px", display: "list-item", listStyle: "disc" }
+              : { fontSize: 27, lineHeight: 1.45, margin: "0", color: "#34322E" };
+            return (
+              <In key={i} t={t} at={at + 0.35 + i * 0.12} rise={10}>
+                <div style={style}>{body}</div>
+              </In>
+            );
+          })}
+        </div>
+      </div>
+      <In t={t} at={at + 2.0} style={{ position: "absolute", left: 300, top: 946 }}>
+        <div style={{ fontFamily: SANS, fontSize: 24, color: "#A3A19C", letterSpacing: 0.5 }}>Example REVIEW.md from the Claude Code docs: code.claude.com/docs/en/code-review-customize</div>
+      </In>
+    </AbsoluteFill>
+  );
+};
+
+const ReviewMd: React.FC<Props & { v: V<"reviewmd"> }> = ({ shot, time, v }) => {
+  const times = v.times ?? [];
+  const marks = new Map(v.marks.map((m, n) => [REVIEW_MD.findIndex((b) => b.text === m.line), times[n] ?? shot.start + 2 + n] as [number, number]));
+  return <ReviewMdPage t={time} at={shot.start} marks={marks} />;
+};
+
 export const FrameVisual: React.FC<Props> = (p) => {
   const v = p.shot.visual!;
   if (v.kind === "odometer") return <Odometer {...p} v={v} />;
   if (v.kind === "lift") return <Lift {...p} v={v} />;
+  if (v.kind === "reviewmd") return <ReviewMd {...p} v={v} />;
   if (v.kind === "chapter") return <Chapter {...p} v={v} />;
   return null;
 };

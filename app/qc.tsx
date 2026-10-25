@@ -62,7 +62,7 @@ const opacity = (el: Element | null) => {
 const blockOf = (el: Element): Element => {
   for (let e: Element | null = el; e; e = e.parentElement) {
     const d = getComputedStyle(e).display;
-    if (d === "block" || d === "flex" || d === "grid") return e;
+    if (d === "block" || d === "list-item" || d === "flex" || d === "grid") return e;
   }
   return el;
 };

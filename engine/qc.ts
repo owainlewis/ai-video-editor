@@ -161,7 +161,9 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
   for (let i = 0; i < texts.length; i++)
     for (let j = i + 1; j < texts.length; j++) {
       const [a, b] = [texts[i], texts[j]];
-      if (overlap(a.box, b.box)) err(`"${short(a.text)}" overlaps "${short(b.text)}"`);
+      // Runs of text in one block (inline `code` inside a sentence) are laid out by the browser and
+      // cannot collide; a multi-line sentence's box simply contains them.
+      if (a.block !== b.block && overlap(a.box, b.box)) err(`"${short(a.text)}" overlaps "${short(b.text)}"`);
       // Side by side on one line: they need a little air (the "x" jammed into the "12").
       const sameLine = Math.min(a.box[1] + a.box[3], b.box[1] + b.box[3]) - Math.max(a.box[1], b.box[1]) > 0.5 * Math.min(a.box[3], b.box[3]);
       if (sameLine && !overlap(a.box, b.box) && gap(a.box, b.box) < Math.max(4, 0.03 * Math.min(a.size, b.size))) {

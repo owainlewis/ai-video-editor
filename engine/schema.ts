@@ -2,6 +2,7 @@
 // resolves every spoken anchor to a time and writes `build/edit.resolved.json`,
 // which is what the Remotion composition renders.
 import { z } from "zod";
+import { reviewLine } from "./reviewmd";
 
 // A phrase the speaker says. Shots and reveals land on its first word.
 // Each anchor must come after the previous shot's anchor in the transcript.
@@ -110,6 +111,12 @@ export const Visual = z.discriminatedUnion("kind", [
     mark: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
     from: Anchor.optional(),
     to: Anchor.optional(),
+  }),
+  // The docs' example REVIEW.md in a browser over the Graphite stage. Each mark highlights one line
+  // of it (by its exact text, see engine/reviewmd.ts) as `at` is said.
+  z.object({
+    kind: z.literal("reviewmd"),
+    marks: z.array(z.object({ line: z.string().refine((l) => reviewLine(l) >= 0, "not a line of the docs' REVIEW.md"), at: Anchor })).max(4).default([]),
   }),
   // The route of the video: a title over a track of numbered stops that pop in on `at` ("the six levels").
   z.object({ kind: z.literal("journey"), title: z.string(), of: z.number().int().min(2).max(12), at: Anchor.optional() }),

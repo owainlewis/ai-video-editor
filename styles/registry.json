@@ -161,6 +161,35 @@
           "preview": false
         },
         {
+          "id": "ivory.t1.reviewmd",
+          "kind": "reviewmd",
+          "tier": "t1",
+          "purpose": "proof",
+          "summary": "The docs' example REVIEW.md in a neutral browser window over the Graphite stage; a highlighter marks each named line as it is said.",
+          "layouts": [
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "marks[].line",
+              "type": "text",
+              "maxChars": 80,
+              "note": "a line of engine/reviewmd.ts, word for word"
+            },
+            {
+              "name": "marks[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
           "id": "ivory.t1.title",
           "kind": "title",
           "tier": "t1",

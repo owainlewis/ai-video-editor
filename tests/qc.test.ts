@@ -19,6 +19,9 @@ describe("qcLayout", () => {
     expect(msgs(qcLayout(m([text("2,500", [200, 400, 80, 30])], { marks: [{ box: [200, 432, 600, 2], opacity: 1 }] }), size, "s"))).toMatch(/touches a line/);
     expect(msgs(qcLayout(m([text("a", [500, 500, 100, 40]), text("b", [550, 510, 100, 40])]), size, "s"))).toMatch(/overlaps/);
   });
+  it("lets inline runs in one block sit inside their sentence (a `code` pill)", () => {
+    expect(msgs(qcLayout(m([text("Generated files under and any file", [400, 500, 800, 80], { block: 1 }), text("src/gen/", [700, 505, 110, 30], { block: 1 })]), size, "s"))).not.toMatch(/overlaps/);
+  });
   it("warns when two pieces of text sit jammed together on a line", () => {
     expect(msgs(qcLayout(m([text("12", [600, 300, 400, 300], { size: 500 }), text("x", [1002, 300, 200, 300], { size: 500 })]), size, "s"))).toMatch(/very tight/);
   });
