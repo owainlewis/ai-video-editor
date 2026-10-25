@@ -83,3 +83,13 @@ wipes, blur dissolves, stock and TV clips. Loud, branded and busy; Owain's notes
   The references run 3 to 20 changes a minute in the body; their intros 5 to 42.
 - Sound effects: one per graphic entry at most, about -8 dB under the voice. No effect on every cut.
 - A graphic holds for its clause: 2 to 8 s.
+
+## Reels references (2026-10-25)
+
+**Nick Saraev, Agency Agents.** Speaker in a rounded window under a framed graphic, two-tier hook title, real GitHub pages in browser frames with highlights, a star counter rolling over the real Star button, the agent's own email typing in a mail window, a Claude Code board of agent cards, an orchestrator pipeline with queued and running pills, a chip cloud of real agent names. Something new about every 1.5 s. Built as `compose`, `divisions`, `chips`, `runs` (our palette, not his blue); see `projects/agency-agents`.
+
+**Google Pomelli reel (25.7 s).** About 10 cuts, but inside each shot something changes about every 1 s. The speaker appears only in the hook (0 to 2 s) and the CTA; the middle is Google's own 16:9 launch video in a letterboxed box on a flat background that flips white and dark per section. Worth borrowing:
+1. Real vendor footage letterboxed on a switching background: pace from real UI without drawing any.
+2. A big headline stacking word by word above the media, on the spoken words, one per section.
+3. A premium hook: the brand mark (the real one, never redrawn) glowing in, a serif title typing letter by letter.
+Also seen: a zoom-blur entrance on the speaker, serif words on depth layers in front of and behind a UI card, a warm gradient wipe between sections, a tilted phone with floating stickers, cards dealt into a row, one- or two-word captions in a dark rounded pill.
