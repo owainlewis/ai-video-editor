@@ -1,4 +1,5 @@
 import React from "react";
+import { isFrame } from "./frame";
 import { H, MEDIA, splitGeom, t } from "./theme";
 import { pal, SCENE } from "./soft";
 import { look, style } from "./style";
@@ -48,7 +49,8 @@ export const Captions: React.FC<{ r: Resolved; shot: ResolvedShot; time: number 
   // the speaker or ink on paper. An accent word is set in Signifier italic. Sized to fit the width.
   if (look.captions === "keyword") {
     // A chapter card is its own big word: no caption over it.
-    if (shot.visual?.kind === "chapter") return null;
+    // So is a full-frame counter or chapter hit: the number or title on screen is the word.
+    if (shot.visual?.kind === "chapter" || isFrame(shot)) return null;
     // The latest content word said so far, across chunks; filler words hold the previous one.
     const said = r.chunks.flatMap((ch) => ch.words).filter((w) => time >= w.start - 2 / 30 && w.start >= shot.start - 0.05 && isKeyword(w.text));
     const now = said[said.length - 1];

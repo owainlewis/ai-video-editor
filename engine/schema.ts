@@ -118,6 +118,28 @@ export const Visual = z.discriminatedUnion("kind", [
     kind: z.literal("reviewmd"),
     marks: z.array(z.object({ line: z.string().refine((l) => reviewLine(l) >= 0, "not a line of the docs' REVIEW.md"), at: Anchor })).max(4).default([]),
   }),
+  // Product moments drawn clean, full frame, in depth (effects/ui.tsx). Words come from the real
+  // source: a Claude Code session from a demo, a search for the real page, the article's own tiers.
+  z.object({
+    kind: z.literal("claudecode"),
+    title: z.string().optional(),
+    // Shown in Claude Code's working colour from the first prompt until the first output line.
+    status: z.string().optional(),
+    lines: z.array(z.object({ text: z.string(), style: z.enum(["prompt", "out", "head", "item", "dim", "ok"]).default("out"), at: Anchor.optional() })).min(1).max(12),
+    mark: z.object({ line: z.number().int().min(0), phrase: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  z.object({
+    kind: z.literal("search"),
+    text: z.string(),
+    at: Anchor.optional(),
+    cps: z.number().positive().optional(),
+    result: z.object({ site: z.string(), title: z.string(), text: z.string().optional(), at: Anchor.optional() }).optional(),
+  }),
+  z.object({
+    kind: z.literal("tiers"),
+    title: z.string().optional(),
+    items: z.array(z.object({ label: z.string(), rule: z.string(), examples: z.string(), at: Anchor.optional(), markAt: Anchor.optional() })).min(2).max(4),
+  }),
   // The route of the video: a title over a track of numbered stops that pop in on `at` ("the six levels").
   z.object({ kind: z.literal("journey"), title: z.string(), of: z.number().int().min(2).max(12), at: Anchor.optional() }),
   // `of`: how many sections there are; a hit card then shows a progress row, one mark per section

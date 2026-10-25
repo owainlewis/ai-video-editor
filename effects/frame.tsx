@@ -3,8 +3,9 @@
 // (2026-10-25). They share effects/motion.tsx.
 import React from "react";
 import { Video } from "@remotion/media";
-import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, staticFile } from "remotion";
+import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, staticFile, useVideoConfig } from "remotion";
 import { REVIEW_MD } from "../engine/reviewmd";
+import { UI_KINDS, UiVisual } from "./ui";
 import type { Resolved, ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
 import { pal } from "./soft";
@@ -13,7 +14,7 @@ import { t as type } from "./theme";
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { r: Resolved; shot: ResolvedShot; time: number };
 
-export const FRAME_KINDS = new Set(["odometer", "lift", "reviewmd"]);
+export const FRAME_KINDS = new Set(["odometer", "lift", "reviewmd", ...UI_KINDS]);
 export const isFrame = (s: ResolvedShot) => s.layout === "media" && !!s.visual && (FRAME_KINDS.has(s.visual.kind) || (s.visual.kind === "chapter" && !!s.visual.hit));
 
 // Footage from the shot's own start. Exports read frames exactly (OffthreadVideo), so the picture
@@ -34,9 +35,12 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
   const here = parseInt(v.number, 10);
   const n = v.of ?? 0;
   const travel = prog(time, at + 2 * STAG, MOVE, easeInOut);
+  // A 9:16 reel has a narrow frame: a smaller margin and a title that still fills it.
+  const narrow = useVideoConfig().width < 1200;
+  const side = narrow ? 90 : 200;
   return (
     <AbsoluteFill>
-      <div style={{ position: "absolute", left: 200, right: 200, top: 0, bottom: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div style={{ position: "absolute", left: side, right: side, top: 0, bottom: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <In t={time} at={at}>
           <div style={{ fontFamily: type.sans, fontWeight: 500, fontSize: 32, letterSpacing: 7, color: c.muted }}>
             <span style={{ color: c.accent }}>{v.number}</span>
@@ -44,7 +48,7 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
           </div>
         </In>
         <In t={time} at={at + STAG} style={{ marginTop: 24 }}>
-          <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: 124, letterSpacing: "-0.035em", lineHeight: 1.02, color: c.ink, textWrap: "balance" }}>
+          <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: narrow ? 150 : 124, letterSpacing: "-0.035em", lineHeight: 1.02, color: c.ink, textWrap: "balance" }}>
             {runs(v.label).map((p, i) =>
               p.marked ? (
                 <Mark key={i} t={time} at={at + 1.0} color={markColor(c.accent)}>
@@ -61,7 +65,7 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
             {Array.from({ length: n }, (_, i) => {
               const fill = i < here - 1 ? 1 : i === here - 1 ? travel : 0;
               return (
-                <div key={i} data-qc="mark" style={{ position: "relative", width: 104, height: 6, borderRadius: 3, background: "rgba(247,243,236,0.14)", overflow: "hidden" }}>
+                <div key={i} data-qc="mark" style={{ position: "relative", width: narrow ? Math.min(104, (900 - 14 * n) / n) : 104, height: 6, borderRadius: 3, background: "rgba(247,243,236,0.14)", overflow: "hidden" }}>
                   <div style={{ position: "absolute", inset: 0, background: i === here - 1 ? c.accent : c.ink, opacity: i === here - 1 ? 1 : 0.55, transformOrigin: "left", scale: `${fill} 1` }} />
                 </div>
               );
@@ -247,6 +251,7 @@ export const FrameVisual: React.FC<Props> = (p) => {
   if (v.kind === "odometer") return <Odometer {...p} v={v} />;
   if (v.kind === "lift") return <Lift {...p} v={v} />;
   if (v.kind === "reviewmd") return <ReviewMd {...p} v={v} />;
+  if (UI_KINDS.has(v.kind)) return <UiVisual shot={p.shot} time={p.time} />;
   if (v.kind === "chapter") return <Chapter {...p} v={v} />;
   return null;
 };

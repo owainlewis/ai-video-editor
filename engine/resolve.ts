@@ -54,6 +54,9 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "odometer": return [...v.steps.map((x) => x.at), ...(v.result ? [v.result.at] : [])];
     case "lift": return [v.from, v.to];
     case "reviewmd": return v.marks.map((m) => m.at);
+    case "claudecode": return [...v.lines.map((l) => l.at), ...(v.mark ? [v.mark.at] : [])];
+    case "search": return [v.at, v.result?.at];
+    case "tiers": return v.items.flatMap((it) => [it.at, it.markAt]);
     case "kpi": return v.items.map((it) => it.at);
     case "bento": return v.cells.map((c) => c.at);
     case "pipeline": return v.stages.map((st) => st.at);
@@ -238,6 +241,11 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
       whoosh(s.start);
       whoosh(s.end - MOVE_S, 0.32);
       if (v.mark && v.times?.[0] !== undefined) click(v.times[0]);
+      return;
+    }
+    if (v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers") {
+      whoosh(s.start);
+      (v.times ?? []).forEach((t, n) => n && click(t));
       return;
     }
     if (v.kind === "reviewmd") {

@@ -2,6 +2,7 @@ import React from "react";
 import { Audio } from "@remotion/media";
 import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { Captions } from "./Captions";
+import { FrameVisual, isFrame } from "./frame";
 import { Speaker } from "./Speaker";
 import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
@@ -259,6 +260,16 @@ export const Reel: React.FC<Resolved> = (r) => {
               </AbsoluteFill>
             </Sequence>
           );
+        // The motion lab's full-frame moves (odometer, chapter hit) on a dark stage of their own.
+        if (isFrame(s))
+          return (
+            <Sequence key={i} from={from} durationInFrames={dur} name={`${i + 1} frame ${visual.kind}`}>
+              <AbsoluteFill>
+                <SceneCanvas tone={s.tone ?? "dark"} time={time} />
+                <FrameVisual r={r} shot={s} time={time} />
+              </AbsoluteFill>
+            </Sequence>
+          );
         if (s.layout !== "split" && s.layout !== "media") return null;
         const box = panel(s, r, i === 0);
         return (
@@ -270,7 +281,7 @@ export const Reel: React.FC<Resolved> = (r) => {
         );
       })}
 
-      {onCanvas && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
+      {onCanvas && !isFrame(shot) && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
       <Captions r={r} shot={shot} time={time} />
       {r.audio && <Audio src={staticFile(r.audio)} />}
     </AbsoluteFill>

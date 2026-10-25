@@ -190,6 +190,125 @@
           "preview": false
         },
         {
+          "id": "ivory.t1.claudecode",
+          "kind": "claudecode",
+          "tier": "t1",
+          "purpose": "proof",
+          "summary": "A Claude Code session drawn clean in a tilted window that settles flat: prompts type themselves, output lands line by line, one phrase is marked. Words from the real demo.",
+          "layouts": [
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "lines",
+              "type": "list",
+              "minItems": 1,
+              "maxItems": 12
+            },
+            {
+              "name": "lines[].text",
+              "type": "text",
+              "maxChars": 70
+            },
+            {
+              "name": "lines[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
+          "id": "ivory.t1.search",
+          "kind": "search",
+          "tier": "t1",
+          "purpose": "hook",
+          "summary": "A search bar types the query, then the real result card (site, title, line) rises under it.",
+          "layouts": [
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "text",
+              "type": "text",
+              "maxChars": 40
+            },
+            {
+              "name": "result.title",
+              "type": "text",
+              "maxChars": 60,
+              "optional": true
+            },
+            {
+              "name": "at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            },
+            {
+              "name": "result.at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
+          "id": "ivory.t1.tiers",
+          "kind": "tiers",
+          "tier": "t1",
+          "purpose": "structure",
+          "summary": "Two to four cards in depth; the tier being said comes forward with a sage edge and its rule is marked on its word.",
+          "layouts": [
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "items",
+              "type": "list",
+              "minItems": 2,
+              "maxItems": 4
+            },
+            {
+              "name": "items[].rule",
+              "type": "text",
+              "maxChars": 16
+            },
+            {
+              "name": "items[].examples",
+              "type": "text",
+              "maxChars": 70
+            },
+            {
+              "name": "items[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            },
+            {
+              "name": "items[].markAt",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
           "id": "ivory.t1.title",
           "kind": "title",
           "tier": "t1",
