@@ -81,11 +81,11 @@ describe("lintShots", () => {
   });
 
   it("react: allows runs of splits", () => {
-    const issues = lintShots([shot(0, 3, "split", img), shot(3, 6, "split", img), shot(6, 7, "punch"), shot(7, 10, "split", img)], 10, "react");
+    const issues = lintShots([shot(0, 2, "split", img), shot(2, 4, "split", img), shot(4, 5, "punch"), shot(5, 7, "split", img)], 7, "react");
     expect(issues).toEqual([]);
   });
 
-  it("allows a long shot while its reveals keep landing, and flags a still stretch over 3 s", () => {
+  it("allows a long shot while its reveals keep landing, and flags a still stretch over 2 s", () => {
     const chart = (times: number[]) => ({ kind: "chart", points: [], times }) as never;
     const ok = lintShots([{ ...shot(0, 6, "split"), visual: chart([2, 4]) }, shot(6, 7, "full")], 7, "mixed");
     expect(ok.map((i) => i.message).join("\n")).not.toMatch(/nothing changes/);
