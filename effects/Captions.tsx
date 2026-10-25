@@ -62,7 +62,7 @@ export const Captions: React.FC<{ r: Resolved; shot: ResolvedShot; time: number 
     const ink = now.accent ? (onPaper ? c.accentText : style.color.dark.accent) : scene ? c.ink : onCanvas ? t.ink : style.color.dark.ink;
     // On an inset split the caption sits in the 150 px gap between the panel and the speaker's window:
     // at 170 px its descenders ran into the window (Owain, 2026-10-25: "some text was misaligned").
-    const cap = shot.layout === "split" && r.split === "inset" ? 108 : 170;
+    const cap = shot.layout === "split" && r.split === "inset" ? 84 : 170;
     const size = Math.min(cap, (1080 - 180) / Math.max(3, word.length * style.font.sansWidth));
     return (
       <div style={{ position: "absolute", left: 90, right: 90, top: y, translate: "0 -50%", textAlign: "center" }}>

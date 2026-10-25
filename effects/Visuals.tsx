@@ -48,9 +48,11 @@ export const Accented: React.FC<{ text: string; color?: string; lift?: number }>
 // from one region to another and a marker that sweeps across what is being said.
 const ImageVisual: React.FC<Props & { v: V<"image"> }> = (props) => {
   const { w, h, v, shot } = props;
-  // On a scene the card is only as tall as the region being shown, so the words under discussion
+  // On a scene or split the card is only as tall as the region being shown, so the words under discussion
   // are large and nothing unrelated from the page sits around them.
-  if (shot.layout === "scene" && v.from) {
+  // Split panels too (Owain, 2026-10-25: "the text positioning is really off"): a paragraph card
+  // shows that paragraph, not half-lines of the page cut off above and below it.
+  if ((shot.layout === "scene" || shot.layout === "split") && v.from) {
     const [iw, ih] = v.size ?? [1600, 1000];
     const tall = (r: number[]) => (w * r[3] * ih) / (r[2] * iw);
     // A browser keeps a window's shape (at least 62% of the panel) with its bar on top; the page
