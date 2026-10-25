@@ -20,6 +20,9 @@ Helvetica and Signifier, always (Owain, 2026-10-22).
 - **Keyword captions and chapter words:** Helvetica Neue 800, lowercase, tight. A caption's accent word changes colour only.
 - **Signifier italic:** the one phrase that matters, in a stacked emphasis (about once a section) or an accent word.
 - **Labels, axes and numbers:** small Helvetica, tracked when uppercase. No mono.
+- **Big numbers** (hero stat, chapter cards, stat cards): Helvetica bold, set very tight. The line under a big number is Signifier italic, muted (Owain, 2026-10-25).
+- **The accent word** in a bold Helvetica title is set about 1.2x larger, so it does not read small and light.
+- **Quotes:** Signifier upright; they are someone's voice.
 
 ## Layout
 

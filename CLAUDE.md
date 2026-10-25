@@ -10,7 +10,7 @@ A project is `projects/<slug>/`. The plan is `edit.json` (schema: `engine/schema
 
 - `transcript.txt`: every word with its time. Shots and reveals are anchored to spoken words, never to seconds.
 - `edit.json`: the plan. Change it with Edit; the editor reloads within a second and saves a version, so Owain can undo.
-- `docs/RULES.md` (the house rules, learned from Owain's notes; they win over everything else) and `docs/STYLE.md`.
+- `docs/RULES.md` (the house rules, learned from Owain's notes; they win over everything else) and `docs/STYLE.md`. `docs/PLAYBOOK.md`: what pro edits do and which tricks fit Owain; check it when planning graphics.
 - `checks/frame.jpg`: a frame of the footage, for `face`.
 
 After every change:

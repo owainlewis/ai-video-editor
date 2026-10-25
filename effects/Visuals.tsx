@@ -26,12 +26,13 @@ const surface = (tone?: "light" | "dark") => {
   return { ...c, canvas: c.bg, line: tone === "dark" ? c.line : t.line, shadow: tone === "dark" ? c.shadow : t.shadow };
 };
 
-// Text with *one accent* set in Signifier italic.
-export const Accented: React.FC<{ text: string; color?: string }> = ({ text, color }) => (
+// Text with *one accent* set in Signifier italic. `lift` sets the accent larger than the line around
+// it: Signifier italic beside bold Helvetica reads small and light at the same size.
+export const Accented: React.FC<{ text: string; color?: string; lift?: number }> = ({ text, color, lift = 1 }) => (
   <>
     {text.split(/(\*[^*]+\*)/).map((part, i) =>
       part.startsWith("*") ? (
-        <span key={i} style={style.type.accent === "colour" ? { color } : { fontFamily: t.serif, fontStyle: "italic", fontWeight: 400, letterSpacing: -0.5 }}>
+        <span key={i} style={style.type.accent === "colour" ? { color } : { fontFamily: t.serif, fontStyle: "italic", fontWeight: 400, letterSpacing: -0.5, fontSize: `${lift}em` }}>
           {part.slice(1, -1)}
         </span>
       ) : (
@@ -389,9 +390,9 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   const size = Math.min(v.value.length > 6 ? 220 : 300, Math.floor((w * 0.95) / (final.length * 0.52)));
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 30 }}>
-      <div style={{ fontFamily: t.serif, fontSize: Math.min(size, (w * 0.95) / (v.value.length * 0.55)), whiteSpace: "nowrap", lineHeight: 0.9, letterSpacing: -8, color: c.ink, fontVariantNumeric: "tabular-nums" }}>{shown}</div>
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: Math.min(size, (w * 0.95) / (v.value.length * 0.6)), whiteSpace: "nowrap", lineHeight: 0.9, letterSpacing: -10, color: c.ink, fontVariantNumeric: "tabular-nums" }}>{shown}</div>
       <div style={{ width: 160, height: 3, background: c.ink, scale: `${v.hit ? 1 : prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
-      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 52, letterSpacing: -1, color: c.muted, opacity: v.hit ? 1 : prog(time, shot.start + 0.2) }}>
+      <div style={{ fontFamily: t.serif, fontStyle: "italic", fontWeight: 400, fontSize: 56, letterSpacing: -0.5, color: c.muted, opacity: v.hit ? 1 : prog(time, shot.start + 0.2) }}>
         <Accented text={v.label} />
       </div>
     </div>
@@ -478,7 +479,30 @@ const CtaVisual: React.FC<Props & { v: V<"cta"> }> = ({ slug, shot, time, w, h, 
 
 // A chapter card: the number lands out of a blur over a soft glow, its name tracked out below.
 const ChapterVisual: React.FC<Props & { v: V<"chapter"> }> = (p) =>
-  p.v.hit ? <StatVisual {...p} v={{ kind: "stat", value: p.v.number, label: p.v.label, hit: true }} /> : look.chapter === "stack" ? <ChapterStack {...p} /> : <ChapterGlow {...p} />;
+  p.v.hit ? <ChapterHit {...p} /> : look.chapter === "stack" ? <ChapterStack {...p} /> : <ChapterGlow {...p} />;
+
+// A full-frame chapter card set like the hero stat, complete on the cut. With `of`, a row of marks
+// under it shows where this section sits: done ones half ink, this one long in the accent, the rest faint.
+const ChapterHit: React.FC<Props & { v: V<"chapter"> }> = (p) => {
+  const { shot, w, h, v } = p;
+  const c = pal(shot.tone);
+  const here = parseInt(v.number, 10);
+  const row = v.of && here >= 1 ? 116 : 0;
+  return (
+    <div style={{ position: "relative", width: w, height: h }}>
+      <div style={{ position: "absolute", inset: 0, bottom: row }}>
+        <StatVisual {...p} h={h - row} v={{ kind: "stat", value: v.number, label: v.label, hit: true }} />
+      </div>
+      {row > 0 && (
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, display: "flex", justifyContent: "center", gap: 14 }}>
+          {Array.from({ length: v.of! }, (_, i) => (
+            <div key={i} style={{ width: i + 1 === here ? 112 : 56, height: 5, borderRadius: 3, background: i + 1 === here ? c.accent : c.ink, opacity: i + 1 < here ? 0.45 : i + 1 === here ? 1 : 0.12 }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Focus stack (Ivory): a huge numeral held soft and blurred behind one sharp word, both drifting
 // slowly at different speeds, so the frame has depth without any light effects.

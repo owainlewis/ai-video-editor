@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
 import { isKeyword } from "../effects/Captions.tsx";
-import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, resolveShots } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, resolveShots, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -258,5 +258,15 @@ describe("on camera", () => {
     const bad = lintOnCamera([shot(5, 12, "over"), shot(25, 28, "side")], ranges);
     expect(bad.map((i) => i.level)).toEqual(["error", "error"]);
     expect(bad[0].message).toMatch(/not on camera.*10.0-20.0s/);
+  });
+});
+
+describe("syncWords", () => {
+  const said = ["has", "said", "that", "it", "will", "make", "the", "final", "result", "better."].map((text, i) => ({ text, start: 10 + i, end: 10.5 + i }));
+  it("times each quote word by its spoken match, fuzzily, in order", () => {
+    expect(syncWords("He estimates it makes the final result better", said, 0, 10, 30)).toEqual([10, 10, 13, 15, 16, 17, 18, 19]);
+  });
+  it("gives unsaid words the time of the word before", () => {
+    expect(syncWords("the final result, roughly", said, 0, 10, 30)).toEqual([16, 17, 18, 18]);
   });
 });

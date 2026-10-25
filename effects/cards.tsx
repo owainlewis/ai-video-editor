@@ -583,13 +583,16 @@ export const QuoteCard: React.FC<Props & { v: V<"quote"> }> = ({ shot, time, w, 
   const words = v.text.split(/\s+/);
   // Words resolve in reading order over about a second, so the quote reads as it is spoken.
   const per = Math.min(0.06, 1.1 / words.length);
+  // A synced quote types each word as it is said; the mark and source are there on the cut.
+  const when = (i: number) => v.words?.[i] ?? at + i * per;
+  const frame = v.words ? 1 : prog(time, shot.start);
   return (
     <div style={{ position: "relative", width: w, height: h }}>
       <div style={{ position: "absolute", left: 0, top: g.top, width: w }}>
-        <div style={{ height: g.mark, fontFamily: F.serif, fontSize: 200, lineHeight: 1, color: c.accentText, opacity: prog(time, shot.start), translate: "-6px 0" }}>“</div>
+        <div style={{ height: g.mark, fontFamily: F.serif, fontSize: 200, lineHeight: 1, color: c.accentText, opacity: frame, translate: "-6px 0" }}>“</div>
         <div style={{ fontFamily: F.serif, fontWeight: 400, fontSize: g.size, lineHeight: 1.18, letterSpacing: -g.size * 0.015, color: c.ink }}>
           {words.map((wd, i) => {
-            const p = prog(time, at + i * per, 0.4);
+            const p = prog(time, when(i), v.words ? 0.25 : 0.4);
             return (
               <React.Fragment key={i}>
                 {i > 0 && " "}
@@ -598,7 +601,7 @@ export const QuoteCard: React.FC<Props & { v: V<"quote"> }> = ({ shot, time, w, 
             );
           })}
         </div>
-        <div style={{ marginTop: g.source.gap, fontFamily: F.sans, fontWeight: 500, fontSize: g.source.size, lineHeight: 1.3, color: c.muted, opacity: prog(time, at + words.length * per) }}>— {v.source}</div>
+        <div style={{ marginTop: g.source.gap, fontFamily: F.sans, fontWeight: 500, fontSize: g.source.size, lineHeight: 1.3, color: c.muted, opacity: v.words ? 1 : prog(time, at + words.length * per) }}>— {v.source}</div>
       </div>
     </div>
   );

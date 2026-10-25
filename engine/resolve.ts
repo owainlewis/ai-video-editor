@@ -96,6 +96,10 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     }
     const v = shot.visual;
     if (!v) continue;
+    if (v.kind === "quote" && v.sync) {
+      shot.visual = { ...v, words: syncWords(v.text, words, shot.index, shot.start, shots[k + 1]?.start ?? duration) };
+      continue;
+    }
     const anchors = visualAnchors(v);
     if (!anchors.length) continue;
     let from = shot.index;
@@ -116,6 +120,25 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     shot.visual = { ...v, times };
   }
   return { shots: shots.map(({ index, ...s }) => s), issues };
+};
+
+// When each word of a quote is said: matched in order against the words spoken in the shot. A word
+// matches if it is the same or one starts with the other ("make", "makes"). Unmatched words take the
+// time of the word before, so they arrive with it.
+export const syncWords = (text: string, words: Word[], from: number, start: number, end: number): number[] => {
+  const said = words.slice(Math.max(0, from)).filter((w) => w.start < end);
+  const same = (a: string, b: string) => a === b || (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a)));
+  let j = 0;
+  let last = start;
+  return text.split(/\s+/).map((raw) => {
+    const t = norm(raw);
+    const k = said.findIndex((w, i) => i >= j && same(norm(w.text), t));
+    if (k >= 0) {
+      j = k + 1;
+      last = Math.max(start, said[k].start);
+    }
+    return last;
+  });
 };
 
 // Caption chunks: one to three words, broken at punctuation, pauses and cuts.
@@ -236,9 +259,9 @@ export const cameraRanges = (dist: number[], rate: number, threshold = 20, minRu
 export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
   shots.flatMap((s, i) => {
     if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
-    // A full-frame chapter card replaces the picture for a moment rather than sitting over it, so
-    // it may cut in over a screen recording (Owain, 2026-10-25).
-    if (s.layout === "media" && s.visual.kind === "chapter") return [];
+    // A full-frame chapter or quote card replaces the picture for a moment rather than sitting over
+    // it, so it may cut in over a screen recording (Owain, 2026-10-25).
+    if (s.layout === "media" && (s.visual.kind === "chapter" || s.visual.kind === "quote")) return [];
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");

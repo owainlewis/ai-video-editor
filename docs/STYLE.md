@@ -44,7 +44,7 @@ Pick graphics from the catalog and keep slots under their max. New in Blueprint:
 ## Look: light editorial
 
 - Cool paper canvas (`#ECEEF1`) with a faint dot grid. Ink black type. One clean blue (`#2563EB`) for accents and highlights.
-- Headlines in Signifier, regular and set tight, like a film title. Helvetica Neue for working text (card rows, labels, numbers). An accent word changes colour only; never an italic serif word inside a bold sans line.
+- Helvetica carries the information: headlines, titles and big numbers in bold, set tight; card rows and small labels in regular. Signifier is the voice: quotes, the one italic accent word in a title (set about 1.2x larger), and the italic line under a big number. Keep Signifier rare so it means something (Owain, 2026-10-25; see `styles/ivory/DESIGN.md`).
 - White cards with a soft shadow and a thin edge. Real captures sit in a card or a browser frame.
 - No neon, no gradients on type, no emoji, no cartoon icons.
 

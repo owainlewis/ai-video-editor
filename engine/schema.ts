@@ -90,7 +90,9 @@ export const Visual = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("lower"), title: z.string(), sub: z.string().optional() }),
   // A chapter card: a large number lands over a soft glow, the chapter's name tracked out below it.
   // `hit`: a full-frame card that lands complete on the cut, set like a hero stat (YouTube).
-  z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string(), hit: z.boolean().optional() }),
+  // `of`: how many sections there are; a hit card then shows a progress row, one mark per section
+  // (done in ink, this one in the accent, the rest faint).
+  z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string(), hit: z.boolean().optional(), of: z.number().int().min(2).max(12).optional() }),
   // A diagram of how parts talk: cards joined by lines that draw on `at`. `chip` rides along an edge
   // (what is passed, e.g. "plan.md"). Two or three nodes sit in a row; with `root`, the first node
   // sits on top and the rest branch below it. A diagram, never a stand-in for real UI.
@@ -176,7 +178,9 @@ export const Visual = z.discriminatedUnion("kind", [
   // Boxes that tick as each is said.
   z.object({ kind: z.literal("checklist"), title: z.string().optional(), items: z.array(Item).min(2).max(6) }),
   // A real quote, word for word, with who said it and where. Never paraphrased, never invented.
-  z.object({ kind: z.literal("quote"), text: z.string(), source: z.string(), at: Anchor.optional() }),
+  // `sync`: each word types in as Owain says its match (fuzzy: "make" matches "makes"); words he
+  // does not say appear with the word before. `words` is filled in by the resolver.
+  z.object({ kind: z.literal("quote"), text: z.string(), source: z.string(), at: Anchor.optional(), sync: z.boolean().optional(), words: z.array(z.number()).optional() }),
   // Many official logos at once, in a wave. Never redrawn.
   z.object({
     kind: z.literal("logowall"),

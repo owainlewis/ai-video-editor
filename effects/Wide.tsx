@@ -110,8 +110,8 @@ const OverTitle: React.FC<{ text: string; kicker?: string; shot: ResolvedShot; t
   return (
     <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity: out }}>
       {kicker && <div style={{ fontFamily: t.sans, fontWeight: 500, fontSize: 22, letterSpacing: 8, textTransform: "uppercase", color: "rgba(236,238,241,0.7)", marginBottom: 22, opacity: a }}>{kicker}</div>}
-      <div style={{ fontFamily: t.serif, fontSize: 76, letterSpacing: -2, lineHeight: 1.05, color: "#ECEEF1", textAlign: "center", maxWidth: 1300, opacity: a, filter: `blur(${(1 - a) * 10}px)` }}>
-        <Accented text={text} />
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 68, letterSpacing: -2, lineHeight: 1.05, color: "#ECEEF1", textAlign: "center", maxWidth: 1300, opacity: a, filter: `blur(${(1 - a) * 10}px)` }}>
+        <Accented text={text} lift={1.2} />
       </div>
     </AbsoluteFill>
   );
