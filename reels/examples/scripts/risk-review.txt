@@ -1,0 +1,15 @@
+In four months, Anthropic went from about 2,500 changes a day to more than 30,000. No team can read all of that by hand.
+
+So they stopped reviewing every change the same way. The change sets the risk, not the author. A classifier reads it and picks a tier.
+
+Low risk. Docs, copy, additive changes behind a flag. No human needed once the AI review and security checks pass.
+
+Medium risk. Ordinary product changes. One person reviews.
+
+High risk. The riskiest code. Two people.
+
+And whoever prompted the agent is on the hook for the change.
+
+Some mistakes still get through, so everything is reversible. Flags turn off without a deploy.
+
+Spend human attention where a mistake would hurt. Not on every line.

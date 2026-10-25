@@ -377,7 +377,8 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   const m = v.value.match(/^([^\d]*)([\d,.]+)(.*)$/);
   const p = prog(time, shot.start, 0.9);
   let shown = v.value;
-  if (m) {
+  // Count up only to a real quantity: a "1" or "2" counting from 0 shows a number nobody said.
+  if (m && parseFloat(m[2].replace(/,/g, "")) >= 10) {
     const target = parseFloat(m[2].replace(/,/g, ""));
     const decimals = (m[2].split(".")[1] || "").length;
     shown = m[1] + (target * p).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + m[3];
