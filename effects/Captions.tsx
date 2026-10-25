@@ -62,10 +62,13 @@ export const Captions: React.FC<{ r: Resolved; shot: ResolvedShot; time: number 
     const ink = now.accent ? (onPaper ? c.accentText : style.color.dark.accent) : scene ? c.ink : onCanvas ? t.ink : style.color.dark.ink;
     // On an inset split the caption sits in the 150 px gap between the panel and the speaker's window:
     // at 170 px its descenders ran into the window (Owain, 2026-10-25: "some text was misaligned").
-    const cap = shot.layout === "split" && r.split === "inset" ? 84 : 170;
+    // On a 50/50 split the caption sits on the seam between the halves, in a dark pill, clear of
+    // Instagram's caption and buttons at the bottom (it used to sit low on the speaker, at y 1790).
+    const seamPill = shot.layout === "split" && r.split === "half";
+    const cap = shot.layout === "split" && r.split === "inset" ? 84 : seamPill ? 76 : 170;
     const size = Math.min(cap, (1080 - 180) / Math.max(3, word.length * style.font.sansWidth));
     return (
-      <div style={{ position: "absolute", left: 90, right: 90, top: y, translate: "0 -50%", textAlign: "center" }}>
+      <div style={{ position: "absolute", left: 90, right: 90, top: seamPill ? splitGeom("half").speaker.top : y, translate: "0 -50%", textAlign: "center" }}>
         <span
           style={{
             fontFamily: t.sans,
@@ -73,8 +76,9 @@ export const Captions: React.FC<{ r: Resolved; shot: ResolvedShot; time: number 
             fontSize: size,
             letterSpacing: -size * 0.045,
             lineHeight: 1,
-            color: ink,
-            textShadow: onPaper ? "none" : "0 2px 24px rgba(0,0,0,0.35)",
+            color: seamPill ? (now.accent ? style.color.dark.accent : style.color.dark.ink) : ink,
+            textShadow: onPaper || seamPill ? "none" : "0 2px 24px rgba(0,0,0,0.35)",
+            ...(seamPill ? { display: "inline-block", padding: `${size * 0.18}px ${size * 0.42}px ${size * 0.24}px`, borderRadius: size * 0.32, background: "rgba(26,25,24,0.88)", boxShadow: "0 10px 30px rgba(0,0,0,0.25)" } : {}),
           }}
         >
           {word}
