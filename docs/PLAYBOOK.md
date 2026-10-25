@@ -93,3 +93,29 @@ wipes, blur dissolves, stock and TV clips. Loud, branded and busy; Owain's notes
 2. A big headline stacking word by word above the media, on the spoken words, one per section.
 3. A premium hook: the brand mark (the real one, never redrawn) glowing in, a serif title typing letter by letter.
 Also seen: a zoom-blur entrance on the speaker, serif words on depth layers in front of and behind a UI card, a warm gradient wipe between sections, a tilted phone with floating stickers, cards dealt into a row, one- or two-word captions in a dark rounded pill.
+
+## Five reels studied (2026-10-25)
+
+Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare security-audit-skill (Prince Gupta, faceless, 48 s), 5 Claude connectors (David, 54 s), Triple Loop storytelling (coach, 82 s).
+
+**Pacing.** Hard cuts are not the measure: shots average 3.8 to 5 s, but inside every shot something changes every 0.5 to 1.5 s (a word, a row, a pill flipping, a push-in, a tick). The longest still moment in any of them is about 2 to 3 s. Our 2 s rule matches the best of them.
+
+**What they share.**
+- One persistent idea per section with a visible state change: queued to running to passed, Connect to Connected, a bar filling, a counter climbing.
+- Real proof plus a big number: a frosted stat badge over the real (blurred) page, an outline drawing round the real Star button and a badge springing out of it.
+- Hubs: a centre mark with spokes drawing out to logos or agents, each getting a tick.
+- Captions are small (about 4% of height) or in a dark pill; the key word switches to serif italic or a coloured accent. One shows a Figma-style selection box with corner handles round the key word.
+- The ending is an Instagram mock: Follow clicks to Following, the keyword is typed into comments, a DM notification drops in with the link.
+- Speaker time ranges from 0% (faceless) to 100% (split for most of it).
+
+**Ideas worth building, best first.**
+1. **Stat badge over the real page** (Agency Agents 13.5 s): blur the capture, drop a frosted card with an odometer in it. Proof and wow in one.
+2. **Before and after stopwatch** (connectors 44.5 s): the slow way's timer climbs in red, then resets to a green 0:01. Fits any "tool X replaces chore Y" line.
+3. **Timeline metaphor** (storytelling 25 to 58 s): a video scrubber with pins, a magnet pulling a viewer along, segments filling in colour. Carries 10+ s of change; fits latency, tokens, build steps, an agent run.
+4. **Radial hub wire-up** (MCP 44 s): logos in a ring, spokes drawing out in turn, ticks popping.
+5. **Persistent progress footer** (security 14.5 to 32 s): a "phase 3 of 6" card stays put while the hero card above swaps, so the viewer always knows where they are.
+6. **Verifier handoff** (security 24 s): a dashed arrow draws to a new node, a checklist answers row by row, ends on a green verdict.
+7. **Instagram CTA mock**: Follow click, typed keyword comment, DM notification.
+8. Smaller: selection-box caption accent, hand-drawn red circle on a key number, "no API" stamp, magnifier loupe over a UI row, neon line draw-ons, grid cascade lighting outward from a centre, blur transitions between scenes, curved-screen warp on terminals, tilted poster wall.
+
+**Watch out.** The Agency Agents reel's badges say 282 and 163k while the voice says 200 and 160k. Our rule holds: the number on screen matches what is said, or the note says why.
