@@ -3,7 +3,8 @@
 What professional edits do, and which of it fits Owain. Studied 2026-10-25 from four references:
 Kallaway, "8 tips for growing faster on social media" (24 min); Sam Gaudet, "10M follower personal
 brand system" (22 min); a Matt D'Avella-style video on time management (12.5 min); Dan Martell,
-"Copy This Strategy to 10X Your Business Fast" (26 min). RULES.md wins over anything here.
+"Copy This Strategy to 10X Your Business Fast" (26 min). Plus two 30 s product promos (Ultramock,
+XFastest): pure motion design, no hard cuts. RULES.md wins over anything here.
 
 ## What all four do
 
@@ -29,7 +30,7 @@ brand system" (22 min); a Matt D'Avella-style video on time management (12.5 min
 | --- | --- | --- | --- |
 | Chapter card at each section | all three | `chapter` with `hit: true` | done |
 | Hero number full frame with a riser | Gaudet 0:01 (counter + tick + riser) | `stat` with `hit: true`, `"sfx": "riser"` | done |
-| **Progress map**: all sections as numbered marks, done ones ink, current one accent, future ones faint | Gaudet 0:16, 4:26 | `chapter` with `hit: true` and `of: N` | done |
+| **Progress map**: all sections as numbered marks, done ones ink, current one accent, future ones faint | Gaudet 0:16, 4:26 | `chapter` with `hit: true` and `of: N`: a journey track, the marker travelling to this stop; `journey` card for the promise | done |
 | **Quote card that types in sync** with Owain reading a source, ghost text behind | D'Avella 4:50 | `quote` with `sync: true`, full frame (`media`) | done |
 | One flat visual metaphor per idea (two circles, a waffle week) | D'Avella 2:06, 6:15 | existing `stat.waffle`, `compare`; one per video, on camera | use |
 | Myth, then truth: "the popular advice" card, then the counter-claim | Kallaway 0:50, 0:59 | a `compare` pair or two `over` titles | try |
@@ -39,6 +40,10 @@ brand system" (22 min); a Matt D'Avella-style video on time management (12.5 min
 | Music under the hook only, dropped at the first chapter card, so the body is just voice | Martell 0:37 | `music` for the intro, stopping at chapter 01 | ask Owain |
 | Thesis sentence full frame with one word in the accent | Martell 3:28, 4:04 | a full-frame `title` (Signifier, one `*accent*` word), hard cut, 2 to 4 s | try |
 | Rows added to a card in the empty wall beside his head, one per spoken item, instead of cutting away | Martell 2:52 | a `list` or `checklist` over `full`, in the empty side of the frame, on camera | try |
+| Kinetic type: a short line centred, words landing as said, a full stop in the accent | promos (XFastest 0:00, Ultramock 0:04) | `title` with `sync: true` on `media` | done |
+| Real UI in perspective, settling flat: the screen recording enters as an object | promos (Ultramock 0:01, XFastest 0:24) | tried as `present`; Owain did not like it | rejected |
+| Flat line, then a sudden spike to a value pill | XFastest 0:07 | only with real data points, never an invented shape | later |
+| Colour-field wipe for the payoff (a circle floods the frame) | XFastest 0:19 | conflicts with hard cuts; ask | ask Owain |
 | Strike-through for a reversal ("~~solve the problem~~, being busy") | Martell 0:55 | a word struck out in an `over` title | later |
 
 ## Needs Owain's call (conflicts with a rule)

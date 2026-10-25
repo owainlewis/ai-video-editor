@@ -7,6 +7,7 @@ The house style, and the only one (Owain, 2026-10-22). Warm off-white and pine g
 - Paper `#F4F1EA`: a warm off-white, a touch brighter than Noske's, never pure white.
 - Pine `#213B34`: the accent on paper. Deeper and cooler than Noske's teal-green.
 - Forest `#192E28`: dark scenes. Darker than the pine, so scenes read deeper than Noske's.
+- Graphite `#1B1B1A`: the dark theme on YouTube (2026-10-25). A warm near-black a little darker than Owain's wall; the accent stays sage.
 - Ink `#1A2622` (green-black) on paper.
 - Text on green and on footage is a near-white warm `#F7F3EC` (Owain: "a bit more white"). Accent words on green are `#E9EFEA`.
 - The splash on green (dots, lines, chips) is a soft sage `#B7CDBF`, where Noske uses a peach.

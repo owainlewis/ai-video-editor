@@ -1,7 +1,7 @@
 import React from "react";
 import { Audio, Video } from "@remotion/media";
 import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
-import { pal, SceneCanvas, type Tone } from "./soft";
+import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
@@ -125,6 +125,7 @@ const Captions: React.FC<{ chunk?: Chunk }> = ({ chunk }) =>
   );
 
 export const Wide: React.FC<Resolved> = (r) => {
+  darkIsGraphite(true);
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));

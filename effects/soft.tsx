@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { clamp, ease, t } from "./theme";
 import { ACCENT, style, type ToneTokens } from "./style";
+import { GRAPHITE } from "../styles/ivory/tokens";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 
 // Cool paper and graphite with grain, one clean blue, real content in every graphic. Owain picked
@@ -16,7 +17,13 @@ export type Pal = ToneTokens;
 // Both tones come from the active style's tokens (src/style.ts).
 
 export { ACCENT };
-export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? style.color.dark : style.color.light);
+// On YouTube, dark is Graphite; reels keep the style's own dark (Forest). The composition sets it
+// once per render, before anything draws.
+let graphite = false;
+export const darkIsGraphite = (on: boolean) => {
+  graphite = on;
+};
+export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (graphite ? GRAPHITE : style.color.dark) : style.color.light);
 
 // Scene geometry: the headline on top, the visual below, captions low.
 export const SCENE = { headTop: 96, headHeight: 340, top: 470, bottom: 1600, caption: 1752 };

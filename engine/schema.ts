@@ -41,7 +41,8 @@ export const Visual = z.discriminatedUnion("kind", [
     caption: z.string().optional(),
   }),
   // A short headline. Wrap one word in *asterisks* for the Signifier italic accent.
-  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional() }),
+  // `sync`: kinetic type, each word lands as Owain says its match (`words` is filled by the resolver).
+  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), words: z.array(z.number()).optional() }),
   // `preview` shows every item dimmed from the start, an open loop the reel then closes item by item.
   // Repeat the same list in later shots to call back to it, with `active` on the current item.
   z.object({ kind: z.literal("list"), title: z.string().optional(), items: z.array(Item).min(2), active: z.number().optional(), preview: z.boolean().default(false) }),
@@ -90,6 +91,8 @@ export const Visual = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("lower"), title: z.string(), sub: z.string().optional() }),
   // A chapter card: a large number lands over a soft glow, the chapter's name tracked out below it.
   // `hit`: a full-frame card that lands complete on the cut, set like a hero stat (YouTube).
+  // The route of the video: a title over a track of numbered stops that pop in on `at` ("the six levels").
+  z.object({ kind: z.literal("journey"), title: z.string(), of: z.number().int().min(2).max(12), at: Anchor.optional() }),
   // `of`: how many sections there are; a hit card then shows a progress row, one mark per section
   // (done in ink, this one in the accent, the rest faint).
   z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string(), hit: z.boolean().optional(), of: z.number().int().min(2).max(12).optional() }),
@@ -231,6 +234,8 @@ export const Shot = z.object({
   at: Anchor,
   layout: Layout,
   visual: Visual.optional(),
+  // Seconds to move the start from its word, to land on a cut in the footage (YouTube).
+  shift: z.number().min(-2).max(2).optional(),
   // Sound on the cut into this shot. Most cuts should have none.
   sfx: SfxKind.optional(),
   // Starts a new chapter header from this shot on (false hides it).
@@ -254,6 +259,8 @@ export const Edit = z.object({
   canvas: z.enum(["reel", "youtube"]).default("reel"),
   // The house style. Ivory is the only one; the field is kept so old plans still parse.
   style: z.string().default("ivory"),
+  // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
+  theme: z.enum(["light", "dark"]).default("light"),
   // Word captions. Reels have them; YouTube does not unless asked.
   captions: z.boolean().optional(),
   // react: the default for tool drops. The speaker stays on screen in a split while the

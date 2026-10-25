@@ -89,6 +89,48 @@
       }
     },
     {
+      "id": "blueprint.t1.journey",
+      "kind": "journey",
+      "tier": "t1",
+      "purpose": "section",
+      "summary": "The video's route: a title over a track of numbered stops that pop in as the promise is named. Chapter cards reuse the track.",
+      "layouts": [
+        "media",
+        "scene"
+      ],
+      "slots": [
+        {
+          "name": "title",
+          "type": "text",
+          "maxChars": 34
+        },
+        {
+          "name": "of",
+          "type": "number",
+          "note": "how many sections"
+        },
+        {
+          "name": "at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "journey",
+          "title": "Six steps to a sample",
+          "of": 6
+        },
+        "header": "The *route*",
+        "scene": "The *route*"
+      },
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
       "id": "blueprint.t1.title",
       "kind": "title",
       "tier": "t1",

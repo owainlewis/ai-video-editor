@@ -30,6 +30,8 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   if (!face) return { issues: [{ level: "error", message: 'edit.json needs "face": measure it on checks/frame.jpg' }] };
 
   const { shots, issues } = resolveShots(plan, words, meta.duration, FPS);
+  // The video's theme is every graphic's tone unless a shot sets its own.
+  if (plan.theme === "dark") for (const s of shots) s.tone ??= "dark";
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, readJson<{ ranges: [number, number][] }>(scanned).ranges));

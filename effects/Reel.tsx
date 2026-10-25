@@ -5,7 +5,7 @@ import { Captions } from "./Captions";
 import { Speaker } from "./Speaker";
 import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
-import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box } from "./soft";
+import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box, darkIsGraphite } from "./soft";
 import { cameraEase, TRANSITION } from "./camera";
 import { style } from "./style";
 import type { Resolved, ResolvedShot } from "../engine/schema";
@@ -205,6 +205,7 @@ const Grow: React.FC<{ b: Box; p: number; children: React.ReactNode }> = ({ b, p
 };
 
 export const Reel: React.FC<Resolved> = (r) => {
+  darkIsGraphite(false);
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));

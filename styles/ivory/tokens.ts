@@ -12,6 +12,20 @@ const GREEN = "#213B34";
 // too close to Tom Noske... maybe a slightly darker green").
 const FOREST = "#192E28";
 const IVORY = "#F4F1EA";
+// Graphite: the dark theme for YouTube (Owain, 2026-10-25). A warm near-black a little darker than
+// his wall, so a hard cut from his dark footage to a card keeps the brightness level.
+export const GRAPHITE = {
+  bg: "#1B1B1A",
+  card: "#1B1B1A",
+  chip: "#2A2A28",
+  ink: "#F7F3EC",
+  muted: "#A3A19C",
+  faint: "#3A3936",
+  line: "rgba(247,243,236,0.16)",
+  accent: "#B7CDBF",
+  accentText: "#F7F3EC",
+  shadow: "none",
+} satisfies ToneTokens;
 const WHITE = "#F7F3EC";
 
 export const tokens = {

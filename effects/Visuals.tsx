@@ -4,7 +4,7 @@ import { Img, interpolate, staticFile } from "remotion";
 import { cameraProgress, frameRect, TRANSITION } from "./camera";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
-import { FunnelVisual, GridVisual, pal, SoftAccented, TypeVisual } from "./soft";
+import { FunnelVisual, GridVisual, pal, SoftAccented, TypeVisual, type Tone } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
@@ -224,7 +224,8 @@ const LogosVisual: React.FC<Props & { v: V<"logos"> }> = ({ slug, shot, time, w,
 // A headline that builds word by word, with a rule drawing under it.
 const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
   const words = v.text.split(/\s+/);
-  const size = v.text.length > 34 ? 92 : v.text.length > 20 ? 112 : 132;
+  const len = v.text.replace(/\*/g, "").length;
+  const size = len > 40 ? 78 : len > 34 ? 92 : len > 20 ? 112 : 132;
   let k = 0;
   const c = pal(shot.tone);
   return (
@@ -234,8 +235,12 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
       )}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: `0 ${size * 0.26}px`, maxWidth: w - 40 }}>
         {words.map((word, i) => {
-          const accent = word.startsWith("*");
-          const p = prog(time, shot.start + 0.06 * k++, 0.4);
+          // Kinetic type is all Helvetica: no serif accent (Owain, 2026-10-25: "keep it all sans serif").
+          const accent = word.startsWith("*") && !v.words;
+          // Synced: each word lands as it is said (kinetic type, after the product promos Owain sent).
+          const p = v.words ? prog(time, v.words[i], 0.3) : prog(time, shot.start + 0.06 * k++, 0.4);
+          const bare = word.replace(/\*/g, "");
+          const stop = v.words && /[.!?]$/.test(bare);
           return (
             <span key={i} style={{ display: "inline-block", overflow: "hidden", paddingBottom: size * 0.12 }}>
               <span
@@ -253,13 +258,15 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
                   color: accent ? c.accentText : c.ink,
                 }}
               >
-                {word.replace(/\*/g, "")}
+                {stop ? bare.slice(0, -1) : bare}
+                {/* A synced line ends on a full stop in the accent colour. */}
+                {stop && <span style={{ color: c.accent, fontFamily: t.display, fontStyle: "normal", fontWeight: style.type.display.weight }}>{bare.slice(-1)}</span>}
               </span>
             </span>
           );
         })}
       </div>
-      <div style={{ width: 200, height: 3, background: c.ink, scale: `${prog(time, shot.start + 0.25, 0.6)} 1`, transformOrigin: "left" }} />
+      {!v.words && <div style={{ width: 200, height: 3, background: c.ink, scale: `${prog(time, shot.start + 0.25, 0.6)} 1`, transformOrigin: "left" }} />}
     </div>
   );
 };
@@ -387,10 +394,21 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   // As before, 300 px (220 past six characters), but never wider than the panel once the count
   // has its thousands commas (a six-digit value used to run off a split's edges).
   const final = m ? m[1] + parseFloat(m[2].replace(/,/g, "")).toLocaleString("en-US", { maximumFractionDigits: 6 }) + m[3] : v.value;
+  const unit = (shown.match(/[^\d,.]+$/) ?? [""])[0];
   const size = Math.min(v.value.length > 6 ? 220 : 300, Math.floor((w * 0.95) / (final.length * 0.52)));
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 30 }}>
-      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: Math.min(size, (w * 0.95) / (v.value.length * 0.6)), whiteSpace: "nowrap", lineHeight: 0.9, letterSpacing: -10, color: c.ink, fontVariantNumeric: "tabular-nums" }}>{shown}</div>
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: Math.min(size, (w * 0.95) / (v.value.length * 0.6)), whiteSpace: "nowrap", lineHeight: 0.9, letterSpacing: "-0.035em", color: c.ink, fontVariantNumeric: "tabular-nums" }}>
+        {/* A trailing unit ("12x", "40%") gets its own breathing room: tight tracking jammed the x into the 2 (Owain, 2026-10-25). */}
+        {unit ? (
+          <>
+            {shown.slice(0, -unit.length)}
+            <span style={{ marginLeft: "0.06em", letterSpacing: 0 }}>{unit}</span>
+          </>
+        ) : (
+          shown
+        )}
+      </div>
       <div style={{ width: 160, height: 3, background: c.ink, scale: `${v.hit ? 1 : prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
       <div style={{ fontFamily: t.serif, fontStyle: "italic", fontWeight: 400, fontSize: 56, letterSpacing: -0.5, color: c.muted, opacity: v.hit ? 1 : prog(time, shot.start + 0.2) }}>
         <Accented text={v.label} />
@@ -484,22 +502,85 @@ const ChapterVisual: React.FC<Props & { v: V<"chapter"> }> = (p) =>
 // A full-frame chapter card set like the hero stat, complete on the cut. With `of`, a row of marks
 // under it shows where this section sits: done ones half ink, this one long in the accent, the rest faint.
 const ChapterHit: React.FC<Props & { v: V<"chapter"> }> = (p) => {
-  const { shot, w, h, v } = p;
-  const c = pal(shot.tone);
+  const { shot, time, w, h, v } = p;
   const here = parseInt(v.number, 10);
-  const row = v.of && here >= 1 ? 116 : 0;
+  const row = v.of && here >= 1 ? 150 : 0;
   return (
     <div style={{ position: "relative", width: w, height: h }}>
       <div style={{ position: "absolute", inset: 0, bottom: row }}>
         <StatVisual {...p} h={h - row} v={{ kind: "stat", value: v.number, label: v.label, hit: true }} />
       </div>
       {row > 0 && (
-        <div style={{ position: "absolute", left: 0, right: 0, bottom: 24, display: "flex", justifyContent: "center", gap: 14 }}>
-          {Array.from({ length: v.of! }, (_, i) => (
-            <div key={i} style={{ width: i + 1 === here ? 112 : 56, height: 5, borderRadius: 3, background: i + 1 === here ? c.accent : c.ink, opacity: i + 1 < here ? 0.45 : i + 1 === here ? 1 : 0.12 }} />
-          ))}
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 20, display: "flex", justifyContent: "center" }}>
+          <Journey tone={shot.tone} n={v.of!} here={here} time={time} start={shot.start} width={Math.min(760, w - 80)} />
         </div>
       )}
+    </div>
+  );
+};
+
+// The journey through a video's sections: stops on one track, numbered. Done stops are filled, the
+// current one is the accent, the rest are hollow. On a chapter card a marker travels along the track
+// from the last stop to this one as the card lands (Owain, 2026-10-25: "show the journey as a
+// timeline ... moving on a journey from 1 to 6"). With `here` 0 (the intro), the stops pop in one
+// after another from `start`, as the whole route is named.
+export const Journey: React.FC<{ tone?: Tone; n: number; here: number; time: number; start: number; width: number }> = ({ tone, n, here, time, start, width }) => {
+  const c = pal(tone);
+  const gap = width / (n - 1);
+  const x = (i: number) => i * gap;
+  const intro = here === 0;
+  // Chapter card: travel from the previous stop to this one. Intro: the track draws across.
+  const travel = intro ? prog(time, start, 0.12 * n + 0.3) : prog(time, start + 0.1, 0.7);
+  const head = intro ? travel * x(n - 1) : x(Math.max(0, here - 2)) + (x(here - 1) - x(Math.max(0, here - 2))) * travel;
+  return (
+    <div style={{ position: "relative", width, height: 96 }}>
+      <div style={{ position: "absolute", left: 0, top: 26, width, height: 3, borderRadius: 2, background: c.ink, opacity: 0.14 }} />
+      <div style={{ position: "absolute", left: 0, top: 26, width: head, height: 3, borderRadius: 2, background: intro ? c.ink : c.accent, opacity: intro ? 0.5 : 0.9 }} />
+      {Array.from({ length: n }, (_, i) => {
+        const stop = i + 1;
+        const appear = intro ? prog(time, start + 0.12 * i, 0.3) : 1;
+        const done = !intro && stop < here;
+        const now = !intro && stop === here;
+        const arrived = now ? prog(time, start + 0.6, 0.3) : 1;
+        const r = now ? 13 + 4 * arrived : 10;
+        return (
+          <React.Fragment key={i}>
+            <div
+              style={{
+                position: "absolute",
+                left: x(i) - r,
+                top: 27.5 - r,
+                width: r * 2,
+                height: r * 2,
+                borderRadius: "50%",
+                boxSizing: "border-box",
+                background: now ? c.accent : done ? c.ink : c.bg,
+                border: now ? "none" : `3px solid ${c.ink}`,
+                opacity: (done ? 0.75 : now ? 1 : intro ? 0.9 : 0.3) * appear,
+                scale: String(0.6 + 0.4 * appear),
+              }}
+            />
+            <div style={{ position: "absolute", left: x(i) - 40, width: 80, top: 56, textAlign: "center", fontFamily: t.sans, fontWeight: now ? 700 : 500, fontSize: 24, letterSpacing: 1, color: c.ink, opacity: (now ? 1 : done ? 0.6 : intro ? 0.7 : 0.3) * appear }}>
+              {String(stop).padStart(2, "0")}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+// The route of a video at its promise ("the six levels of ..."): a title over the journey track,
+// whose stops pop in one after another on the anchor word.
+const JourneyVisual: React.FC<Props & { v: V<"journey"> }> = ({ shot, time, w, h, v }) => {
+  const c = pal(shot.tone);
+  const at = v.times?.[0] ?? shot.start;
+  return (
+    <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 70 }}>
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 84, letterSpacing: "-0.03em", lineHeight: 1.05, color: c.ink, textAlign: "center", maxWidth: w - 40, textWrap: "balance" }}>{v.title}</div>
+      <div style={{ scale: "1.25", transformOrigin: "center top" }}>
+        <Journey tone={shot.tone} n={v.of} here={0} time={time} start={at} width={Math.min(620, w - 160)} />
+      </div>
     </div>
   );
 };
@@ -791,6 +872,7 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
     case "steps": return <StepsVisual {...p} v={v} />;
     case "compare": return <CompareVisual {...p} v={v} />;
     case "stat": return <StatVisual {...p} v={v} />;
+    case "journey": return <JourneyVisual {...p} v={v} />;
     case "terminal": return <TerminalVisual {...p} v={v} />;
     case "prompt": return <PromptVisual {...p} v={v} />;
     case "cta": return <CtaVisual {...p} v={v} />;

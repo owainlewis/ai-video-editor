@@ -270,3 +270,12 @@ describe("syncWords", () => {
     expect(syncWords("the final result, roughly", said, 0, 10, 30)).toEqual([16, 17, 18, 18]);
   });
 });
+
+describe("shift", () => {
+  it("moves a shot's start from its word, to land on a cut in the footage", () => {
+    const words = ["one", "two", "three", "four"].map((text, i) => ({ text, start: i * 2, end: i * 2 + 1 }));
+    const plan = Edit.parse({ title: "t", canvas: "youtube", face: { x: 0.5, y: 0.3, h: 0.3 }, shots: [{ at: "one", layout: "full" }, { at: "three", layout: "full", shift: -0.5 }] });
+    const { shots } = resolveShots(plan, words, 10, 30);
+    expect(shots[1].start).toBeCloseTo(3.467, 2);
+  });
+});

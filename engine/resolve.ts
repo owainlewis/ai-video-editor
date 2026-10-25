@@ -48,6 +48,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "ring":
     case "meter":
     case "waffle":
+    case "journey":
       return [v.at];
     case "chart": return v.points.map((pt) => pt.at);
     case "kpi": return v.items.map((it) => it.at);
@@ -74,7 +75,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       continue;
     }
     cursor = i + 1;
-    const start = shots.length === 0 ? 0 : snap(Math.max(0, words[i].start - CUT_LEAD), fps);
+    const start = shots.length === 0 ? 0 : snap(Math.max(0, words[i].start - CUT_LEAD + (s.shift ?? 0)), fps);
     // The header carries forward until a shot sets a new one, or false to hide it.
     header = s.header === false ? undefined : (s.header ?? header);
     const prev = shots[shots.length - 1];
@@ -96,7 +97,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     }
     const v = shot.visual;
     if (!v) continue;
-    if (v.kind === "quote" && v.sync) {
+    if ((v.kind === "quote" || v.kind === "title") && v.sync) {
       shot.visual = { ...v, words: syncWords(v.text, words, shot.index, shot.start, shots[k + 1]?.start ?? duration) };
       continue;
     }
