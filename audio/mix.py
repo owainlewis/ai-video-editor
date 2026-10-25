@@ -75,7 +75,7 @@ def main(project: Path) -> None:
     tracks = ([lib / "music" / m["track"]] if m.get("track") else music_files(lib / "music", m.get("mood", "focus"))) if m else []
     if m and tracks:
         pick = tracks[sum(map(ord, project.name)) % len(tracks)]
-        bed = music_bed(pick, seconds, cache)
+        bed = music_bed(pick, seconds, cache, start=float(m.get("start", 0)))
         print(f"  music: {pick.name}")
         sf.write(work / "music.wav", fit(bed), SR, subtype="FLOAT")
         music_db = float(m.get("level", -20))

@@ -380,7 +380,8 @@ export const Edit = z.object({
   accents: z.array(z.string()).default([]),
   music: z.union([
     z.literal(false),
-    z.object({ mood: z.enum(["focus", "uplift", "dark"]).default("focus"), track: z.string().optional(), level: z.number().default(-20) }),
+    // `start`: seconds into the track to begin, to skip a slow intro and land on its steady part.
+    z.object({ mood: z.enum(["focus", "uplift", "dark"]).default("focus"), track: z.string().optional(), level: z.number().default(-20), start: z.number().min(0).optional() }),
   ]).default({ mood: "focus", level: -20 }),
   // A light colour grade on the speaker footage, as CSS filter amounts (1 = unchanged).
   grade: z.object({ brightness: z.number().default(1), contrast: z.number().default(1), saturate: z.number().default(1) }).default({ brightness: 1, contrast: 1, saturate: 1 }),

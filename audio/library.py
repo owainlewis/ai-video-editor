@@ -81,9 +81,9 @@ def music_files(root: Path | None, mood: str) -> list[Path]:
     return _files(root / mood) or _files(root)
 
 
-def music_bed(path: Path, seconds: float, cache: Path, crossfade: float = 2.0) -> np.ndarray:
-    """Loop a track with a crossfade until it covers `seconds`, then fade out."""
-    track = decode(path, cache)
+def music_bed(path: Path, seconds: float, cache: Path, crossfade: float = 2.0, start: float = 0.0) -> np.ndarray:
+    """Loop a track with a crossfade until it covers `seconds`, then fade out. `start` skips into it."""
+    track = decode(path, cache)[int(start * SR):]
     n = int(seconds * SR)
     xf = int(crossfade * SR)
     out = track.copy()
