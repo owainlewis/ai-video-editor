@@ -1,0 +1,15 @@
+Seven new moves.
+
+One. The Agency has over 230 AI agents.
+
+Two. A human code review can take days. An AI review comes back in minutes.
+
+Three. Anthropic reviews in layers. Local checks, then CI, then AI review, then a human, scaled by risk, then a gradual release.
+
+Four. One install wires the agents into Claude Code, Cursor, Codex and Gemini.
+
+Five. The orchestrator works in phases. Planning, architecture, the dev and QA loop, then integration.
+
+Six. Then a reality checker tests the work. It says needs work, until the evidence proves otherwise.
+
+Seven. Comment AGENCY, and I'll send you the link.
