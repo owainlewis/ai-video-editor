@@ -57,6 +57,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "claudecode": return [...v.lines.map((l) => l.at), ...(v.mark ? [v.mark.at] : [])];
     case "search": return [v.at, v.result?.at];
     case "tiers": return v.items.flatMap((it) => [it.at, it.markAt]);
+    case "custom": return v.at;
     case "compose": return [v.at, v.send];
     case "divisions": return [v.count?.at, ...v.items.map((it) => it.at)];
     case "chips": return [v.count?.at];
@@ -247,7 +248,7 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
       if (v.mark && v.times?.[0] !== undefined) click(v.times[0]);
       return;
     }
-    if (v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers" || v.kind === "compose" || v.kind === "divisions" || v.kind === "chips" || v.kind === "runs") {
+    if (v.kind === "custom" || v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers" || v.kind === "compose" || v.kind === "divisions" || v.kind === "chips" || v.kind === "runs") {
       whoosh(s.start);
       (v.times ?? []).forEach((t, n) => n && click(t));
       return;

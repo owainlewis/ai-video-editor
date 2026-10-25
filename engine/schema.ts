@@ -170,6 +170,15 @@ export const Visual = z.discriminatedUnion("kind", [
     steps: z.array(z.object({ label: z.string(), agent: z.string().optional(), at: Anchor.optional() })).min(2).max(6),
     done: Anchor.optional(),
   }),
+  // A one-off motion graphic designed for this reel (Owain, 2026-10-25: "creative freedom to come up
+  // with new interesting motion graphics per reel"). `name` picks a component in effects/custom/;
+  // `props` is its content; `at` lists its spoken beats in order, passed to it as times.
+  z.object({
+    kind: z.literal("custom"),
+    name: z.string(),
+    props: z.record(z.string(), z.unknown()).default({}),
+    at: z.array(Anchor).default([]),
+  }),
   z.object({
     kind: z.literal("tiers"),
     title: z.string().optional(),

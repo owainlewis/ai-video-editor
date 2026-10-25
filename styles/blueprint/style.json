@@ -529,6 +529,35 @@
       }
     },
     {
+      "id": "blueprint.t1.custom",
+      "kind": "custom",
+      "tier": "t1",
+      "purpose": "bespoke",
+      "summary": "A one-off motion graphic designed for one reel's story, drawn in effects/custom/ and named from the plan.",
+      "layouts": [
+        "split",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "name",
+          "type": "text",
+          "maxChars": 40
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "noSample": "Each one is drawn for its own reel.",
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
       "id": "blueprint.t1.title",
       "kind": "title",
       "tier": "t1",

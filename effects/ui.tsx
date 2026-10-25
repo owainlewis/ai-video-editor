@@ -10,6 +10,7 @@ import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, In, lerp, Mark, MOVE, prog } from "./motion";
 import { t as type } from "./theme";
+import { CUSTOM } from "./custom";
 
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { shot: ResolvedShot; time: number };
@@ -425,18 +426,19 @@ const Runs: React.FC<Props & { v: V<"runs"> }> = ({ shot, time, v }) => {
       <Stage time={time} />
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: w, ...depth }}>
+          {/* The title pill and the steps share one left edge, so the block reads as one column. */}
           <div style={{ display: "inline-flex", alignItems: "center", gap: fs * 0.45, background: "#1A1918", color: "#F2EFEA", borderRadius: fs, padding: `${fs * 0.35}px ${fs * 0.9}px`, fontFamily: type.sans, fontWeight: 700, fontSize: fs * 1.05, boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
             {v.emoji && <span>{v.emoji}</span>}
             {v.title}
           </div>
-          <div style={{ marginTop: fs * 0.7, marginLeft: fs * 0.9, borderLeft: `2px solid ${panel ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)"}`, paddingLeft: fs * 0.8, display: "flex", flexDirection: "column", gap: fs * 0.4 }}>
+          <div style={{ marginTop: fs * 0.7, display: "flex", flexDirection: "column", gap: fs * 0.4 }}>
             {v.steps.map((st, i) => {
               const next = i + 1 < v.steps.length ? ats[i + 1] : doneAt;
               const state = time >= next ? "passed" : time >= ats[i] ? "running" : "queued";
               const k = prog(time, ats[i], 0.25);
               const label = state === "passed" ? "✓ passed" : state === "running" ? "● running" : "queued";
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: fs * 0.6, padding: `${fs * 0.5}px ${fs * 0.7}px`, borderRadius: fs * 0.5, background: panel ? "#FBFAF7" : "#1F1E1C", border: `1.5px solid ${state === "running" ? "#2C4441" : panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`, boxShadow: state === "running" ? `0 ${18 * k}px ${40 * k}px rgba(44,68,65,0.3)` : "0 6px 16px rgba(0,0,0,0.08)", scale: String(state === "running" ? 1 + 0.03 * k : 1), opacity: state === "queued" ? 0.6 : 1 }}>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: fs * 0.6, padding: `${fs * 0.5}px ${fs * 0.7}px`, borderRadius: fs * 0.5, background: panel ? "#FBFAF7" : "#1F1E1C", border: `1.5px solid ${state === "running" ? "#2C4441" : panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`, boxShadow: state === "running" ? `0 ${18 * k}px ${40 * k}px rgba(44,68,65,0.3)` : "0 6px 16px rgba(0,0,0,0.08)", scale: String(state === "running" ? 1 + 0.03 * k : 1), transformOrigin: "left center", opacity: state === "queued" ? 0.6 : 1 }}>
                   <div style={{ width: fs * 1.3, height: fs * 1.3, borderRadius: fs, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px solid ${panel ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.2)"}`, fontFamily: type.sans, fontWeight: 600, fontSize: fs * 0.7, color: panel ? "#6E6B65" : "#A3A19C" }}>{i + 1}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: panel ? "#1F1F1D" : "#F2EFEA" }}>{st.label}</div>
@@ -453,12 +455,21 @@ const Runs: React.FC<Props & { v: V<"runs"> }> = ({ shot, time, v }) => {
   );
 };
 
-export const UI_KINDS = new Set(["claudecode", "search", "tiers", "compose", "divisions", "chips", "runs"]);
+// ---------- custom: a one-off graphic for this reel, from effects/custom/ ----------
+const Custom: React.FC<Props & { v: V<"custom"> }> = ({ shot, time, v }) => {
+  const box = useBox();
+  const C = CUSTOM[v.name];
+  if (!C) throw new Error(`no custom graphic "${v.name}" in effects/custom/index.ts`);
+  return <C shot={shot} time={time} props={v.props} times={v.times ?? []} {...box} />;
+};
+
+export const UI_KINDS = new Set(["custom", "claudecode", "search", "tiers", "compose", "divisions", "chips", "runs"]);
 // `box` draws the moment inside a split's panel instead of the whole frame.
 export const UiVisual: React.FC<Props & { box?: { width: number; height: number } }> = ({ shot, time, box }) => {
   const v = shot.visual!;
   const el =
-    v.kind === "claudecode" ? <ClaudeCode shot={shot} time={time} v={v} />
+    v.kind === "custom" ? <Custom shot={shot} time={time} v={v} />
+    : v.kind === "claudecode" ? <ClaudeCode shot={shot} time={time} v={v} />
     : v.kind === "search" ? <Search shot={shot} time={time} v={v} />
     : v.kind === "tiers" ? <Tiers shot={shot} time={time} v={v} />
     : v.kind === "compose" ? <Compose shot={shot} time={time} v={v} />

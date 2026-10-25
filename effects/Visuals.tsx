@@ -913,6 +913,7 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
   const v = p.v;
   switch (v.kind) {
     case "image": return <ImageVisual {...p} v={v} />;
+    case "custom":
     case "claudecode":
     case "search":
     case "tiers":

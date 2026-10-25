@@ -144,6 +144,16 @@ const catalog: Card[] = [
     noSample: "Shows a real source's names and words; the lab has none to show.",
   },
   {
+    id: "blueprint.t1.custom",
+    kind: "custom",
+    tier: "t1",
+    purpose: "bespoke",
+    summary: "A one-off motion graphic designed for one reel's story, drawn in effects/custom/ and named from the plan.",
+    layouts: ["split", "media"],
+    slots: [{ name: "name", type: "text", maxChars: 40 }, at("at[]")],
+    noSample: "Each one is drawn for its own reel.",
+  },
+  {
     id: "blueprint.t1.title",
     kind: "title",
     tier: "t1",
