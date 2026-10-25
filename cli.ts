@@ -6,13 +6,16 @@
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
-//   npm run studio -- render <slug>                mix the audio and render renders/final.mp4
+//   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
+//   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
+import { runQc } from "./media/qc.ts";
+import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
 import { renderEffectPreviews } from "./media/effects.ts";
@@ -54,6 +57,15 @@ async function main() {
       for (const i of issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
       if (issues.some((i) => i.level === "error")) process.exitCode = 1;
       else console.log(`\nOK. The editor has reloaded.`);
+      return;
+    }
+    case "qc": {
+      const slug = need(target);
+      const at = flag("at")?.split(",").map(Number);
+      const { issues, sheets, overview } = await runQc(projects, slug, undefined, (stage) => console.log(`  ${stage}`), at);
+      for (const i of issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
+      console.log(`\n${issues.filter((i) => i.level === "error").length} errors, ${issues.filter((i) => i.level === "warn").length} warnings. ${sheets.length} contact sheets in projects/${slug}/checks/qc/${overview ? "; overview.jpg shows every graphic settled" : ""}`);
+      if (issues.some((i) => i.level === "error")) process.exitCode = 1;
       return;
     }
     case "stills": {
@@ -102,6 +114,30 @@ async function main() {
     case "render": {
       const slug = need(target);
       const dir = join(projects, slug);
+      // One export at a time: two at once overwrite each other's sections (2026-10-25).
+      const lock = join(dir, "build/export.lock");
+      if (exists(lock)) {
+        const pid = parseInt(readFileSync(lock, "utf8"), 10);
+        let alive = false;
+        try {
+          process.kill(pid, 0);
+          alive = true;
+        } catch {}
+        if (alive) throw new Error(`an export of ${slug} is already running (pid ${pid}); wait for it or stop it first`);
+      }
+      writeFileSync(lock, String(process.pid));
+      try {
+        // QC before anything renders: errors stop the export (--force to override).
+        setStatus(dir, "Checking graphics");
+        const qc = await runQc(projects, slug, log, (stage) => setStatus(dir, stage));
+        const errors = qc.issues.filter((i) => i.level === "error");
+        for (const i of qc.issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
+        if (errors.length && !args.includes("--force")) throw new Error(`QC found ${errors.length} errors; fix them (npm run studio -- qc ${slug}) or render with --force`);
+      } catch (e) {
+        rmSync(lock, { force: true });
+        writeJson(join(dir, "status.json"), { stage: "Render failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
+        throw e;
+      }
       setStatus(dir, "Rendering");
       try {
         // YouTube videos keep the original picture and only render the graphic sections; reels are
@@ -119,11 +155,13 @@ async function main() {
       } catch (e) {
         writeJson(join(dir, "status.json"), { stage: "Render failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
         throw e;
+      } finally {
+        rmSync(lock, { force: true });
       }
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug>");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--force]");
   }
 }
 

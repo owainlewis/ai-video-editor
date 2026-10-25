@@ -88,7 +88,7 @@ def main(project: Path) -> None:
 
     library = SoundLibrary(lib / "sounds", cache)
     print(f"  sounds: {library.summary()}")
-    effects = sfx.render(cfg.get("sfx", []), seconds, 220.0, library)
+    effects = sfx.render(cfg.get("sfx", []), seconds, 220.0, library, youtube=cfg.get("canvas") == "youtube")
     sf.write(work / "sfx.wav", fit(effects * 0.5), SR, subtype="FLOAT")
 
     gain = float(cfg.get("voiceGain", 0))

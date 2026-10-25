@@ -46,6 +46,21 @@ XFastest): pure motion design, no hard cuts. RULES.md wins over anything here.
 | Colour-field wipe for the payoff (a circle floods the frame) | XFastest 0:19 | conflicts with hard cuts; ask | ask Owain |
 | Strike-through for a reversal ("~~solve the problem~~, being busy") | Martell 0:55 | a word struck out in an `over` title | later |
 
+## The motion lab (2026-10-25): all six approved, all in the library
+
+Studied Ben's Claude Code review frame by frame (one persistent stage, two speeds, 80 ms staggers, a
+second beat on the word), built six directions on real moments (`effects/Lab.tsx`), and Owain approved
+all six ("I love them all"). Where each lives now:
+
+| Direction | Use it when | Plan |
+| --- | --- | --- |
+| Chapter, polished | each section start | `media`, `chapter` with `hit`, `of: N`, a `*marked*` phrase in `label` |
+| Stage | a graphic while Owain is on camera | `side`: he shrinks into a portrait card, the graphic builds beside him, he grows back |
+| Odometer | numbers said in sequence ("from 2,500 to 30,000, a 12x increase") | `media`, `odometer` with `steps` and a `result` |
+| Focus lift | he talks about a specific paragraph on a screen recording | `media`, `lift` with `region` and `mark` measured on a frame, `from`/`to` words |
+| Kinetic + highlighter | his strongest line | `media`, `title` with `sync`, the key phrase `*marked*`; `//` to choose the line break |
+| Flow with a traveller | a process in stages | `pipeline`: connectors draw to each stage with a dot riding the tip |
+
 ## Needs Owain's call (conflicts with a rule)
 
 - **Annotate the screen recording**: a hand-drawn circle or highlight on the exact word in the article

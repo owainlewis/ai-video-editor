@@ -51,6 +51,8 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "journey":
       return [v.at];
     case "chart": return v.points.map((pt) => pt.at);
+    case "odometer": return [...v.steps.map((x) => x.at), ...(v.result ? [v.result.at] : [])];
+    case "lift": return [v.from, v.to];
     case "kpi": return v.items.map((it) => it.at);
     case "bento": return v.cells.map((c) => c.at);
     case "pipeline": return v.stages.map((st) => st.at);
@@ -210,21 +212,64 @@ export const estimateWords = (script: string, wpm = 165): Word[] => {
 };
 
 // Sound comes from the plan's cut sounds plus quiet taps on visible reveals.
+// Sound comes from the plan's cut sounds, quiet taps on visible reveals, and the motion system's
+// sounds (2026-10-25 motion lab): a soft whoosh when the speaker card or a lifted paragraph moves, a
+// click when a highlighter sweeps, ticks while an odometer rolls, a riser into its result.
+const MOVE_S = 0.46;
+const marked = (text?: string) => !!text && /\*[^*]+\*/.test(text);
 export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
   const ev: SfxEvent[] = [];
-  for (const s of shots) {
+  const whoosh = (t: number, gain = 0.42) => ev.push({ kind: "whoosh", t, gain, exact: true });
+  const click = (t: number, gain = 0.7) => ev.push({ kind: "blip", t, gain, exact: true });
+  shots.forEach((s, i) => {
     // A riser ends on the cut (the mixer lines up a real riser's end with t + dur).
-    if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.6 });
+    if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.6, exact: true });
     else if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
-    if (s.keep) continue;
+    if (s.keep) return;
     const v = s.visual;
-    if (!v?.times) continue;
+    // The speaker card shrinks in and grows back out.
+    if (s.layout === "side") {
+      if (shots[i - 1]?.layout !== "side") whoosh(s.start);
+      if (shots[i + 1]?.layout !== "side") whoosh(s.end - MOVE_S, 0.36);
+    }
+    if (!v) return;
+    if (v.kind === "lift") {
+      whoosh(s.start);
+      whoosh(s.end - MOVE_S, 0.32);
+      if (v.mark && v.times?.[0] !== undefined) click(v.times[0]);
+      return;
+    }
+    if (v.kind === "odometer") {
+      const times = v.times ?? [];
+      v.steps.forEach((_, n) => {
+        const at = times[n] ?? s.start;
+        const [a, b] = n ? [at - 0.45, at + 0.3] : [at - 0.35, at + 0.1];
+        for (let t = a; t < b; t += 0.05) ev.push({ kind: "pop", t, gain: 0.3, exact: true });
+      });
+      const r = times[v.steps.length];
+      if (v.result && r !== undefined) {
+        ev.push({ kind: "riser", t: r - 1, dur: 1, gain: 0.55, exact: true });
+        click(r, 0.9);
+      }
+      return;
+    }
+    if (v.kind === "chapter" && v.hit) {
+      whoosh(s.start);
+      if (marked(v.label)) click(s.start + 1.0);
+    }
+    if (v.kind === "title" && v.sync && marked(v.text) && v.words?.length) {
+      const first = v.text.split(/\s+/).findIndex((w) => w.startsWith("*"));
+      if (first >= 0 && v.words[first] !== undefined) click(v.words[first] + 0.1);
+    }
+    if (!v.times) return;
     const kind = v.kind === "terminal" || v.kind === "prompt" || v.kind === "type" ? "key" : v.kind === "image" ? "blip" : "pop";
     v.times.forEach((t, n) => {
       if (n === 0 && Math.abs(t - s.start) < 0.05 && s.sfx) return;
       ev.push({ kind, t, gain: 0.45 });
+      // A pipeline's connector draws to each next stage with a quiet whoosh.
+      if (v.kind === "pipeline" && n > 0) whoosh(t - 0.45, 0.22);
     });
-  }
+  });
   return ev.sort((a, b) => a.t - b.t);
 };
 
@@ -297,9 +342,10 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     // brightness against the original (Owain, 2026-10-24: "they change the color and brightness").
     if (s.layout === "punch") issues.push({ level: "error", message: `${label}: no punch-ins on YouTube; they re-render the footage and change its colour` });
     if (s.layout === "over" && len < 2.5) issues.push({ level: "warn", message: `${label}: an overlay for ${len.toFixed(1)}s is too quick to read` });
-    if (s.layout !== "full" && s.layout !== "punch" && !s.keep && len > 12) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; past 12s give it a reveal, a keep or return to the speaker` });
-    away = s.layout === "media" || s.layout === "cutaway" ? away + len : 0;
-    if (away > 8) issues.push({ level: "warn", message: `${label}: speaker off screen for ${away.toFixed(1)}s; use side to keep the face in a window` });
+    // How long a graphic holds is QC's job now (engine/qc.ts: it warns when one lingers after its
+    // last reveal). B-roll still should not hide the speaker for long.
+    away = s.layout === "cutaway" ? away + len : 0;
+    if (away > 8) issues.push({ level: "warn", message: `${label}: b-roll hides the speaker for ${away.toFixed(1)}s` });
   });
   const graphics = shots.filter((s) => s.layout !== "full" && s.layout !== "punch" && !s.keep).length;
   if (duration > 60 && graphics / (duration / 60) > 4)

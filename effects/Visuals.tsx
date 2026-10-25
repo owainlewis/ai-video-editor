@@ -4,6 +4,7 @@ import { Img, interpolate, staticFile } from "remotion";
 import { cameraProgress, frameRect, TRANSITION } from "./camera";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
+import { markColor } from "./motion";
 import { FunnelVisual, GridVisual, pal, SoftAccented, TypeVisual, type Tone } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
@@ -17,7 +18,7 @@ type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> 
 // Project files, web URLs, or inline data (the style lab's illustrative samples).
 const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
 // 0 to 1 over `dur` seconds from `at`, eased.
-const prog = (time: number, at: number, dur = 0.45) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
+const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
 // Colours for a designed graphic in the shot's tone. On paper the hairline and shadow are the split
 // canvas's own (as they always were); on graphite everything comes from the dark tone.
@@ -222,10 +223,30 @@ const LogosVisual: React.FC<Props & { v: V<"logos"> }> = ({ slug, shot, time, w,
 };
 
 // A headline that builds word by word, with a rule drawing under it.
+// Which words of a "*marked phrase*" line are marked, and each one's place in its phrase.
+const markedAt = (words: string[], i: number) => {
+  let on = false;
+  for (let k = 0; k <= i; k++) {
+    if (words[k].startsWith("*")) on = true;
+    if (k === i) return on;
+    if (words[k].replace(/[.!?,]$/, "").endsWith("*")) on = false;
+  }
+  return false;
+};
+const markIndex = (words: string[], i: number) => {
+  let start = i;
+  while (start > 0 && !words[start].startsWith("*")) start--;
+  let end = i;
+  while (end < words.length - 1 && !words[end].replace(/[.!?,]$/, "").endsWith("*")) end++;
+  return { n: i - start, of: end - start + 1 };
+};
+
 const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
   const words = v.text.split(/\s+/);
   const len = v.text.replace(/\*/g, "").length;
-  const size = len > 40 ? 78 : len > 34 ? 92 : len > 20 ? 112 : 132;
+  // "//" in the text is a line break the plan chose; the type is then sized to the longest line.
+  const lines = v.text.replace(/\*/g, "").split("//").map((l) => l.trim().length);
+  const size = lines.length > 1 ? Math.min(132, Math.floor((w - 40) / (Math.max(...lines) * 0.56))) : len > 40 ? 78 : len > 34 ? 92 : len > 20 ? 112 : 132;
   let k = 0;
   const c = pal(shot.tone);
   return (
@@ -235,16 +256,39 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
       )}
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: `0 ${size * 0.26}px`, maxWidth: w - 40 }}>
         {words.map((word, i) => {
+          if (word === "//") return <span key={i} style={{ flexBasis: "100%", height: 0 }} />;
           // Kinetic type is all Helvetica: no serif accent (Owain, 2026-10-25: "keep it all sans serif").
+          // Its *marked* words get the highlighter instead, sweeping word by word after the line lands.
           const accent = word.startsWith("*") && !v.words;
+          const marked = !!v.words && markedAt(words, i);
+          const m = marked ? markIndex(words, i) : { n: 0, of: 1 };
+          // Each marked word is swept as it is said, so the beat lands even when the card cuts away
+          // right after the line.
+          const sweep = marked && v.words ? prog(time, v.words[i] + 0.1, 0.3) : 0;
           // Synced: each word lands as it is said (kinetic type, after the product promos Owain sent).
           const p = v.words ? prog(time, v.words[i], 0.3) : prog(time, shot.start + 0.06 * k++, 0.4);
           const bare = word.replace(/\*/g, "");
           const stop = v.words && /[.!?]$/.test(bare);
           return (
-            <span key={i} style={{ display: "inline-block", overflow: "hidden", paddingBottom: size * 0.12 }}>
+            <span key={i} style={{ position: "relative", display: "inline-block", overflowX: "visible", overflowY: "clip", paddingBottom: size * 0.12 }}>
+              {marked && (
+                <span
+                  style={{
+                    position: "absolute",
+                    left: m.n === 0 ? -size * 0.08 : -size * 0.14,
+                    right: m.n === m.of - 1 ? -size * 0.08 : -size * 0.14,
+                    top: size * 0.1,
+                    height: size * 0.92,
+                    background: markColor(c.accent),
+                    borderRadius: 4,
+                    transformOrigin: "left",
+                    scale: `${sweep} 1`,
+                  }}
+                />
+              )}
               <span
                 style={{
+                  position: "relative",
                   display: "inline-block",
                   translate: `0 ${(1 - p) * size * 0.5}px`,
                   opacity: p,
@@ -369,7 +413,7 @@ const CompareVisual: React.FC<Props & { v: V<"compare"> }> = ({ shot, time, w, h
   const card = (label: string, text: string, p: number, right: boolean) => (
     <div style={{ flex: 1, height: h * 0.8, borderRadius: 28, padding: 44, background: c.card, border: `1.5px solid ${right ? c.ink : c.line}`, boxShadow: right ? c.shadow : "none", display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: p, translate: `0 ${(1 - p) * 50}px` }}>
       <div style={{ fontFamily: t.sans, fontWeight: 500, fontSize: 28, letterSpacing: 5, textTransform: "uppercase", color: c.muted }}>{label}</div>
-      <div style={{ position: "relative", fontFamily: right && !v.even ? t.serif : t.sans, fontStyle: right && !v.even ? "italic" : "normal", fontWeight: right && !v.even ? 400 : 700, fontSize: right && !v.even ? 84 : 68, lineHeight: 1.02, letterSpacing: right && !v.even ? -1 : -1.5, color: right || v.even ? c.ink : c.muted }}>
+      <div style={{ position: "relative", fontFamily: right && !v.even ? t.serif : t.sans, fontStyle: right && !v.even ? "italic" : "normal", fontWeight: right && !v.even ? 400 : 700, fontSize: right && !v.even ? 84 : v.even ? 58 : 68, lineHeight: 1.04, letterSpacing: right && !v.even ? -1 : -1.5, color: right || v.even ? c.ink : c.muted, textWrap: "balance" }}>
         {text}
         {!right && !v.even && <div style={{ position: "absolute", left: -6, right: -6, top: "52%", height: 5, background: c.ink, scale: `${pr} 1`, transformOrigin: "left" }} />}
       </div>
@@ -411,7 +455,7 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
           shown
         )}
       </div>
-      <div style={{ width: 160, height: 3, background: c.ink, scale: `${v.hit ? 1 : prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
+      <div data-qc="mark" style={{ width: 160, height: 3, background: c.ink, scale: `${v.hit ? 1 : prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
       <div style={{ fontFamily: t.serif, fontStyle: "italic", fontWeight: 400, fontSize: 56, letterSpacing: -0.5, color: c.muted, opacity: v.hit ? 1 : prog(time, shot.start + 0.2) }}>
         <Accented text={v.label} />
       </div>
@@ -536,7 +580,7 @@ export const Journey: React.FC<{ tone?: Tone; n: number; here: number; time: num
   const head = intro ? travel * x(n - 1) : x(Math.max(0, here - 2)) + (x(here - 1) - x(Math.max(0, here - 2))) * travel;
   return (
     <div style={{ position: "relative", width, height: 96 }}>
-      <div style={{ position: "absolute", left: 0, top: 26, width, height: 3, borderRadius: 2, background: c.ink, opacity: 0.14 }} />
+      <div data-qc="mark" style={{ position: "absolute", left: 0, top: 26, width, height: 3, borderRadius: 2, background: c.ink, opacity: 0.14 }} />
       <div style={{ position: "absolute", left: 0, top: 26, width: head, height: 3, borderRadius: 2, background: intro ? c.ink : c.accent, opacity: intro ? 0.5 : 0.9 }} />
       {Array.from({ length: n }, (_, i) => {
         const stop = i + 1;
@@ -548,6 +592,7 @@ export const Journey: React.FC<{ tone?: Tone; n: number; here: number; time: num
         return (
           <React.Fragment key={i}>
             <div
+              data-qc="mark"
               style={{
                 position: "absolute",
                 left: x(i) - r,

@@ -36,7 +36,7 @@ export type Box = { x: number; y: number; w: number; h: number; r: number };
 
 // Project files, web URLs, or inline data (the style lab's illustrative samples).
 const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
-const prog = (time: number, at: number, dur = 0.45) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
+const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
 // The scene background: flat warm colour with fine film grain. Nothing else.
 // Quiet architecture behind every graphic: a hairline grid, the panel's margin guides as long
@@ -82,8 +82,12 @@ export const Blueprint: React.FC<{ tone: Tone; width?: number; height?: number; 
 export const SceneCanvas: React.FC<{ tone: Tone; time: number; width?: number; height?: number }> = ({ tone, time, width, height }) => {
   const c = pal(tone);
   return (
-    <AbsoluteFill style={{ background: c.bg }}>
-      <Blueprint tone={tone} margin={width && width > height! ? style.grid.marginWide : style.grid.marginScene} width={width} height={height} />
+    // data-qc="canvas": the background, which QC leaves out when it judges a graphic's layout.
+    <AbsoluteFill data-qc="canvas" style={{ background: c.bg }}>
+      {/* The background drifts about a pixel a second, so the stage is alive (2026-10-25 motion lab). */}
+      <div style={{ position: "absolute", inset: -style.grid.cell, translate: `${(time * 1.2) % style.grid.cell}px ${(time * 0.6) % style.grid.cell}px` }}>
+        <Blueprint tone={tone} margin={width && width > height! ? style.grid.marginWide : style.grid.marginScene} width={(width ?? 1080) + 2 * style.grid.cell} height={(height ?? 1920) + 2 * style.grid.cell} />
+      </div>
       <AbsoluteFill style={{ opacity: tone === "dark" ? 0.09 : 0.05, mixBlendMode: tone === "dark" ? "screen" : "multiply" }}>
         <svg width="100%" height="100%">
           <filter id={`grain-${tone}`}>

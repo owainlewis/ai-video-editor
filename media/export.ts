@@ -3,9 +3,11 @@
 // the picture with transparency, side and full-frame graphics complete), then lay them over his
 // original file in one hardware-encoded pass. His picture and grade are untouched everywhere else,
 // and a 27 minute video exports in minutes, not hours (2026-10-24).
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
+import type { Issue } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { mixAudio } from "./render.ts";
 import { resolveProject } from "./project.ts";
@@ -81,5 +83,39 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const pct = Math.floor(f * 100);
     if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
   }, log);
+  onStage("Checking the export");
+  const check = verifyExport(original, out, files);
+  writeJson(join(dir, "checks/export-check.json"), { at: new Date().toISOString(), ...check });
+  for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
   return out;
+}
+
+// One frame as 64x36 grey pixels, for comparing pictures cheaply.
+const thumb = (file: string, t: number) =>
+  spawnSync("ffmpeg", ["-v", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], { maxBuffer: 1 << 20 }).stdout as Buffer;
+const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.reduce((sum, x, k) => sum + Math.abs(x - b[k]), 0) / a.length : 255);
+
+// After an export: the same length as the original, every graphic where it should be, and the
+// loudness, so a bad export is caught before Owain watches it (2026-10-25).
+export function verifyExport(original: string, out: string, files: { file: string; s: Section }[]) {
+  const issues: Issue[] = [];
+  const [a, b] = [probeDuration(original), probeDuration(out)];
+  if (Math.abs(a - b) > 0.1) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; the original is ${a.toFixed(2)}s` });
+  // Same size as the original: a 4K master exports 4K for YouTube (2026-10-25).
+  const [ow, oh] = probeSize(original), [ew, eh] = probeSize(out);
+  if (ow !== ew || oh !== eh) issues.push({ level: "error", message: `the export is ${ew}x${eh}; the original is ${ow}x${oh}` });
+  for (const { file, s } of files) {
+    const mid = (s.start + s.end) / 2;
+    const final = thumb(out, mid);
+    if (s.alpha) {
+      // A title over the picture: the export must differ from the original there.
+      if (differ(final, thumb(original, mid)) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
+    } else if (differ(final, thumb(file, mid - s.start)) > 10) {
+      issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
+    }
+  }
+  const loud = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", out, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
+  const lufs = parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(loud.slice(loud.lastIndexOf("Summary")))?.[1] ?? "NaN");
+  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
+  return { issues, lufs, sections: files.length, size: `${ew}x${eh}` };
 }

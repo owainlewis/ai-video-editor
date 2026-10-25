@@ -116,11 +116,12 @@ export const tokens = {
   },
   motion: {
     ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
-    // Slower and softer than Blueprint: things glide in out of a deeper blur.
-    enter: 0.6,
-    settle: 0.8,
-    stagger: 0.16,
-    blur: 14,
+    // Two speeds and tight staggers (2026-10-25 motion lab, after Ben's edit): content arrives fast
+    // out of a light blur, settles on a long tail. See effects/motion.tsx.
+    enter: 0.25,
+    settle: 0.46,
+    stagger: 0.08,
+    blur: 8,
   },
   look: {
     // One heavy lowercase word at a time over the speaker, Noske style.

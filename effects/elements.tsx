@@ -1,4 +1,5 @@
 import React from "react";
+import { easeInOut } from "./motion";
 import { interpolate } from "remotion";
 import { pal } from "./soft";
 import { look } from "./style";
@@ -13,7 +14,7 @@ type Props = { shot: ResolvedShot; time: number; w: number; h: number };
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 
 // An element that never arrives (at = Infinity) stays at 0.
-const prog = (time: number, at: number, dur = 0.5) => (isFinite(at) ? interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease }) : 0);
+const prog = (time: number, at: number, dur = 0.28) => (isFinite(at) ? interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease }) : 0);
 const fmt = (n: number, unit = "") => `${unit === "$" ? "$" : ""}${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}${unit && unit !== "$" ? unit : ""}`;
 
 // A bar or line chart. Each point grows or draws on its word; the last (or `highlight`) point takes
@@ -43,8 +44,8 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
       {/* Framed: a baseline and two faint guides. Bare (Ivory): only the two axes, as thin lines. */}
       {look.chart === "bare" ? (
         <>
-          <div style={{ position: "absolute", left: 20, width: plotW, top: top + plotH, height: 2, background: c.ink, opacity: 0.7 }} />
-          <div style={{ position: "absolute", left: 20, width: 2, top: top - 20, height: plotH + 20, background: c.ink, opacity: 0.7 }} />
+          <div data-qc="mark" style={{ position: "absolute", left: 20, width: plotW, top: top + plotH, height: 2, background: c.ink, opacity: 0.7 }} />
+          <div data-qc="mark" style={{ position: "absolute", left: 20, width: 2, top: top - 20, height: plotH + 20, background: c.ink, opacity: 0.7 }} />
         </>
       ) : (
         [0, 0.5, 1].map((g) => (
@@ -108,7 +109,7 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
                     <polyline points={pts} fill="none" stroke={c.accent} strokeWidth={6} strokeLinejoin="round" strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - draw} />
                   )}
                   {v.points.map((pt, i) => (
-                    <circle key={i} cx={xs[i]} cy={y(pt.value)} r={i === hi ? 13 : 9} fill={i === hi ? c.accent : c.card} stroke={c.accent} strokeWidth={4} opacity={p(i)} />
+                    <circle data-qc="mark" key={i} cx={xs[i]} cy={y(pt.value)} r={i === hi ? 13 : 9} fill={i === hi ? c.accent : c.card} stroke={c.accent} strokeWidth={4} opacity={p(i)} />
                   ))}
                   {draw > 0 && draw < 1 && <circle cx={headX} cy={headY} r={9} fill={c.accent} />}
                 </svg>
@@ -146,12 +147,28 @@ export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, t
   const reached = times.filter((x) => time >= x - 0.05).length;
   const current = reached - 1;
   if (n > 4) return <PipelineColumn {...{ shot, time, w, h, v, times, reached, current, enter }} />;
-  const pad = 70;
-  const step = (w - pad * 2) / Math.max(1, n - 1);
-  const cy = h * 0.42;
+  // Labels sit under their stage, so the end stages are inset by half the widest label: nothing runs
+  // off the frame (Owain, 2026-10-25, the evals card: "graphic is at the top and dead space below").
+  // All labels on one line under the stages: the type steps down until they fit side by side.
+  const longest = Math.max(1, ...v.stages.map((st) => (st.label ?? "").length));
+  let labelSize = 38;
+  const fit = (size: number) => {
+    const widest = longest * size * 0.55;
+    const pad = Math.max(70, widest / 2 + 20);
+    return { widest, pad, step: (w - pad * 2) / Math.max(1, n - 1) };
+  };
+  while (labelSize > 24 && fit(labelSize).widest + 30 > fit(labelSize).step) labelSize -= 2;
+  const { widest, pad, step } = fit(labelSize);
   const dot = Math.min(84, step * 0.5);
-  // The track fills smoothly from stage to stage.
-  const fill = times.reduce((acc, at, i) => (i === 0 || !isFinite(at) ? acc : acc + prog(time, at, 0.6)), 0);
+  const alternate = widest + 30 > step;
+  // The whole block (title, stages, labels) is centred in the frame.
+  const above = v.title ? 150 : alternate ? 92 : 0;
+  const below = 26 + labelSize * 1.2;
+  const cy = h / 2 + (above - below) / 2;
+  // The track draws out to each stage so it arrives as the stage lands, with a dot riding its tip
+  // (2026-10-25 motion lab: "flow with a traveller").
+  const fill = times.reduce((acc, at, i) => (i === 0 || !isFinite(at) ? acc : acc + (isFinite(at) ? interpolate(time, [at - 0.45, at], [0, 1], { ...clamp, easing: easeInOut }) : 0)), 0);
+  const travelling = fill % 1 > 0.01 && fill % 1 < 0.99;
   return (
     <div style={{ position: "relative", width: w, height: h, opacity: enter }}>
       {v.title && (
@@ -159,6 +176,7 @@ export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, t
       )}
       <div style={{ position: "absolute", left: pad, width: w - pad * 2, top: cy - 1.5, height: 3, background: c.line }} />
       <div style={{ position: "absolute", left: pad, width: step * fill, top: cy - 1.5, height: 3, background: c.ink }} />
+      {travelling && <div style={{ position: "absolute", left: pad + step * fill - 9, top: cy - 9, width: 18, height: 18, borderRadius: 9, background: c.accent, boxShadow: `0 0 22px ${c.accent}` }} />}
       {v.stages.map((st, i) => {
         const x = pad + step * i;
         const on = i === current;
@@ -195,11 +213,11 @@ export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, t
                   position: "absolute",
                   left: x - step / 2 - 20,
                   width: step + 40,
-                  top: i % 2 ? cy - dot / 2 - 92 : cy + dot / 2 + 26,
+                  top: alternate && i % 2 ? cy - dot / 2 - 92 : cy + dot / 2 + 26,
                   textAlign: "center",
                   fontFamily: t.sans,
                   fontWeight: 700,
-                  fontSize: Math.min(38, step * 0.24),
+                  fontSize: Math.min(labelSize, step * 0.24),
                   lineHeight: 1.1,
                   letterSpacing: -0.6,
                   color: on ? c.ink : c.muted,

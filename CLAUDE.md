@@ -23,6 +23,15 @@ npm run studio -- stills <slug> --at 3.2,8   # look at the frames when the chang
 
 Never render the whole video while editing. Owain exports from the editor when he is happy.
 
+### Check before rendering
+
+Fixing a graphic after an export costs ten minutes; fixing it before costs seconds (Owain, 2026-10-25).
+1. `npm run studio -- check <slug>` after every plan change: timing, anchors, camera, demos, and the plan checks (reading time, lingering, cards back to back, overlays across a cut, numbers nobody said).
+2. `npm run studio -- qc <slug>` (or `--at 95,1320` for one or two moments) before any export: it measures every graphic in a headless browser (safe area, collisions, one-word last lines, type size, contrast, centring) and writes `checks/qc/`: a strip per graphic (before, first frame, reveals, settled, after) and `overview.jpg`. Fix every error, read every warning, and look at `overview.jpg` before exporting.
+3. `render` runs QC itself and refuses to export with QC errors (`--force` overrides, only when Owain says so). One export at a time: it holds `build/export.lock`.
+4. After an export, read `checks/export-check.json`: length, every graphic placed, loudness.
+When Owain flags a layout or pacing problem, add it to `engine/qc.ts` as a check, not only to RULES.md.
+
 ## How a plan works
 
 - `shots` run in order. Each starts on a spoken phrase (`at`, a few exact words from the transcript) and lasts until the next.
@@ -37,7 +46,7 @@ Never render the whole video while editing. Owain exports from the editor when h
 `"canvas": "youtube"` (16:9). Owain cuts the video himself; the plan only adds graphics over it and never re-cuts it. Most of a long video is screen recording and b-roll, so:
 
 - **Graphics go only where Owain is on camera.** If `build/camera.json` is missing, run `npm run studio -- frames <slug>`, look at the sheets, pick two or three times where he is on camera, then `npm run studio -- scan <slug> --ref <t1>,<t2>`. `check` errors on any graphic off camera.
-- Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a cinematic `title`; no lower thirds, Owain does not like them, unless he asks), `media` (the visual alone, briefly). Set `"theme": "dark"` for Graphite graphics. In article sections, full-frame `media` cards may cut in over the screen recording; fence demos off with `"leave": [[start, end], ...]`. Side and media graphics hard cut in and out. No stat cards for Owain's own credentials (years, experience). No punch-ins on YouTube: they re-render the footage and change its colour. Hero moments: one full-frame hero number (`stat` with `hit: true` and `"sfx": "riser"`) and full-frame chapter cards (`chapter` with `hit: true`) at each section start; only these two may cut in over a screen recording.
+- Layouts: `full` (the picture as cut, most of the video), `side` (a visual on the left, Owain in a window on the right), `over` (a cinematic `title`; no lower thirds, Owain does not like them, unless he asks), `media` (the visual alone, briefly). Set `"theme": "dark"` for Graphite graphics. The motion lab moves (see `docs/PLAYBOOK.md`, "The motion lab"): `side` is the stage (Owain shrinks into a card and grows back; use it whenever he is on camera); `odometer` for numbers said in sequence; `lift` when he talks about a paragraph on a screen recording (measure `region` and `mark` in 1920x1080 pixels on a frame from `npm run studio -- stills`, then check the lift's QC strip that the mark sits on the right words); chapter cards and kinetic lines take one `*marked*` phrase for the highlighter. In article sections, full-frame `media` cards may cut in over the screen recording; fence demos off with `"leave": [[start, end], ...]`. Side and media graphics hard cut in and out. No stat cards for Owain's own credentials (years, experience). No punch-ins on YouTube: they re-render the footage and change its colour. Hero moments: one full-frame hero number (`stat` with `hit: true` and `"sfx": "riser"`) and full-frame chapter cards (`chapter` with `hit: true`) at each section start.
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
 

@@ -93,6 +93,24 @@ export const Visual = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("lower"), title: z.string(), sub: z.string().optional() }),
   // A chapter card: a large number lands over a soft glow, the chapter's name tracked out below it.
   // `hit`: a full-frame card that lands complete on the cut, set like a hero stat (YouTube).
+  // A counter whose digits roll to each value as it is said (`steps`, one to three), with an optional
+  // result that punches in on its word ("12x"; *marked* text takes the accent). Real numbers only.
+  z.object({
+    kind: z.literal("odometer"),
+    steps: z.array(z.object({ value: z.number(), at: Anchor.optional() })).min(1).max(3),
+    label: z.string(),
+    result: z.object({ text: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  // Focus lift over a screen recording: `region` of the frame ([x, y, w, h] in 1920x1080 pixels)
+  // lifts off the blurred page as a card and settles back as the shot ends. `mark` highlights a
+  // phrase inside it, sweeping from the word `from` to the word `to` as they are said.
+  z.object({
+    kind: z.literal("lift"),
+    region: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    mark: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
+    from: Anchor.optional(),
+    to: Anchor.optional(),
+  }),
   // The route of the video: a title over a track of numbered stops that pop in on `at` ("the six levels").
   z.object({ kind: z.literal("journey"), title: z.string(), of: z.number().int().min(2).max(12), at: Anchor.optional() }),
   // `of`: how many sections there are; a hit card then shows a progress row, one mark per section
@@ -316,7 +334,8 @@ export type ResolvedShot = {
   enter?: { from: "tile" | "card" | "input" | "rect"; index: number; rect?: [number, number, number, number] };
 };
 export type Chunk = { words: { text: string; start: number; end: number; accent: boolean }[]; start: number; end: number };
-export type SfxEvent = { kind: z.infer<typeof SfxKind>; t: number; gain?: number; dur?: number };
+// `exact`: play as given (its own gain, never thinned): whooshes, risers and highlight clicks.
+export type SfxEvent = { kind: z.infer<typeof SfxKind>; t: number; gain?: number; dur?: number; exact?: boolean };
 export type Resolved = {
   slug: string;
   title: string;

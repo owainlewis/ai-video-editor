@@ -1,6 +1,8 @@
 import React from "react";
 import { Audio, Video } from "@remotion/media";
-import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { FrameVisual, isFrame } from "./frame";
+import { easeInOut, lerp, MOVE, prog } from "./motion";
 import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
@@ -14,54 +16,49 @@ export const WH = 1080;
 
 type Box = { x: number; y: number; w: number; h: number; r: number; o: number };
 const FULL: Box = { x: 0, y: 0, w: WW, h: WH, r: 0, o: 1 };
-// The speaker's window on a side shot, and the area the visual gets beside it.
-const WINDOW: Box = { x: WW - 48 - 330, y: (WH - 440) / 2, w: 330, h: 440, r: 22, o: 1 };
-export const SIDE = { x: 120, y: 110, w: WINDOW.x - 72 - 120, h: WH - 220 };
+// The stage (Owain, 2026-10-25, from the motion lab): on a side shot the speaker shrinks into a
+// portrait card on the right in one long-tailed move, the graphic builds beside it, and the card grows
+// back to full frame as the shot ends. The card and the part of the picture it shows move on one
+// curve, so it is one move, not a zoom and a pan.
+const CARD = { x: WW - 64 - 500, y: 110, w: 500, h: 860 };
+export const SIDE = { x: 110, y: 110, w: CARD.x - 80 - 110, h: WH - 220 };
 export const MEDIA = { x: 160, y: 90, w: WW - 320, h: WH - 180 };
 // The width the shared visuals are designed at (the reel's panel).
 const DESIGN_W = 900;
 
-const speakerBox = (layout: ResolvedShot["layout"]): Box =>
-  layout === "side" ? WINDOW : layout === "media" || layout === "cutaway" ? { ...WINDOW, o: 0 } : FULL;
-
-// Where the footage sits inside a box: covering it, with the face kept in view. In the small
-// window the head fills about 40% of its height.
-const crop = (r: Resolved, box: Box) => {
-  const [sw, sh] = r.videoSize;
-  const cover = Math.max(box.w / sw, box.h / sh);
-  const window = box.w < WW * 0.5;
-  const scale = window ? Math.max(cover, (0.4 * box.h) / (r.face.h * sh)) : cover;
-  const vw = sw * scale;
-  const vh = sh * scale;
-  const x = Math.min(0, Math.max(box.w - vw, box.w / 2 - r.face.x * vw));
-  const y = Math.min(0, Math.max(box.h - vh, (window ? 0.45 : r.face.y) * box.h - r.face.y * vh));
-  return { x, y, vw, vh };
+// How far into the card the speaker is (0 full frame, 1 card) on a side shot.
+const stageK = (shots: ResolvedShot[], i: number, time: number) => {
+  const s = shots[i];
+  if (s?.layout !== "side") return 0;
+  const enter = shots[i - 1]?.layout === "side" ? 1 : prog(time, s.start, MOVE, easeInOut);
+  const leave = shots[i + 1]?.layout === "side" ? 0 : prog(time, s.end - MOVE, MOVE, easeInOut);
+  return enter * (1 - leave);
 };
 
-// The speaker cuts between full frame and the window: no zoom or move between them (Owain,
-// 2026-10-24: "the transitions are janky when we zoom between the graphic and footage").
-const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; dim: number }> = ({ r, shot, dim }) => {
-  const box = speakerBox(shot.layout);
-  const c = crop(r, box);
+// The footage. Exports read frames exactly (OffthreadVideo): the browser's own video decoder shifted
+// the colour, which is what spoiled punch-ins (2026-10-24). The editor plays it live.
+const Picture: React.FC<{ r: Resolved; style: React.CSSProperties }> = ({ r, style }) =>
+  getRemotionEnvironment().isRendering ? (
+    <OffthreadVideo src={staticFile(r.video)} muted style={{ position: "absolute", ...style }} />
+  ) : (
+    <Video src={staticFile(r.video)} muted={!!r.audio} style={{ position: "absolute", ...style }} />
+  );
+
+const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; k: number; dim: number }> = ({ r, shot, k, dim }) => {
   const grade = `brightness(${r.grade.brightness * dim}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})`;
+  // Hidden behind a full-frame card or b-roll.
+  if (shot.layout === "media" || shot.layout === "cutaway") return null;
+  const box = { x: lerp(0, CARD.x, k), y: lerp(0, CARD.y, k), w: lerp(WW, CARD.w, k), h: lerp(WH, CARD.h, k) };
+  // The part of the picture shown, in frame pixels: the whole frame, narrowing to a portrait slice
+  // around the face.
+  const srcW = lerp(WW, WH * (CARD.w / CARD.h), k);
+  const scale = box.w / srcW;
+  const srcH = box.h / scale;
+  const srcX = Math.min(WW - srcW, Math.max(0, r.face.x * WW - srcW / 2));
+  const srcY = Math.min(WH - srcH, Math.max(0, (WH - srcH) / 2));
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: box.x,
-        top: box.y,
-        width: box.w,
-        height: box.h,
-        borderRadius: box.r,
-        overflow: "hidden",
-        opacity: box.o,
-        boxShadow: box.r > 1 ? "0 2px 6px rgba(0,0,0,0.4), 0 24px 60px rgba(0,0,0,0.5)" : "none",
-        background: "#121417",
-      }}
-    >
-      {r.video && (
-        <Video src={staticFile(r.video)} muted={!!r.audio} style={{ position: "absolute", left: c.x, top: c.y, width: c.vw, height: c.vh, filter: grade }} />
-      )}
+    <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: 24 * k, overflow: "hidden", background: "#121417", boxShadow: k > 0 ? `0 ${30 * k}px ${80 * k}px rgba(0,0,0,${0.5 * k})` : "none" }}>
+      {r.video && <Picture r={r} style={{ left: -srcX * scale, top: -srcY * scale, width: WW * scale, height: WH * scale, filter: grade }} />}
     </div>
   );
 };
@@ -154,8 +151,16 @@ export const Wide: React.FC<Resolved> = (r) => {
               <VisualView slug={r.slug} shot={s} time={time} w={WW} h={WH} v={visual} bleed />
             </Sequence>
           );
+        if (isFrame(s))
+          return (
+            <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${visual.kind}`}>
+              <FrameVisual r={r} shot={s} time={time} />
+            </Sequence>
+          );
         if (s.layout !== "side" && s.layout !== "media") return null;
         const area = s.layout === "side" ? SIDE : MEDIA;
+        // On the stage the graphic leaves with the card's move back to full frame.
+        const leaving = s.layout === "side" && r.shots[last + 1]?.layout !== "side" ? 1 - prog(time, s.end - MOVE, 0.2) : 1;
         // The visuals are designed for a 900 px panel (the reel's). On 16:9 they are laid out at that
         // width and scaled up to fill the panel, so type and lines grow with it instead of sitting
         // small in empty space (Owain, 2026-10-24: "a little sparse/plain").
@@ -163,7 +168,7 @@ export const Wide: React.FC<Resolved> = (r) => {
         const vw = area.w / k, vh = area.h / k;
         return (
           <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
-            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone).ink }}>
+            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone).ink, opacity: leaving, filter: `blur(${(1 - leaving) * 8}px)` }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: vw, height: vh, transform: `scale(${k})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} />
               </div>
@@ -171,7 +176,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           </Sequence>
         );
       })}
-      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} dim={dim} />}
+      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} k={stageK(r.shots, index, time)} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}

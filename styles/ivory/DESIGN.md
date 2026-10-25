@@ -39,7 +39,13 @@ Helvetica and Signifier, always (Owain, 2026-10-22).
 
 ## Motion
 
-0.6 s enters out of a 14 px blur on the house expo-out curve, with 0.16 s staggers. Nothing bounces. One camera move per shot.
+The motion system (2026-10-25, from Ben's edit and the motion lab; code in `effects/motion.tsx`):
+- **Two speeds.** Content arrives in about 180-250 ms out of an 8 px blur with a small rise, on the expo-out curve (quick start, long soft settle). Anything that moves through space (the speaker card, a lifted paragraph) takes 460 ms on a slow-fast-slow curve with a long tail. Nothing bounces or overshoots.
+- **Tight staggers.** Elements that arrive together land 80 ms apart: label, title, rule.
+- **A second beat.** After a card settles, or as the words are said, one small thing happens on the spoken word: a sage highlighter sweeps behind the key phrase, a connector draws to the next stage with a dot riding its tip, digits roll.
+- **No jumps inside the stage.** The speaker shrinks into a portrait card and grows back rather than cutting to a window; a paragraph lifts off the page and settles back.
+- **A living background.** The graphite canvas drifts about a pixel a second.
+- Sound follows motion: a soft whoosh on a move, a click on a highlight, ticks while digits roll, a riser into a result.
 
 ## What not to do
 

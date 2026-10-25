@@ -131,6 +131,109 @@
       }
     },
     {
+      "id": "blueprint.t1.odometer",
+      "kind": "odometer",
+      "tier": "t1",
+      "purpose": "stat",
+      "summary": "A counter whose digits roll to each real number as it is said, with ticks; a result (\"12x\") punches in on its word after a riser.",
+      "layouts": [
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "steps",
+          "type": "list",
+          "minItems": 1,
+          "maxItems": 3
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "maxChars": 30
+        },
+        {
+          "name": "result.text",
+          "type": "text",
+          "maxChars": 6,
+          "optional": true
+        },
+        {
+          "name": "steps[].at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        },
+        {
+          "name": "result.at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "odometer",
+          "steps": [
+            {
+              "value": 120
+            },
+            {
+              "value": 960
+            }
+          ],
+          "label": "Illustration: a sample count"
+        },
+        "header": "It *grows*",
+        "scene": "It *grows*"
+      },
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
+      "id": "blueprint.t1.lift",
+      "kind": "lift",
+      "tier": "t1",
+      "purpose": "proof",
+      "summary": "Focus lift over a screen recording: the paragraph being discussed lifts off the blurred page as a card, a highlighter follows the spoken words, then it settles back.",
+      "layouts": [
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "region",
+          "type": "text",
+          "maxChars": 30,
+          "note": "[x, y, w, h] of the frame, in 1920x1080 pixels"
+        },
+        {
+          "name": "mark",
+          "type": "text",
+          "maxChars": 30,
+          "optional": true,
+          "note": "[x, y, w, h] of the phrase to highlight"
+        },
+        {
+          "name": "from",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        },
+        {
+          "name": "to",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "noSample": "Lifts a region of real footage; the lab has no stand-in screen recording.",
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
       "id": "blueprint.t1.title",
       "kind": "title",
       "tier": "t1",

@@ -42,7 +42,7 @@ const body = (req: IncomingMessage) =>
     });
   });
 
-function serveFile(root: string, req: IncomingMessage, res: ServerResponse, prefix = ""): boolean {
+export function serveFile(root: string, req: IncomingMessage, res: ServerResponse, prefix = ""): boolean {
   const path = decodeURIComponent((req.url ?? "").split(/[?#]/)[0]);
   if (!path.startsWith(prefix + "/")) return false;
   const file = normalize(join(root, path.slice(prefix.length)));

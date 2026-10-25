@@ -100,29 +100,33 @@ MIN_GAP = 2.5
 TAP_GAIN = 0.3
 
 
-def thin(events: list[dict]) -> list[dict]:
+def thin(events: list[dict], min_gap: float = MIN_GAP, tap_gain: float = TAP_GAIN) -> list[dict]:
     kept: list[dict] = []
     last = -1e9
     for e in sorted(events, key=lambda e: e["t"]):
         tap = e.get("gain", 1.0) < 1.0
-        if e["kind"] == "key":
+        if e.get("exact"):
+            kept.append(e)
+        elif e["kind"] == "key":
             kept.append(e)
         elif not tap:
             kept.append(e)
             last = e["t"]
-        elif e["t"] - last >= MIN_GAP:
-            kept.append({**e, "gain": TAP_GAIN})
+        elif e["t"] - last >= min_gap:
+            kept.append({**e, "gain": tap_gain})
             last = e["t"]
     return kept
 
 
-def render(events: list[dict], seconds: float, root_hz: float, library=None, synth: bool = False) -> np.ndarray:
+def render(events: list[dict], seconds: float, root_hz: float, library=None, synth: bool = False, youtube: bool = False) -> np.ndarray:
     """Mix the events into one stereo track from the sound library. A kind with no
     files is left silent unless `synth` is set: the synthesised sounds read as cheap."""
     out = np.zeros((int(seconds * SR), 2))
     cache: dict[tuple, np.ndarray] = {}
     counts: dict[str, int] = {}
-    for e in thin(events):
+    # YouTube: every item that lands gets its own click, loud enough to hear over Owain's music
+    # (2026-10-25: "the Review effort by risk graphic lacks sfx"). Reels are denser, so taps thin out.
+    for e in (thin(events, 0.5, 0.6) if youtube else thin(events)):
         kind = e["kind"]
         if library is not None and library.has(kind):
             index = counts.get(kind, 0) + (e.get("step", 0) if kind == "pop" else 0)

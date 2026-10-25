@@ -2,6 +2,7 @@ import React from "react";
 import { Composition } from "remotion";
 import { Reel } from "./Reel";
 import { Wide, WH, WW } from "./Wide";
+import { Lab, type LabProps } from "./Lab";
 import type { Resolved } from "../engine/schema";
 
 // Props come from projects/<slug>/build/edit.resolved.json (see `reel render`).
@@ -30,6 +31,7 @@ const metadata = ({ props }: { props: Resolved }) => ({ durationInFrames: Math.m
 export const Root: React.FC = () => (
   <>
     <Composition id="Reel" component={Reel} width={1080} height={1920} fps={30} durationInFrames={90} defaultProps={empty} calculateMetadata={metadata} />
+    <Composition id="Lab" component={Lab} width={WW} height={WH} fps={30} durationInFrames={90} defaultProps={{ idea: "chapter", from: 0, dur: 3, video: "", t: {} } as LabProps} calculateMetadata={({ props }: { props: LabProps }) => ({ durationInFrames: Math.round(props.dur * 30) })} />
     <Composition id="Wide" component={Wide} width={WW} height={WH} fps={30} durationInFrames={90} defaultProps={{ ...empty, canvas: "youtube", captions: false }} calculateMetadata={metadata} />
   </>
 );
