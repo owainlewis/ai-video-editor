@@ -309,6 +309,153 @@
           "preview": false
         },
         {
+          "id": "ivory.t1.compose",
+          "kind": "compose",
+          "tier": "t1",
+          "purpose": "proof",
+          "summary": "An email writing itself in a clean mail window, from an agent, with the agent's own example text; Send presses on its word.",
+          "layouts": [
+            "split",
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "subject",
+              "type": "text",
+              "maxChars": 40
+            },
+            {
+              "name": "body",
+              "type": "list",
+              "minItems": 1,
+              "maxItems": 3
+            },
+            {
+              "name": "at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            },
+            {
+              "name": "send",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
+          "id": "ivory.t1.divisions",
+          "kind": "divisions",
+          "tier": "t1",
+          "purpose": "structure",
+          "summary": "A grid of labelled pills in their real colours; each named one lights on its word, a big count can land over them.",
+          "layouts": [
+            "split",
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "items",
+              "type": "list",
+              "minItems": 2,
+              "maxItems": 24
+            },
+            {
+              "name": "items[].label",
+              "type": "text",
+              "maxChars": 20
+            },
+            {
+              "name": "items[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
+          "id": "ivory.t1.chips",
+          "kind": "chips",
+          "tier": "t1",
+          "purpose": "stat",
+          "summary": "Rows of real names drifting past in opposite directions; a count lands over them on its word.",
+          "layouts": [
+            "split",
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "rows",
+              "type": "list",
+              "minItems": 1,
+              "maxItems": 5
+            },
+            {
+              "name": "count.value",
+              "type": "text",
+              "maxChars": 6,
+              "optional": true
+            },
+            {
+              "name": "count.at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
+          "id": "ivory.t1.runs",
+          "kind": "runs",
+          "tier": "t1",
+          "purpose": "process",
+          "summary": "An agent's pipeline: each step queued, running on its word, passed when the next starts.",
+          "layouts": [
+            "split",
+            "media"
+          ],
+          "slots": [
+            {
+              "name": "steps",
+              "type": "list",
+              "minItems": 2,
+              "maxItems": 6
+            },
+            {
+              "name": "steps[].label",
+              "type": "text",
+              "maxChars": 22
+            },
+            {
+              "name": "steps[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": false
+        },
+        {
           "id": "ivory.t1.title",
           "kind": "title",
           "tier": "t1",

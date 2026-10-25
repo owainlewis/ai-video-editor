@@ -19,6 +19,14 @@ const CLAY = "#D97757"; // Claude Code's working colour, used for its status lin
 const MONO = '"SF Mono", "JetBrains Mono", Menlo, monospace';
 const MARK = "rgba(183,205,191,0.42)";
 
+// The box a moment is drawn in: the whole frame, or a split's panel (then no stage of its own; the
+// window floats on the paper with its shadow, and the speaker stays on screen below).
+const BoxCtx = React.createContext<{ width: number; height: number; panel: boolean } | null>(null);
+const useBox = () => {
+  const cfg = useVideoConfig();
+  return React.useContext(BoxCtx) ?? { width: cfg.width, height: cfg.height, panel: false };
+};
+
 // A slow 3D settle for a whole screen: tilted and back at the cut, nearly flat by the end, with a
 // gentle push in. One curve for the shot, so it never stops moving and never jumps.
 const useDepth = (shot: ResolvedShot, time: number, tilt = 1) => {
@@ -31,7 +39,8 @@ const useDepth = (shot: ResolvedShot, time: number, tilt = 1) => {
 };
 
 // The stage: graphite, a sage glow behind the subject that breathes a little.
-const Stage: React.FC<{ time: number }> = ({ time }) => (
+const Stage: React.FC<{ time: number }> = ({ time }) => (useBox().panel ? null : <StageFill time={time} />);
+const StageFill: React.FC<{ time: number }> = ({ time }) => (
   <AbsoluteFill style={{ background: "#141413" }}>
     <AbsoluteFill style={{ background: `radial-gradient(ellipse 60% 40% at 50% ${46 + Math.sin(time * 0.8) * 2}%, rgba(183,205,191,0.16), transparent 70%)` }} />
     <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,0.5) 100%)" }} />
@@ -45,9 +54,9 @@ const Caret: React.FC<{ time: number; on: boolean; color: string; h?: string }> 
 
 // ---------- Claude Code ----------
 const ClaudeCode: React.FC<Props & { v: V<"claudecode"> }> = ({ shot, time, v }) => {
-  const { width, height } = useVideoConfig();
+  const { width, height, panel } = useBox();
   const depth = useDepth(shot, time);
-  const tall = height > width;
+  const tall = height > width || panel;
   const w = Math.min(width * (tall ? 0.94 : 0.9), 1500);
   const fs = Math.round(w / (tall ? 21 : 30));
   const times = v.times ?? [];
@@ -137,10 +146,10 @@ const Item: React.FC<{ text: string; body: (s: string) => React.ReactNode }> = (
 
 // ---------- search ----------
 const Search: React.FC<Props & { v: V<"search"> }> = ({ shot, time, v }) => {
-  const { width, height } = useVideoConfig();
+  const { width, height, panel } = useBox();
   const depth = useDepth(shot, time, 0.6);
   const w = Math.min(width * 0.92, 1400);
-  const fs = Math.round(w / (height > width ? 19.5 : 24));
+  const fs = Math.round(w / (height > width || panel ? 19.5 : 24));
   const times = v.times ?? [];
   const at = times[0] ?? shot.start + 0.15;
   const s = typed(v.text, time, at, v.cps ?? 30);
@@ -179,7 +188,7 @@ const Search: React.FC<Props & { v: V<"search"> }> = ({ shot, time, v }) => {
 
 // ---------- tiers ----------
 const Tiers: React.FC<Props & { v: V<"tiers"> }> = ({ shot, time, v }) => {
-  const { width, height } = useVideoConfig();
+  const { width, height, panel } = useBox();
   const times = v.times ?? [];
   // times: each item's anchor then its mark's, in spoken order. An item with no anchor in this shot
   // shows dim from the start: a tier already covered, or one still to come (an open loop).
@@ -189,7 +198,7 @@ const Tiers: React.FC<Props & { v: V<"tiers"> }> = ({ shot, time, v }) => {
   let active = -1;
   ats.forEach((a, i) => time >= a && (active = i));
   // A tall frame gets bigger cards; a wide one keeps them to a comfortable reading size.
-  const tall = height > width;
+  const tall = height > width || panel;
   const w = Math.min(width * (tall ? 0.79 : 0.86), 1400);
   const fs = Math.round(w / (tall ? 16.5 : 22));
   const cardH = fs * (tall ? 6.9 : 6.2);
@@ -251,11 +260,211 @@ const Tiers: React.FC<Props & { v: V<"tiers"> }> = ({ shot, time, v }) => {
   );
 };
 
-export const UI_KINDS = new Set(["claudecode", "search", "tiers"]);
-export const UiVisual: React.FC<Props> = ({ shot, time }) => {
+// ---------- compose: an email being written by an agent ----------
+const Compose: React.FC<Props & { v: V<"compose"> }> = ({ shot, time, v }) => {
+  const { width, height, panel } = useBox();
+  const depth = useDepth(shot, time, 0.5);
+  const w = Math.min(width * 0.92, 1400);
+  const fs = Math.round(w / (height > width || panel ? 21 : 30));
+  const times = v.times ?? [];
+  const at = times[0] ?? shot.start + 0.3;
+  const body = v.body.join("\n\n");
+  const s = typed(body, time, at, v.cps ?? 45);
+  const sent = v.send ? prog(time, times[1] ?? Infinity, 0.25) : 0;
+  return (
+    <AbsoluteFill>
+      <Stage time={time} />
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: w, borderRadius: fs * 0.7, overflow: "hidden", background: "#FBFAF7", boxShadow: "0 50px 120px rgba(0,0,0,0.35)", border: "1px solid rgba(0,0,0,0.08)", ...depth }}>
+          <div style={{ height: fs * 2.2, display: "flex", alignItems: "center", gap: fs * 0.45, padding: `0 ${fs}px`, background: "#EFECE6", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+            {["#ED6A5E", "#F4BF4F", "#61C554"].map((c) => (
+              <div key={c} style={{ width: fs * 0.5, height: fs * 0.5, borderRadius: fs, background: c }} />
+            ))}
+            <div style={{ flex: 1, textAlign: "center", fontFamily: type.sans, fontWeight: 600, fontSize: fs * 0.72, color: "#6E6B65", marginRight: fs * 2 }}>New message</div>
+          </div>
+          <div style={{ padding: `${fs * 0.6}px ${fs * 1.1}px ${fs * 1.1}px`, fontFamily: type.sans, color: "#1F1F1D" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: fs * 0.5, padding: `${fs * 0.45}px 0`, borderBottom: "1px solid rgba(0,0,0,0.08)", fontSize: fs * 0.8 }}>
+              <span style={{ color: "#8A867F" }}>From</span>
+              <span style={{ background: "rgba(183,205,191,0.45)", borderRadius: fs, padding: `${fs * 0.12}px ${fs * 0.55}px`, fontWeight: 600 }}>
+                {v.emoji ? `${v.emoji} ` : ""}
+                {v.from}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: fs * 0.5, padding: `${fs * 0.45}px 0`, borderBottom: "1px solid rgba(0,0,0,0.08)", fontSize: fs * 0.8 }}>
+              <span style={{ color: "#8A867F" }}>Subject</span>
+              <span style={{ fontWeight: 700 }}>{v.subject}</span>
+            </div>
+            <div style={{ marginTop: fs * 0.7, fontSize: fs * 0.95, lineHeight: 1.38, whiteSpace: "pre-wrap", minHeight: fs * 1.38 * (v.lines ?? 6) }}>
+              {s}
+              <Caret time={time} on={!sent} color="#2C4441" h="1.05em" />
+            </div>
+            {v.file && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: fs * 0.6 }}>
+                <span style={{ fontFamily: MONO, fontSize: fs * 0.6, color: "#8A867F" }}>{v.file}</span>
+                <span style={{ background: sent ? "#2C4441" : "#213B34", color: "#F7F3EC", borderRadius: fs, padding: `${fs * 0.3}px ${fs * 0.9}px`, fontWeight: 700, fontSize: fs * 0.75, scale: String(1 + 0.08 * Math.sin(sent * Math.PI)) }}>
+                  {sent >= 1 ? "Sent" : "Send"}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+// ---------- divisions: a grid of labelled pills in their own colours; named ones light up ----------
+const Divisions: React.FC<Props & { v: V<"divisions"> }> = ({ shot, time, v }) => {
+  const { width, height, panel } = useBox();
+  const depth = useDepth(shot, time, 0.35);
+  const tall = height > width || panel;
+  const w = Math.min(width * 0.94, 1500);
+  const fs = Math.round(w / (tall ? 24 : 34));
+  const times = v.times ?? [];
+  // times: the count's first (it is said before the names), then one per item.
+  const lit = v.items.map((it, i) => (it.at ? (times[i + 1] ?? Infinity) : Infinity));
+  const anyLit = (v.focus?.length ?? 0) > 0 || lit.some((t) => time >= t);
+  const countAt = v.count?.at ? (times[0] ?? shot.start) : v.count ? shot.start : Infinity;
+  return (
+    <AbsoluteFill>
+      <Stage time={time} />
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", ...depth }}>
+        {v.count && (
+          <In t={time} at={countAt} style={{ marginBottom: fs * 0.9, textAlign: "center" }}>
+            <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: fs * 3.2, letterSpacing: "-0.03em", lineHeight: 1, color: panel ? "#1F1F1D" : "#F2EFEA" }}>{v.count.value}</div>
+            <div style={{ fontFamily: type.serif, fontStyle: "italic", fontSize: fs * 1.1, color: panel ? "#6E6B65" : "#A3A19C" }}>{v.count.label}</div>
+          </In>
+        )}
+        <div style={{ width: w, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: fs * 0.45 }}>
+          {v.items.map((it, i) => {
+            const on = time >= lit[i] || v.focus?.includes(i);
+            const k = v.focus?.includes(i) ? 1 : prog(time, lit[i], 0.22);
+            const appear = prog(time, shot.start + 0.05 + i * 0.035, 0.2);
+            return (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: fs * 0.35,
+                  padding: `${fs * 0.32}px ${fs * 0.6}px`,
+                  borderRadius: fs,
+                  fontFamily: type.sans,
+                  fontWeight: 600,
+                  fontSize: fs * 0.82,
+                  background: on ? it.color : panel ? "#FBFAF7" : "#232220",
+                  color: on ? "#FFFFFF" : panel ? "#1F1F1D" : "#D9D5CE",
+                  border: `1px solid ${panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`,
+                  boxShadow: on ? `0 ${12 * k}px ${30 * k}px ${it.color}66` : "0 6px 16px rgba(0,0,0,0.12)",
+                  opacity: appear * (anyLit && !on ? 0.45 : 1),
+                  scale: String((0.85 + 0.15 * appear) * (1 + 0.1 * k * (1 - prog(time, lit[i] + 0.22, 0.3)))),
+                }}
+              >
+                <span style={{ width: fs * 0.42, height: fs * 0.42, borderRadius: fs, background: on ? "#FFFFFF" : it.color }} />
+                {it.label}
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+// ---------- chips: rows of real names drifting past, a count landing over them ----------
+const Chips: React.FC<Props & { v: V<"chips"> }> = ({ shot, time, v }) => {
+  const { width, height, panel } = useBox();
+  const tall = height > width || panel;
+  const fs = Math.round(width / (tall ? 22 : 34));
+  const times = v.times ?? [];
+  const countAt = v.count ? (times[0] ?? shot.start + 0.4) : Infinity;
+  const c = prog(time, countAt, 0.35, easeInOut);
+  const rowH = fs * 2.3;
+  return (
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <Stage time={time} />
+      <AbsoluteFill data-qc="ambient" style={{ justifyContent: "center", gap: fs * 0.5, filter: `blur(${c * 3}px)`, opacity: 1 - c * 0.45 }}>
+        {v.rows.map((row, r) => {
+          const dir = r % 2 ? 1 : -1;
+          const x = dir * ((time - shot.start) * fs * (5 + r * 1.3)) - (dir > 0 ? width : 0);
+          return (
+            <div key={r} style={{ height: rowH, display: "flex", gap: fs * 0.45, translate: `${x - fs * 4 * r}px 0`, whiteSpace: "nowrap" }}>
+              {[...row, ...row, ...row].map((name, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", padding: `0 ${fs * 0.7}px`, borderRadius: fs, background: panel ? "#FBFAF7" : "#232220", border: `1px solid ${panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`, boxShadow: "0 8px 20px rgba(0,0,0,0.12)", fontFamily: type.sans, fontWeight: 600, fontSize: fs * 0.82, color: panel ? "#1F1F1D" : "#D9D5CE" }}>
+                  {name}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </AbsoluteFill>
+      {v.count && (
+        <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+          <div style={{ opacity: c, scale: String(1.25 - 0.25 * c), textAlign: "center", background: panel ? "rgba(251,250,247,0.9)" : "rgba(20,20,19,0.85)", borderRadius: fs * 0.8, padding: `${fs * 0.5}px ${fs * 1.2}px`, boxShadow: "0 30px 80px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: fs * 3.4, letterSpacing: "-0.03em", lineHeight: 1, color: panel ? "#1F1F1D" : "#F2EFEA" }}>{v.count.value}</div>
+            <div style={{ fontFamily: type.serif, fontStyle: "italic", fontSize: fs * 1.15, color: panel ? "#2C4441" : SAGE }}>{v.count.label}</div>
+          </div>
+        </AbsoluteFill>
+      )}
+    </AbsoluteFill>
+  );
+};
+
+// ---------- runs: an agent's pipeline, each step queued, running, then passed on its word ----------
+const Runs: React.FC<Props & { v: V<"runs"> }> = ({ shot, time, v }) => {
+  const { width, height, panel } = useBox();
+  const depth = useDepth(shot, time, 0.4);
+  const tall = height > width || panel;
+  const w = Math.min(width * 0.9, 1400);
+  const fs = Math.round(w / (tall ? 20 : 30));
+  const times = v.times ?? [];
+  const ats = v.steps.map((st, i) => (st.at ? (times[i] ?? Infinity) : -Infinity));
+  const doneAt = v.done ? (times[v.steps.length] ?? Infinity) : Infinity;
+  return (
+    <AbsoluteFill>
+      <Stage time={time} />
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: w, ...depth }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: fs * 0.45, background: "#1A1918", color: "#F2EFEA", borderRadius: fs, padding: `${fs * 0.35}px ${fs * 0.9}px`, fontFamily: type.sans, fontWeight: 700, fontSize: fs * 1.05, boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
+            {v.emoji && <span>{v.emoji}</span>}
+            {v.title}
+          </div>
+          <div style={{ marginTop: fs * 0.7, marginLeft: fs * 0.9, borderLeft: `2px solid ${panel ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)"}`, paddingLeft: fs * 0.8, display: "flex", flexDirection: "column", gap: fs * 0.4 }}>
+            {v.steps.map((st, i) => {
+              const next = i + 1 < v.steps.length ? ats[i + 1] : doneAt;
+              const state = time >= next ? "passed" : time >= ats[i] ? "running" : "queued";
+              const k = prog(time, ats[i], 0.25);
+              const label = state === "passed" ? "✓ passed" : state === "running" ? "● running" : "queued";
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: fs * 0.6, padding: `${fs * 0.5}px ${fs * 0.7}px`, borderRadius: fs * 0.5, background: panel ? "#FBFAF7" : "#1F1E1C", border: `1.5px solid ${state === "running" ? "#2C4441" : panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"}`, boxShadow: state === "running" ? `0 ${18 * k}px ${40 * k}px rgba(44,68,65,0.3)` : "0 6px 16px rgba(0,0,0,0.08)", scale: String(state === "running" ? 1 + 0.03 * k : 1), opacity: state === "queued" ? 0.6 : 1 }}>
+                  <div style={{ width: fs * 1.3, height: fs * 1.3, borderRadius: fs, display: "flex", alignItems: "center", justifyContent: "center", border: `1.5px solid ${panel ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.2)"}`, fontFamily: type.sans, fontWeight: 600, fontSize: fs * 0.7, color: panel ? "#6E6B65" : "#A3A19C" }}>{i + 1}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: panel ? "#1F1F1D" : "#F2EFEA" }}>{st.label}</div>
+                    {st.agent && <div style={{ fontFamily: MONO, fontSize: fs * 0.6, color: "#8A867F" }}>{st.agent}</div>}
+                  </div>
+                  <div style={{ fontFamily: type.sans, fontWeight: 600, fontSize: fs * 0.62, padding: `${fs * 0.15}px ${fs * 0.5}px`, borderRadius: fs, color: state === "queued" ? "#8A867F" : "#FFFFFF", background: state === "passed" ? "#3E7B5B" : state === "running" ? "#2C4441" : "transparent", border: state === "queued" ? "1px solid rgba(138,134,127,0.5)" : "none" }}>{label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+export const UI_KINDS = new Set(["claudecode", "search", "tiers", "compose", "divisions", "chips", "runs"]);
+// `box` draws the moment inside a split's panel instead of the whole frame.
+export const UiVisual: React.FC<Props & { box?: { width: number; height: number } }> = ({ shot, time, box }) => {
   const v = shot.visual!;
-  if (v.kind === "claudecode") return <ClaudeCode shot={shot} time={time} v={v} />;
-  if (v.kind === "search") return <Search shot={shot} time={time} v={v} />;
-  if (v.kind === "tiers") return <Tiers shot={shot} time={time} v={v} />;
-  return null;
+  const el =
+    v.kind === "claudecode" ? <ClaudeCode shot={shot} time={time} v={v} />
+    : v.kind === "search" ? <Search shot={shot} time={time} v={v} />
+    : v.kind === "tiers" ? <Tiers shot={shot} time={time} v={v} />
+    : v.kind === "compose" ? <Compose shot={shot} time={time} v={v} />
+    : v.kind === "divisions" ? <Divisions shot={shot} time={time} v={v} />
+    : v.kind === "chips" ? <Chips shot={shot} time={time} v={v} />
+    : v.kind === "runs" ? <Runs shot={shot} time={time} v={v} />
+    : null;
+  return box ? <BoxCtx.Provider value={{ ...box, panel: true }}>{el}</BoxCtx.Provider> : el;
 };

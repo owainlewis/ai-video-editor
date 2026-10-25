@@ -79,6 +79,8 @@ function measure() {
   const blocks = new Map<Element, number>();
   const words: { block: number; top: number; h: number }[] = [];
   for (const el of root.querySelectorAll("*")) {
+    // Ambient motion (a marquee of names drifting past the frame edges) is texture, not text to read.
+    if (el.closest('[data-qc="ambient"]')) continue;
     if (el.closest('[data-qc="canvas"]')) continue;
     const o = opacity(el);
     if (o < 0.05) continue;

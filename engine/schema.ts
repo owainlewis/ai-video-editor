@@ -135,6 +135,41 @@ export const Visual = z.discriminatedUnion("kind", [
     cps: z.number().positive().optional(),
     result: z.object({ site: z.string(), title: z.string(), text: z.string().optional(), at: Anchor.optional() }).optional(),
   }),
+  // An email typing itself out, from an agent (the agent's own example text).
+  z.object({
+    kind: z.literal("compose"),
+    from: z.string(),
+    emoji: z.string().optional(),
+    subject: z.string(),
+    body: z.array(z.string()).min(1).max(3),
+    file: z.string().optional(),
+    lines: z.number().int().optional(),
+    cps: z.number().positive().optional(),
+    at: Anchor.optional(),
+    send: Anchor.optional(),
+  }),
+  // Labelled pills in their own colours (a repo's divisions); each named one lights on its word.
+  // `focus` lights some from the start; `count` lands a big number over the grid.
+  z.object({
+    kind: z.literal("divisions"),
+    items: z.array(z.object({ label: z.string(), color: z.string(), at: Anchor.optional() })).min(2).max(24),
+    focus: z.array(z.number().int()).optional(),
+    count: z.object({ value: z.string(), label: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  // Rows of real names drifting past in opposite directions, a count landing over them on `count.at`.
+  z.object({
+    kind: z.literal("chips"),
+    rows: z.array(z.array(z.string()).min(2)).min(1).max(5),
+    count: z.object({ value: z.string(), label: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  // An agent's pipeline: steps queued, running on their word, passed when the next one starts.
+  z.object({
+    kind: z.literal("runs"),
+    title: z.string(),
+    emoji: z.string().optional(),
+    steps: z.array(z.object({ label: z.string(), agent: z.string().optional(), at: Anchor.optional() })).min(2).max(6),
+    done: Anchor.optional(),
+  }),
   z.object({
     kind: z.literal("tiers"),
     title: z.string().optional(),

@@ -57,6 +57,10 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "claudecode": return [...v.lines.map((l) => l.at), ...(v.mark ? [v.mark.at] : [])];
     case "search": return [v.at, v.result?.at];
     case "tiers": return v.items.flatMap((it) => [it.at, it.markAt]);
+    case "compose": return [v.at, v.send];
+    case "divisions": return [v.count?.at, ...v.items.map((it) => it.at)];
+    case "chips": return [v.count?.at];
+    case "runs": return [...v.steps.map((st) => st.at), v.done];
     case "kpi": return v.items.map((it) => it.at);
     case "bento": return v.cells.map((c) => c.at);
     case "pipeline": return v.stages.map((st) => st.at);
@@ -243,7 +247,7 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
       if (v.mark && v.times?.[0] !== undefined) click(v.times[0]);
       return;
     }
-    if (v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers") {
+    if (v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers" || v.kind === "compose" || v.kind === "divisions" || v.kind === "chips" || v.kind === "runs") {
       whoosh(s.start);
       (v.times ?? []).forEach((t, n) => n && click(t));
       return;
@@ -419,7 +423,8 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
     // Something changes every 2 to 3 s (Owain, 2026-10-22): a cut, a reveal on its word, a header
     // swap or a punch-in. A long shot is fine while its reveals keep landing.
     const still = longestStill(s);
-    if (still > 3) issues.push({ level: "warn", message: `${label}: nothing changes for ${still.toFixed(1)}s; something should change every 2 to 3 s (a cut, a reveal, a header swap or a punch-in)` });
+    // Tightened to 2 s (Owain, 2026-10-25: "The editing is very slow... a move every 2s max").
+    if (still > 2.2) issues.push({ level: "warn", message: `${label}: nothing changes for ${still.toFixed(1)}s; something should change every 2 s at most (a cut, a reveal, a header swap or a punch-in)` });
     if (len < 0.4) issues.push({ level: "warn", message: `${label} is only ${len.toFixed(2)}s` });
     if ((s.layout === "split" || s.layout === "media" || s.layout === "cutaway" || s.layout === "scene") && !s.visual)
       issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });

@@ -1,5 +1,6 @@
 import React from "react";
 import { Video } from "@remotion/media";
+import { UiVisual } from "./ui";
 import { Img, interpolate, staticFile } from "remotion";
 import { cameraProgress, frameRect, TRANSITION } from "./camera";
 import { clamp, ease, t } from "./theme";
@@ -912,6 +913,14 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
   const v = p.v;
   switch (v.kind) {
     case "image": return <ImageVisual {...p} v={v} />;
+    case "claudecode":
+    case "search":
+    case "tiers":
+    case "compose":
+    case "divisions":
+    case "chips":
+    case "runs":
+      return <div style={{ position: "relative", width: p.w, height: p.h }}><UiVisual shot={p.shot} time={p.time} box={{ width: p.w, height: p.h }} /></div>;
     case "video": return <VideoVisual {...p} v={v} />;
     case "logos": return <LogosVisual {...p} v={v} />;
     case "title": return <TitleVisual {...p} v={v} />;

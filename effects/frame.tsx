@@ -116,7 +116,10 @@ const Odometer: React.FC<Props & { v: V<"odometer"> }> = ({ shot, time, v }) => 
   });
   const resultAt = v.result ? (times[steps.length] ?? Infinity) : Infinity;
   const hit = prog(time, resultAt, 0.22);
-  const size = 260;
+  // As big as the frame allows: a six-digit count at 260 px runs off a 9:16 frame.
+  const { width } = useVideoConfig();
+  const chars = Math.max(...steps.map((s) => Math.round(s.value).toLocaleString("en-US").length));
+  const size = Math.min(260, Math.floor((width * 0.84) / (chars * 0.62)));
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity: 1 - hit, filter: `blur(${hit * 10}px)`, scale: String(1 - hit * 0.06) }}>
