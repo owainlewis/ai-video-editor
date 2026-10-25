@@ -1,0 +1,17 @@
+Google is building a Kubernetes for AI agents. It's called AX, Agent Executor.
+
+Here's the problem. Most of us run agents on our laptops. For a business, that's a security risk. You can't see what they're doing, which jobs are running, or how much you're spending.
+
+AX moves them onto shared infrastructure. Every agent runs isolated, in its own sandbox.
+
+You write three things. A workspace, with your repos, MCP servers and skills. A model. And a task.
+
+Then one command. AX sandboxes the agent and runs it.
+
+You can watch it live, shell into the sandbox, or pause it and resume exactly where it left off.
+
+And it's built for billions of tasks per cluster.
+
+It's the same shift as software factories. Take agents off your machine, and treat them like any other infrastructure.
+
+Comment AX and I'll send you the repo.

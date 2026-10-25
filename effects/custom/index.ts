@@ -7,11 +7,13 @@
 import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
 import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./moves";
+import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   orgchart: OrgChart,
+  migrate: Migrate,
   statbadge: StatBadge,
   stopwatch: Stopwatch,
   timeline: Timeline,

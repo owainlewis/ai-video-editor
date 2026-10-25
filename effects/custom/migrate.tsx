@@ -1,0 +1,82 @@
+// "AX moves them onto shared infrastructure. Every agent runs isolated, in its own sandbox."
+// Agents sit on a laptop; on their word they arc across into a shared cluster, then each gets its
+// own sandbox drawn round it. Built for the Google AX reel (from Owain's post on the shift).
+// props: { agents?: number, laptop?: string, cluster?: string, sandbox?: string, mode?: "laptop" }
+// times: [agents move, cluster label lands, sandboxes draw]. mode "laptop" shows only the laptop.
+import React from "react";
+import { AbsoluteFill } from "remotion";
+import { easeInOut, lerp, prog } from "../motion";
+import { t as type } from "../theme";
+import type { CustomProps } from "./index";
+
+const PINE = "#2C4441";
+const SAGE = "#B7CDBF";
+
+export const Migrate: React.FC<CustomProps> = ({ shot, time, props, times, width, height, panel }) => {
+  const n = Number(props.agents ?? 6);
+  const laptopOnly = props.mode === "laptop";
+  const moveAt = laptopOnly ? Infinity : (times[0] ?? shot.start + 0.6);
+  const infraAt = times[1] ?? moveAt + 0.6;
+  const boxAt = times[2] ?? infraAt + 1.5;
+  const ink = panel ? "#1F1F1D" : "#F2EFEA";
+  const muted = panel ? "#6E6B65" : "#A3A19C";
+  const edge = panel ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.14)";
+  const fs = Math.round(width / 26);
+
+  // Laptop: centred when it is the whole story, on the left once agents leave it.
+  const lw = width * (laptopOnly ? 0.5 : 0.34);
+  const lh = lw * 0.62;
+  const lx = laptopOnly ? (width - lw) / 2 : width * 0.05;
+  const ly = height * 0.5 - lh / 2 - fs * 0.6;
+  const appear = prog(time, shot.start, 0.35, easeInOut);
+  const left = prog(time, moveAt + 0.3 + n * 0.08, 0.4, easeInOut);
+
+  // Cluster on the right: a grid of slots, one per agent.
+  const cw = width * 0.5, chh = height * 0.62;
+  const cx = width * 0.46, cy = height * 0.5 - chh / 2;
+  const cols = 3, rows = Math.ceil(n / cols);
+  const slot = (i: number) => ({ x: cx + (cw / cols) * ((i % cols) + 0.5), y: cy + fs * 1.6 + ((chh - fs * 2.2) / rows) * (Math.floor(i / cols) + 0.5) });
+  const home = (i: number) => {
+    const c = 3, r = Math.ceil(n / c);
+    return { x: lx + (lw / c) * ((i % c) + 0.5), y: ly + (lh / r) * (Math.floor(i / c) + 0.5) };
+  };
+  const clusterIn = prog(time, laptopOnly ? Infinity : moveAt - 0.1, 0.4, easeInOut);
+  const label = prog(time, infraAt, 0.3, easeInOut);
+  const r = fs * 0.55;
+
+  return (
+    <AbsoluteFill style={{ opacity: appear }}>
+      {/* laptop */}
+      <div style={{ position: "absolute", left: lx, top: ly, width: lw, height: lh, borderRadius: fs * 0.5, background: "#1A1918", border: `${fs * 0.25}px solid #2A2927`, opacity: lerp(1, 0.4, left), boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }} />
+      <div style={{ position: "absolute", left: lx - lw * 0.08, top: ly + lh, width: lw * 1.16, height: fs * 0.55, borderRadius: `0 0 ${fs}px ${fs}px`, background: "#2A2927", opacity: lerp(1, 0.4, left) }} />
+      <div style={{ position: "absolute", left: lx, width: lw, top: ly + lh + fs * 1.1, textAlign: "center", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: lerp(1, 0, left) > 0.5 ? ink : muted, opacity: lerp(1, 0.6, left) }}>{String(props.laptop ?? "Your laptop")}</div>
+
+      {/* cluster */}
+      <div style={{ position: "absolute", left: cx, top: cy, width: cw, height: chh, borderRadius: fs * 0.7, border: `2px dashed ${edge}`, background: panel ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.04)", opacity: clusterIn, scale: String(0.94 + 0.06 * clusterIn) }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: fs * 0.45, textAlign: "center", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: ink, opacity: label }}>{String(props.cluster ?? "Shared infrastructure")}</div>
+      </div>
+
+      {/* sandboxes: one outline per agent, drawn in turn */}
+      {Array.from({ length: laptopOnly ? 0 : n }, (_, i) => {
+        const k = prog(time, boxAt + i * 0.08, 0.3, easeInOut);
+        const s = slot(i);
+        const b = fs * 2.3;
+        return <div key={`b${i}`} style={{ position: "absolute", left: s.x - b / 2, top: s.y - b / 2, width: b, height: b, borderRadius: fs * 0.4, border: `2.5px solid ${PINE}`, background: "rgba(183,205,191,0.18)", opacity: k, scale: String(0.6 + 0.4 * k) }} />;
+      })}
+      {!laptopOnly && (
+        <div style={{ position: "absolute", left: cx, width: cw, top: cy + chh + fs * 0.5, textAlign: "center", fontFamily: type.serif, fontStyle: "italic", fontSize: fs * 0.95, color: PINE, opacity: prog(time, boxAt + n * 0.08, 0.3) }}>{String(props.sandbox ?? "one sandbox each")}</div>
+      )}
+
+      {/* agents: they idle on the laptop, then arc across into their slots */}
+      {Array.from({ length: n }, (_, i) => {
+        const a = home(i);
+        const b = slot(i);
+        const k = prog(time, moveAt + i * 0.08, 0.7, easeInOut);
+        const bob = Math.sin(time * 3 + i * 1.7) * fs * 0.12 * (1 - k);
+        const x = lerp(a.x, b.x, k);
+        const y = lerp(a.y, b.y, k) - Math.sin(k * Math.PI) * height * 0.18 + bob;
+        return <div key={i} style={{ position: "absolute", left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r * 2, background: k > 0.5 ? PINE : SAGE, boxShadow: `0 6px 16px rgba(0,0,0,0.25)` }} />;
+      })}
+    </AbsoluteFill>
+  );
+};
