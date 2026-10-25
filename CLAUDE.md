@@ -26,7 +26,7 @@ Never render the whole video while editing. Owain exports from the editor when h
 ### Check before rendering
 
 Fixing a graphic after an export costs ten minutes; fixing it before costs seconds (Owain, 2026-10-25).
-1. `npm run studio -- check <slug>` after every plan change: timing, anchors, camera, demos, and the plan checks (reading time, lingering, cards back to back, overlays across a cut, numbers nobody said).
+1. `npm run studio -- check <slug>` after every plan change: timing, anchors, camera, demos, and the plan checks (reading time, lingering, cards back to back, overlays across a cut, numbers nobody said, a section said twice). A section said twice is cut with `"remove": [[start, end]]`, both edges between words: find the edges in `transcript.json`, and land the start on a cut in the footage when there is one (`build/cuts.json`).
 2. `npm run studio -- qc <slug>` (or `--at 95,1320` for one or two moments) before any export: it measures every graphic in a headless browser (safe area, collisions, one-word last lines, type size, contrast, centring) and writes `checks/qc/`: a strip per graphic (before, first frame, reveals, settled, after) and `overview.jpg`. Fix every error, read every warning, and look at `overview.jpg` before exporting.
 3. `render` runs QC itself and refuses to export with QC errors (`--force` overrides, only when Owain says so). One export at a time: it holds `build/export.lock`.
 4. After an export, read `checks/export-check.json`: length, every graphic placed, loudness.

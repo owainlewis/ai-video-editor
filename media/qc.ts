@@ -39,7 +39,10 @@ const framesFor = (s: ResolvedShot, duration: number) => {
   const reveals = (s.visual?.times ?? []).filter((t) => t > s.start && t < s.end).map((t) => Math.min(s.end - 0.05, t + 0.7));
   const settled = +Math.max(s.start + 0.05, s.end - 0.15).toFixed(3);
   const all = [s.start - 0.1, s.start + 0.04, ...reveals, settled, s.end + 0.1].filter((t) => t >= 0 && t < duration);
-  return { all: [...new Set(all.map((t) => +t.toFixed(3)))].sort((a, b) => a - b), settled };
+  // Layout is checked on every frame where something has just landed, not only the last one: a
+  // graphic that changes (an odometer becoming "12x") hides its earlier states from a last-frame check.
+  const checks = new Set([...reveals, settled].map((t) => +t.toFixed(3)));
+  return { all: [...new Set(all.map((t) => +t.toFixed(3)))].sort((a, b) => a - b), settled, checks };
 };
 
 // The background a graphic's text sits on, for contrast: the canvas for designed frames, nothing on footage.
@@ -104,7 +107,8 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
     };
     for (const [n, { s, i }] of graphics.entries()) {
       onStage?.(`Checking graphic ${n + 1}/${graphics.length}`);
-      const { all, settled } = framesFor(s, r.duration);
+      const { all, settled, checks } = framesFor(s, r.duration);
+      const seen = new Set<string>();
       const where = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
       const files: string[] = [];
       let measured = false;
@@ -112,14 +116,17 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
         const file = join(out, "frames", `${String(i + 1).padStart(3, "0")}-${k}.jpg`);
         await shoot(t, file);
         files.push(file);
-        if (t === settled) {
-          measured = true;
-          settledShots.push(file);
+        if (checks.has(t)) {
+          if (t === settled) (measured = true), settledShots.push(file);
           const m = (await page.evaluate(() => window.qcMeasure!())) as Measure;
-          writeJson(join(out, "frames", `${String(i + 1).padStart(3, "0")}-measure.json`), m);
-          // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full frame is centred.
-          const centred = (s.layout === "media" || s.layout === "scene") && s.visual!.kind !== "chapter";
-          issues.push(...qcLayout(m, [comp.width, comp.height], where, bgFor(r, s), centred));
+          if (t === settled) writeJson(join(out, "frames", `${String(i + 1).padStart(3, "0")}-measure.json`), m);
+          // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full
+          // frame is centred. Centring is judged once everything has landed.
+          const centred = t === settled && (s.layout === "media" || s.layout === "scene") && s.visual!.kind !== "chapter";
+          for (const issue of qcLayout(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s`, bgFor(r, s), centred)) {
+            const key = issue.message.replace(/ at [\d.]+s:/, ":");
+            if (!seen.has(key)) seen.add(key), issues.push(issue);
+          }
         }
       }
       // Every graphic must be measured; a silent skip is how a bad layout gets through.

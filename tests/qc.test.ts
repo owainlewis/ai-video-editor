@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contrast, type Measure, qcLayout, qcPlan, visualText } from "../engine/qc.ts";
+import { contrast, type Measure, qcLayout, qcPlan, saidTwice, visualText } from "../engine/qc.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 
 const size: [number, number] = [1920, 1080];
@@ -58,5 +58,27 @@ describe("qcPlan", () => {
   });
   it("reads every piece of text a visual shows", () => {
     expect(visualText({ kind: "compare", left: { label: "A", text: "B" }, right: { label: "C", text: "*D*", at: "x" } })).toEqual(["A", "B", "C", "D"]);
+  });
+});
+
+describe("qcLayout: clipped and touching letters", () => {
+  it("errors on text cut off by its container", () => {
+    expect(msgs(qcLayout(m([text("0", [600, 300, 140, 200], { clipped: true })]), size, "s"))).toMatch(/cut off/);
+  });
+  it("errors when big letters from separate pieces of text touch", () => {
+    expect(msgs(qcLayout(m([text("5", [600, 300, 140, 200], { size: 260 }), text("0", [740, 300, 140, 200], { size: 260 })]), size, "s"))).toMatch(/touch/);
+  });
+});
+
+describe("saidTwice", () => {
+  const take = "so before they open a pull request they run a local review then a second agent reviews the code with fresh context".split(" ");
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`);
+  const at = (texts: string[], start: number) => texts.map((text, i) => ({ text, start: start + i * 0.4, end: start + i * 0.4 + 0.3 }));
+  const words = [...at(take, 10), ...at(filler(150), 20), ...at(take, 100)];
+  it("flags a section said twice", () => {
+    expect(saidTwice(words)).toHaveLength(1);
+  });
+  it("is quiet when one take is removed", () => {
+    expect(saidTwice(words, [[9, 19]])).toEqual([]);
   });
 });

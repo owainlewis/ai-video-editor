@@ -81,7 +81,9 @@ const Digits: React.FC<{ value: number; size: number }> = ({ value, size }) => {
     // A column only turns as the one below it passes 9, like a real counter.
     const shown = k === 0 ? d : Math.floor(d) + Math.max(0, (value % 10 ** k) / 10 ** k - 0.9) * 10;
     out.push(
-      <span key={k} style={{ display: "inline-block", height: size, overflow: "hidden", verticalAlign: "top" }}>
+      // Each digit rolls inside its own window, as wide as a digit plus a little air: tight tracking
+      // made the windows narrower than the digits and clipped the zeros together (Owain, 2026-10-25).
+      <span key={k} style={{ display: "inline-block", width: "0.6em", textAlign: "center", letterSpacing: 0, height: size, overflow: "hidden", verticalAlign: "top" }}>
         <span style={{ display: "block", translate: `0 ${-(shown % 10) * size}px` }}>
           {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((x, i) => (
             <span key={i} style={{ display: "block", height: size, lineHeight: `${size}px` }}>
@@ -91,7 +93,7 @@ const Digits: React.FC<{ value: number; size: number }> = ({ value, size }) => {
         </span>
       </span>,
     );
-    if (k % 3 === 0 && k) out.push(<span key={`c${k}`}>,</span>);
+    if (k % 3 === 0 && k) out.push(<span key={`c${k}`} style={{ letterSpacing: 0, marginRight: "0.02em" }}>,</span>);
   }
   return <>{out}</>;
 };
@@ -114,7 +116,7 @@ const Odometer: React.FC<Props & { v: V<"odometer"> }> = ({ shot, time, v }) => 
     <AbsoluteFill>
       <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity: 1 - hit, filter: `blur(${hit * 10}px)`, scale: String(1 - hit * 0.06) }}>
         <In t={time} at={steps[0].at - 0.4}>
-          <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: size, letterSpacing: "-0.04em", color: c.ink, height: size, lineHeight: 1 }}>
+          <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: size, color: c.ink, height: size, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
             <Digits value={value} size={size} />
           </div>
         </In>

@@ -69,6 +69,29 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const inputs = files.flatMap(({ file, s }) => ["-itsoffset", s.start.toFixed(6), "-i", file]);
   const chain = files.map(({ s }, k) => `[v${k}][${k + 1}:v]overlay=eof_action=pass:enable='between(t,${s.start.toFixed(3)},${(s.end + 1 / fps).toFixed(3)})'[v${k + 1}]`);
   const graph = files.length ? `[0:v]null[v0];${chain.join(";")}` : "[0:v]null[v0]";
+  // Stretches cut out (a section said twice): the overlaid picture and the mix are cut at the same
+  // points and joined, in the same pass.
+  const remove = [...(r.remove ?? [])].sort((x, y) => x[0] - y[0]);
+  const total = probeDuration(original);
+  const keep: [number, number][] = [];
+  let at = 0;
+  for (const [a, b] of remove) {
+    if (a > at) keep.push([at, a]);
+    at = Math.max(at, b);
+  }
+  if (at < total) keep.push([at, total]);
+  const A = files.length + 1;
+  let vOut = `[v${files.length}]`, aOut = `${A}:a`, graphFull = graph;
+  if (remove.length) {
+    const k = keep.length;
+    graphFull += `;${vOut}split=${k}${keep.map((_, i) => `[vs${i}]`).join("")};[${A}:a]asplit=${k}${keep.map((_, i) => `[as${i}]`).join("")}`;
+    keep.forEach(([a, b], i) => {
+      graphFull += `;[vs${i}]trim=start=${a.toFixed(4)}:end=${b.toFixed(4)},setpts=PTS-STARTPTS[vk${i}];[as${i}]atrim=start=${a.toFixed(4)}:end=${b.toFixed(4)},asetpts=PTS-STARTPTS[ak${i}]`;
+    });
+    graphFull += `;${keep.map((_, i) => `[vk${i}][ak${i}]`).join("")}concat=n=${k}:v=1:a=1[vcut][acut]`;
+    vOut = "[vcut]";
+    aOut = "[acut]";
+  }
   const audio = join(dir, "build/mix.wav");
   const out = join(dir, "renders/final.mp4");
   mkdirSync(join(dir, "renders"), { recursive: true });
@@ -76,15 +99,15 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   let last = -1;
   await ffmpegProgress([
     "-i", original, ...inputs, "-i", audio,
-    "-filter_complex", graph, "-map", `[v${files.length}]`, "-map", `${files.length + 1}:a`,
+    "-filter_complex", graphFull, "-map", vOut, "-map", aOut,
     ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
     "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", out,
-  ], probeDuration(original), (f) => {
+  ], total, (f) => {
     const pct = Math.floor(f * 100);
     if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
   }, log);
   onStage("Checking the export");
-  const check = verifyExport(original, out, files);
+  const check = verifyExport(original, out, files, remove);
   writeJson(join(dir, "checks/export-check.json"), { at: new Date().toISOString(), ...check });
   for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
   return out;
@@ -97,16 +120,21 @@ const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.
 
 // After an export: the same length as the original, every graphic where it should be, and the
 // loudness, so a bad export is caught before Owain watches it (2026-10-25).
-export function verifyExport(original: string, out: string, files: { file: string; s: Section }[]) {
+export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = []) {
   const issues: Issue[] = [];
-  const [a, b] = [probeDuration(original), probeDuration(out)];
-  if (Math.abs(a - b) > 0.1) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; the original is ${a.toFixed(2)}s` });
+  const cutOut = remove.reduce((sum, [x, y]) => sum + (y - x), 0);
+  const [a, b] = [probeDuration(original) - cutOut, probeDuration(out)];
+  if (Math.abs(a - b) > 0.15) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; expected ${a.toFixed(2)}s (the original less ${cutOut.toFixed(2)}s removed)` });
+  // A time in the original, as it falls in the export after removals (null if it was removed).
+  const mapped = (t: number) => (remove.some(([x, y]) => t >= x && t < y) ? null : t - remove.filter(([, y]) => y <= t).reduce((sum, [x, y]) => sum + (y - x), 0));
   // Same size as the original: a 4K master exports 4K for YouTube (2026-10-25).
   const [ow, oh] = probeSize(original), [ew, eh] = probeSize(out);
   if (ow !== ew || oh !== eh) issues.push({ level: "error", message: `the export is ${ew}x${eh}; the original is ${ow}x${oh}` });
   for (const { file, s } of files) {
     const mid = (s.start + s.end) / 2;
-    const final = thumb(out, mid);
+    const there = mapped(mid);
+    if (there === null) continue;
+    const final = thumb(out, there);
     if (s.alpha) {
       // A title over the picture: the export must differ from the original there.
       if (differ(final, thumb(original, mid)) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });

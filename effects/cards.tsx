@@ -797,7 +797,7 @@ export const RingCard: React.FC<Props & { v: V<"ring"> }> = ({ shot, time, w, h,
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: F.label, fontWeight: 600, fontSize: g.num, letterSpacing: -g.num * 0.04, color: c.ink, fontVariantNumeric: "tabular-nums", filter: `blur(${(1 - prog(time, at, 0.5)) * M.blur}px)` }}>
           {shown}
-          <span style={{ fontFamily: F.serif, fontStyle: "italic", fontWeight: 400, fontSize: g.num * 0.55, color: c.accentText, marginLeft: g.num * 0.04 }}>%</span>
+          <span style={{ fontFamily: F.serif, fontStyle: "italic", fontWeight: 400, fontSize: g.num * 0.55, color: c.accentText, marginLeft: g.num * 0.08 }}>%</span>
         </div>
       </div>
       <div style={{ position: "absolute", left: 0, right: 0, top: g.top + g.d + 40, textAlign: "center", fontFamily: F.sans, fontWeight: 700, fontSize: g.label, lineHeight: 1.15, letterSpacing: -g.label * 0.02, color: c.ink, ...land(prog(time, at + 0.3), 16) }}>
@@ -890,7 +890,7 @@ export const WaffleCard: React.FC<Props & { v: V<"waffle"> }> = ({ shot, time, w
       <div style={{ position: "absolute", left: 0, top: g.top, width: g.wide ? w * 0.4 : w, textAlign: g.wide ? "left" : "center", ...land(enter, 16) }}>
         <div style={{ fontFamily: F.label, fontWeight: 600, fontSize: g.num, lineHeight: 1, letterSpacing: -g.num * 0.04, color: c.ink, fontVariantNumeric: "tabular-nums" }}>
           {Math.round(filled)}
-          <span style={{ fontFamily: F.serif, fontStyle: "italic", fontWeight: 400, fontSize: g.num * 0.55, color: c.accentText }}>%</span>
+          <span style={{ fontFamily: F.serif, fontStyle: "italic", fontWeight: 400, fontSize: g.num * 0.55, color: c.accentText, marginLeft: g.num * 0.08 }}>%</span>
         </div>
         <div style={{ marginTop: 30, fontFamily: F.sans, fontWeight: 700, fontSize: g.label, lineHeight: 1.15, letterSpacing: -g.label * 0.02, color: c.ink }}>
           <SoftAccented text={v.label} c={c} />

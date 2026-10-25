@@ -67,11 +67,44 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
   return issues;
 };
 
+// Said twice: a stretch that shares many short runs of words with one a few minutes before it,
+// usually a section recorded twice and both takes left in (Owain, 2026-10-25: "In the final output I
+// repeat the same section twice"). Retakes are paraphrased, so it counts 4-word runs in 30 s windows;
+// on the Code Review video the real repeat shared 17 and nothing else more than 9. A repeat with one
+// copy in a removed stretch is already handled.
+export const saidTwice = (words: Word[], remove: [number, number][] = []): Issue[] => {
+  const N = 4, WINDOW = 30, ENOUGH = 10;
+  const gone = (t: number) => remove.some(([a, b]) => t >= a && t < b);
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
+  const runs = new Map<string, number[]>();
+  for (let i = 0; i + N <= words.length; i++) {
+    if (gone(words[i].start)) continue;
+    const key = words.slice(i, i + N).map((w) => norm(w.text)).join(" ");
+    runs.set(key, [...(runs.get(key) ?? []), i]);
+  }
+  const shared = new Map<string, number>();
+  for (const at of runs.values())
+    for (const a of at)
+      for (const b of at) {
+        const dt = words[b].start - words[a].start;
+        if (dt > 20 && dt < 300) {
+          const key = `${Math.floor(words[b].start / WINDOW) * WINDOW} ${Math.floor(words[a].start / WINDOW) * WINDOW}`;
+          shared.set(key, (shared.get(key) ?? 0) + 1);
+        }
+      }
+  return [...shared.entries()]
+    .filter(([, n]) => n >= ENOUGH)
+    .map(([key, n]) => {
+      const [later, earlier] = key.split(" ").map(Number);
+      return { level: "warn" as const, message: `${later}-${later + WINDOW}s repeats ${earlier}-${earlier + WINDOW}s (${n} shared phrases): a section said twice? Remove one take (plan "remove")` };
+    });
+};
+
 // ---------- layout checks ----------
 
 export type Box = [number, number, number, number]; // left, top, width, height
 export type Measure = {
-  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string }[];
+  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string; clipped?: boolean }[];
   marks: { box: Box; opacity: number }[];
   words: { block: number; top: number; h: number }[];
   paint?: Box[];
@@ -114,6 +147,7 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     const [x, y, w, h] = t.box;
     if (x < W * SAFE.x || x + w > W * (1 - SAFE.x) || y < H * SAFE.top || y + h > H * (1 - SAFE.bottom))
       err(`"${short(t.text)}" is outside the safe area (${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)})`);
+    if (t.clipped) err(`"${short(t.text)}" is cut off by its container`);
     if (t.opacity >= 0.6 && t.size < 20) err(`"${short(t.text)}" is ${t.size.toFixed(0)}px, too small to read at 1080p`);
     else if (t.opacity >= 0.6 && t.size < 24) warn(`"${short(t.text)}" is ${t.size.toFixed(0)}px, small at 1080p`);
     // Faded items (a list's earlier rows, a preview) are faint on purpose; check what is meant to be read.
@@ -130,8 +164,11 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
       if (overlap(a.box, b.box)) err(`"${short(a.text)}" overlaps "${short(b.text)}"`);
       // Side by side on one line: they need a little air (the "x" jammed into the "12").
       const sameLine = Math.min(a.box[1] + a.box[3], b.box[1] + b.box[3]) - Math.max(a.box[1], b.box[1]) > 0.5 * Math.min(a.box[3], b.box[3]);
-      if (a.block !== b.block && sameLine && !overlap(a.box, b.box) && gap(a.box, b.box) < Math.max(4, 0.03 * Math.min(a.size, b.size)))
-        warn(`"${short(a.text)}" and "${short(b.text)}" sit very tight (${gap(a.box, b.box).toFixed(0)}px)`);
+      if (sameLine && !overlap(a.box, b.box) && gap(a.box, b.box) < Math.max(4, 0.03 * Math.min(a.size, b.size))) {
+        // Touching: separate pieces of text whose letters run into each other (the odometer's zeros).
+        if (gap(a.box, b.box) < 1 && Math.min(a.size, b.size) >= 40) err(`"${short(a.text)}" and "${short(b.text)}" touch`);
+        else if (a.block !== b.block) warn(`"${short(a.text)}" and "${short(b.text)}" sit very tight (${gap(a.box, b.box).toFixed(0)}px)`);
+      }
     }
   // A last line with a single word on it ("review" alone under a title).
   const blocks = new Map<number, number[]>();

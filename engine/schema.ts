@@ -283,6 +283,9 @@ export const Edit = z.object({
   theme: z.enum(["light", "dark"]).default("light"),
   // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
   leave: z.array(z.tuple([z.number(), z.number()])).default([]),
+  // YouTube: stretches of the original to cut out of the export, [start, end] in seconds (a section
+  // said twice). Each edge must fall between words, and no graphic may overlap one.
+  remove: z.array(z.tuple([z.number(), z.number()])).default([]),
   // Word captions. Reels have them; YouTube does not unless asked.
   captions: z.boolean().optional(),
   // react: the default for tool drops. The speaker stays on screen in a split while the
@@ -349,6 +352,8 @@ export type Resolved = {
   // Export only: draw the overlays alone on a transparent frame, for Final Cut (reel export).
   alpha?: boolean;
   face: { x: number; y: number; h: number };
+  // Stretches cut out of the export (see Edit.remove).
+  remove?: [number, number][];
   grade: { brightness: number; contrast: number; saturate: number };
   split: "half" | "inset";
   canvas: "reel" | "youtube";

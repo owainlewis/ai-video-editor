@@ -5,7 +5,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
 import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
-import { qcPlan } from "../engine/qc.ts";
+import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
@@ -38,6 +38,14 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, readJson<{ ranges: [number, number][] }>(scanned).ranges));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube) issues.push(...lintLeave(shots, plan.leave));
+  // A removed stretch must start and end between words, and must not cut through a graphic.
+  for (const [a, b] of plan.remove) {
+    const cut = words.find((w) => (w.start < a && w.end > a + 0.02) || (w.start < b - 0.02 && w.end > b));
+    if (cut) issues.push({ level: "error", message: `removing ${a}-${b}s cuts through the word "${cut.text}" (${cut.start.toFixed(2)}-${cut.end.toFixed(2)}s)` });
+    shots.forEach((s, i) => {
+      if (s.layout !== "full" && s.start < b && s.end > a) issues.push({ level: "error", message: `removing ${a}-${b}s cuts through shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")` });
+    });
+  }
   if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
 
   // Library shots ("broll:<id>") are copied into the project so the renderer can serve them.
@@ -103,6 +111,7 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
     videoSize: meta.size ?? [1080, 1920],
     audio: existsSync(join(dir, "build/mix.wav")) ? `${slug}/build/mix.wav` : null,
     face,
+    remove: plan.remove,
     grade: plan.grade,
     split: plan.split,
     canvas: plan.canvas,
@@ -120,6 +129,7 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   const cutsFile = join(dir, "build/cuts.json");
   const cuts = existsSync(cutsFile) ? readJson<{ cuts: number[] }>(cutsFile).cuts : [];
   issues.push(...qcPlan(resolved, words, plan.shots.map((s) => s.note), cuts));
+  if (youtube) issues.push(...saidTwice(words, plan.remove));
   writeJson(join(dir, "build/edit.resolved.json"), resolved);
   writeJson(join(dir, "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx });
   return { resolved, issues };

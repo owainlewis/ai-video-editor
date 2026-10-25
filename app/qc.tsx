@@ -74,7 +74,7 @@ function measure() {
   const W = root.getBoundingClientRect().width, H = root.getBoundingClientRect().height;
   // Everything drawn (cards, dots, lines, svg shapes), for balance: is the graphic as a whole centred?
   const paint: number[][] = [];
-  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string }[] = [];
+  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string; clipped: boolean }[] = [];
   const marks: { box: number[]; opacity: number }[] = [];
   const blocks = new Map<Element, number>();
   const words: { block: number; top: number; h: number }[] = [];
@@ -104,22 +104,40 @@ function measure() {
     // the real ink above and below the baseline.
     const cs = getComputedStyle(el);
     ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    ctx.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
     const text = nodes.map((n) => n.textContent).join("").trim();
     const mt = ctx.measureText(text);
     const ink = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
     for (const n of nodes) {
       const range = document.createRange();
       range.selectNodeContents(n);
-      for (const q of range.getClientRects()) {
-        if (!q.width) continue;
+      const rects = [...range.getClientRects()].filter((q) => q.width);
+      for (const q of rects) {
         const base = q.bottom - mt.fontBoundingBoxDescent * scale;
-        ink.l = Math.min(ink.l, q.left);
-        ink.r = Math.max(ink.r, q.right);
+        // On one line the canvas gives the letters' real left and right ink, which can reach past
+        // the layout box (tight tracking) or stop short of it (side bearings, a trailing space).
+        const one = rects.length === 1 && nodes.length === 1;
+        ink.l = Math.min(ink.l, one ? q.left - mt.actualBoundingBoxLeft * scale : q.left);
+        ink.r = Math.max(ink.r, one ? q.left + mt.actualBoundingBoxRight * scale : q.right);
         ink.t = Math.min(ink.t, base - mt.actualBoundingBoxAscent * scale);
         ink.b = Math.max(ink.b, base + mt.actualBoundingBoxDescent * scale);
       }
     }
     if (!isFinite(ink.l)) continue;
+    // Clipped: an ancestor that hides overflow cuts into the letters. Text it hides completely (a
+    // rolling digit strip's other digits) is simply not shown, so it is skipped.
+    let clipped = false, hidden = false;
+    for (let e = el.parentElement; e && e !== root; e = e.parentElement) {
+      const ov = getComputedStyle(e);
+      if (ov.overflowX === "visible" && ov.overflowY === "visible") continue;
+      const c = e.getBoundingClientRect();
+      const ix = Math.min(ink.r, c.right) - Math.max(ink.l, c.left), iy = Math.min(ink.b, c.bottom) - Math.max(ink.t, c.top);
+      if (ix <= 0 || iy <= 0) { hidden = true; break; }
+      const cutX = ov.overflowX !== "visible" && (ink.l < c.left - 1 || ink.r > c.right + 1);
+      const cutY = ov.overflowY !== "visible" && (ink.t < c.top - 1 || ink.b > c.bottom + 1);
+      if (cutX || cutY) clipped = true;
+    }
+    if (hidden) continue;
     const block = blockOf(el);
     if (!blocks.has(block)) blocks.set(block, blocks.size);
     const id = blocks.get(block)!;
@@ -129,7 +147,7 @@ function measure() {
       const c = getComputedStyle(e).backgroundColor;
       if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)" && !e.closest('[data-qc="canvas"]')) under = c;
     }
-    texts.push({ text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: getComputedStyle(el).color, block: id, under });
+    texts.push({ text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: getComputedStyle(el).color, block: id, under, clipped });
     // Each word's line, to find a last line with a single word on it.
     for (const n of nodes) {
       const s = n.textContent!;
