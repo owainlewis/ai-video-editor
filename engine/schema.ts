@@ -51,7 +51,9 @@ export const Visual = z.discriminatedUnion("kind", [
     left: z.object({ label: z.string(), text: z.string() }),
     right: z.object({ label: z.string(), text: z.string(), at: Anchor.optional() }),
   }),
-  z.object({ kind: z.literal("stat"), value: z.string(), label: z.string() }),
+  // `hit`: lands complete on the cut (no count-up, label already there), for a short full-frame
+  // hero number. A count-up flashes numbers that were never said.
+  z.object({ kind: z.literal("stat"), value: z.string(), label: z.string(), hit: z.boolean().optional() }),
   // A chat input (e.g. Claude) where a prompt types itself out on `at`.
   z.object({ kind: z.literal("prompt"), app: z.string().default("Claude"), text: z.string(), at: Anchor.optional() }),
   // The end card: "Comment KEYWORD" and what they get. Only when there is a real resource to send.
@@ -87,7 +89,8 @@ export const Visual = z.discriminatedUnion("kind", [
   // A lower third over the speaker's picture: a name or point in serif, a short line in sans below it.
   z.object({ kind: z.literal("lower"), title: z.string(), sub: z.string().optional() }),
   // A chapter card: a large number lands over a soft glow, the chapter's name tracked out below it.
-  z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string() }),
+  // `hit`: a full-frame card that lands complete on the cut, set like a hero stat (YouTube).
+  z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string(), hit: z.boolean().optional() }),
   // A diagram of how parts talk: cards joined by lines that draw on `at`. `chip` rides along an edge
   // (what is passed, e.g. "plan.md"). Two or three nodes sit in a row; with `root`, the first node
   // sits on top and the rest branch below it. A diagram, never a stand-in for real UI.
@@ -217,7 +220,8 @@ export const Layout = z.enum([
   "over", // the speaker's picture as cut, with a quiet overlay on it (a lower third or a cinematic title)
 ]);
 
-export const SfxKind = z.enum(["whoosh", "pop", "impact", "thud", "blip", "chime", "key"]);
+// "riser" builds into the shot: it ends on the cut instead of starting on it.
+export const SfxKind = z.enum(["whoosh", "pop", "impact", "thud", "blip", "chime", "key", "riser"]);
 
 export const Shot = z.object({
   at: Anchor,
@@ -297,7 +301,7 @@ export type ResolvedShot = {
   enter?: { from: "tile" | "card" | "input" | "rect"; index: number; rect?: [number, number, number, number] };
 };
 export type Chunk = { words: { text: string; start: number; end: number; accent: boolean }[]; start: number; end: number };
-export type SfxEvent = { kind: z.infer<typeof SfxKind>; t: number; gain?: number };
+export type SfxEvent = { kind: z.infer<typeof SfxKind>; t: number; gain?: number; dur?: number };
 export type Resolved = {
   slug: string;
   title: string;

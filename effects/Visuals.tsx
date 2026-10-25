@@ -378,7 +378,7 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   const m = v.value.match(/^([^\d]*)([\d,.]+)(.*)$/);
   const p = prog(time, shot.start, 0.9);
   let shown = v.value;
-  if (m) {
+  if (m && !v.hit) {
     const target = parseFloat(m[2].replace(/,/g, ""));
     const decimals = (m[2].split(".")[1] || "").length;
     shown = m[1] + (target * p).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + m[3];
@@ -390,8 +390,8 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 30 }}>
       <div style={{ fontFamily: t.serif, fontSize: Math.min(size, (w * 0.95) / (v.value.length * 0.55)), whiteSpace: "nowrap", lineHeight: 0.9, letterSpacing: -8, color: c.ink, fontVariantNumeric: "tabular-nums" }}>{shown}</div>
-      <div style={{ width: 160, height: 3, background: c.ink, scale: `${prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
-      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 52, letterSpacing: -1, color: c.muted, opacity: prog(time, shot.start + 0.2) }}>
+      <div style={{ width: 160, height: 3, background: c.ink, scale: `${v.hit ? 1 : prog(time, shot.start + 0.3, 0.6)} 1`, transformOrigin: "left" }} />
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 52, letterSpacing: -1, color: c.muted, opacity: v.hit ? 1 : prog(time, shot.start + 0.2) }}>
         <Accented text={v.label} />
       </div>
     </div>
@@ -477,7 +477,8 @@ const CtaVisual: React.FC<Props & { v: V<"cta"> }> = ({ slug, shot, time, w, h, 
 };
 
 // A chapter card: the number lands out of a blur over a soft glow, its name tracked out below.
-const ChapterVisual: React.FC<Props & { v: V<"chapter"> }> = (p) => (look.chapter === "stack" ? <ChapterStack {...p} /> : <ChapterGlow {...p} />);
+const ChapterVisual: React.FC<Props & { v: V<"chapter"> }> = (p) =>
+  p.v.hit ? <StatVisual {...p} v={{ kind: "stat", value: p.v.number, label: p.v.label, hit: true }} /> : look.chapter === "stack" ? <ChapterStack {...p} /> : <ChapterGlow {...p} />;
 
 // Focus stack (Ivory): a huge numeral held soft and blurred behind one sharp word, both drifting
 // slowly at different speeds, so the frame has depth without any light effects.

@@ -189,7 +189,9 @@ export const estimateWords = (script: string, wpm = 165): Word[] => {
 export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
   const ev: SfxEvent[] = [];
   for (const s of shots) {
-    if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
+    // A riser ends on the cut (the mixer lines up a real riser's end with t + dur).
+    if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.6 });
+    else if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
     if (s.keep) continue;
     const v = s.visual;
     if (!v?.times) continue;
@@ -234,6 +236,9 @@ export const cameraRanges = (dist: number[], rate: number, threshold = 20, minRu
 export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
   shots.flatMap((s, i) => {
     if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
+    // A full-frame chapter card replaces the picture for a moment rather than sitting over it, so
+    // it may cut in over a screen recording (Owain, 2026-10-25).
+    if (s.layout === "media" && s.visual.kind === "chapter") return [];
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");
