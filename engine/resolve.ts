@@ -257,12 +257,21 @@ export const cameraRanges = (dist: number[], rate: number, threshold = 20, minRu
 
 // Graphics go on the talking head only, never over b-roll or a screen recording (Owain,
 // 2026-10-24). Every shot that adds a visual must sit inside an on-camera stretch.
+// Stretches Owain wants left alone (demos): nothing but his picture inside them.
+export const lintLeave = (shots: ResolvedShot[], leave: [number, number][]): Issue[] =>
+  shots.flatMap((s, i) =>
+    s.layout !== "full" && leave.some(([a, b]) => s.start < b && s.end > a)
+      ? [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): inside a stretch to leave alone (a demo)` }]
+      : [],
+  );
+
 export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
   shots.flatMap((s, i) => {
     if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
-    // A full-frame chapter or quote card replaces the picture for a moment rather than sitting over
-    // it, so it may cut in over a screen recording (Owain, 2026-10-25).
-    if (s.layout === "media" && (s.visual.kind === "chapter" || s.visual.kind === "quote")) return [];
+    // A full-frame card replaces the picture for a moment rather than sitting over it, so it may cut
+    // in over a screen recording (Owain, 2026-10-25: the article sections "might benefit from
+    // something"). Demos are fenced off with the plan's `leave` instead (lintLeave).
+    if (s.layout === "media") return [];
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");

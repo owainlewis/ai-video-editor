@@ -51,6 +51,8 @@ export const Visual = z.discriminatedUnion("kind", [
     kind: z.literal("compare"),
     left: z.object({ label: z.string(), text: z.string() }),
     right: z.object({ label: z.string(), text: z.string(), at: Anchor.optional() }),
+    // `even`: two sides of one idea, neither wrong: no strike-through, both set the same.
+    even: z.boolean().optional(),
   }),
   // `hit`: lands complete on the cut (no count-up, label already there), for a short full-frame
   // hero number. A count-up flashes numbers that were never said.
@@ -261,6 +263,8 @@ export const Edit = z.object({
   style: z.string().default("ivory"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
   theme: z.enum(["light", "dark"]).default("light"),
+  // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
+  leave: z.array(z.tuple([z.number(), z.number()])).default([]),
   // Word captions. Reels have them; YouTube does not unless asked.
   captions: z.boolean().optional(),
   // react: the default for tool drops. The speaker stays on screen in a split while the

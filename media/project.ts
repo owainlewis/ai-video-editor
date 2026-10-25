@@ -4,7 +4,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
@@ -35,6 +35,7 @@ export function resolveProject(projects: string, slug: string): { resolved?: Res
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  if (youtube) issues.push(...lintLeave(shots, plan.leave));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
 

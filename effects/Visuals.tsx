@@ -358,7 +358,9 @@ const StepsVisual: React.FC<Props & { v: V<"steps"> }> = ({ shot, time, w, h, v 
   );
 };
 
-// Old way against new way. When the new way lands, the old one is struck through.
+// Old way against new way. When the new way lands, the old one is struck through. With `even`, two
+// sides of one idea, neither wrong (documentation vs database; humans vs AI): both set alike in
+// Helvetica, no strike (Owain, 2026-10-25).
 const CompareVisual: React.FC<Props & { v: V<"compare"> }> = ({ shot, time, w, h, v }) => {
   const c = surface(shot.tone);
   const rightAt = v.times?.[0] ?? shot.start + 0.6;
@@ -367,9 +369,9 @@ const CompareVisual: React.FC<Props & { v: V<"compare"> }> = ({ shot, time, w, h
   const card = (label: string, text: string, p: number, right: boolean) => (
     <div style={{ flex: 1, height: h * 0.8, borderRadius: 28, padding: 44, background: c.card, border: `1.5px solid ${right ? c.ink : c.line}`, boxShadow: right ? c.shadow : "none", display: "flex", flexDirection: "column", justifyContent: "space-between", opacity: p, translate: `0 ${(1 - p) * 50}px` }}>
       <div style={{ fontFamily: t.sans, fontWeight: 500, fontSize: 28, letterSpacing: 5, textTransform: "uppercase", color: c.muted }}>{label}</div>
-      <div style={{ position: "relative", fontFamily: right ? t.serif : t.sans, fontStyle: right ? "italic" : "normal", fontWeight: right ? 400 : 700, fontSize: right ? 84 : 68, lineHeight: 1.02, letterSpacing: right ? -1 : -1.5, color: right ? c.ink : c.muted }}>
+      <div style={{ position: "relative", fontFamily: right && !v.even ? t.serif : t.sans, fontStyle: right && !v.even ? "italic" : "normal", fontWeight: right && !v.even ? 400 : 700, fontSize: right && !v.even ? 84 : 68, lineHeight: 1.02, letterSpacing: right && !v.even ? -1 : -1.5, color: right || v.even ? c.ink : c.muted }}>
         {text}
-        {!right && <div style={{ position: "absolute", left: -6, right: -6, top: "52%", height: 5, background: c.ink, scale: `${pr} 1`, transformOrigin: "left" }} />}
+        {!right && !v.even && <div style={{ position: "absolute", left: -6, right: -6, top: "52%", height: 5, background: c.ink, scale: `${pr} 1`, transformOrigin: "left" }} />}
       </div>
     </div>
   );
