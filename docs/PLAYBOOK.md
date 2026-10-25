@@ -119,3 +119,5 @@ Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare se
 8. Smaller: selection-box caption accent, hand-drawn red circle on a key number, "no API" stamp, magnifier loupe over a UI row, neon line draw-ons, grid cascade lighting outward from a centre, blur transitions between scenes, curved-screen warp on terminals, tilted poster wall.
 
 **Watch out.** The Agency Agents reel's badges say 282 and 163k while the voice says 200 and 160k. Our rule holds: the number on screen matches what is said, or the note says why.
+
+**Built (2026-10-25).** All seven are in `effects/custom/moves.tsx` as `statbadge`, `stopwatch`, `timeline`, `hub`, `phases`, `verifier`, `igcta`, shown one per section in `projects/moves-lab`. Use them from a plan as `{ "kind": "custom", "name": "<name>", "at": [...], "props": {...} }`; the props and beats are documented at the top of the file.

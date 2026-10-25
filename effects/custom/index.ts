@@ -6,9 +6,17 @@
 // it is drawn in (`panel` true inside a split's panel, where the paper shows and the speaker stays).
 import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
+import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./moves";
 import { OrgChart } from "./orgchart";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   orgchart: OrgChart,
+  statbadge: StatBadge,
+  stopwatch: Stopwatch,
+  timeline: Timeline,
+  hub: Hub,
+  phases: Phases,
+  verifier: Verifier,
+  igcta: IgCta,
 };

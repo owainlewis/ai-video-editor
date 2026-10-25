@@ -78,7 +78,7 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
 };
 
 // ---------- odometer: the digits roll to each number as it is said; a result punches in ----------
-const Digits: React.FC<{ value: number; size: number }> = ({ value, size }) => {
+export const Digits: React.FC<{ value: number; size: number }> = ({ value, size }) => {
   const n = Math.max(1, String(Math.floor(value)).length);
   const out: React.ReactNode[] = [];
   for (let k = n - 1; k >= 0; k--) {
