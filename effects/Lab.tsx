@@ -295,9 +295,103 @@ const ReviewMd: React.FC<{ t: number; v: LabProps }> = ({ t, v }) => (
   <ReviewMdPage t={t} at={v.t.window} marks={new Map([[4, v.t.a], [7, v.t.b], [12, v.t.c]])} />
 );
 
+// ---------- 8. spawn: a coordinator spawns subagents, work flows along the edges, they fold back ----------
+// From the frame-by-frame study of the subagents video (2026-10-26, docs/PLAYBOOK.md): children
+// come out of their parent and return into it, something always travels along live edges, and a
+// result rides an edge home and makes its node pulse. Our look and our two speeds.
+const bez = (a: number[], b: number[], k: number) => {
+  // A vertical S-curve from a (parent's foot) to b (child's head).
+  const c1 = [a[0], lerp(a[1], b[1], 0.55)], c2 = [b[0], lerp(a[1], b[1], 0.45)];
+  const u = 1 - k;
+  return [u * u * u * a[0] + 3 * u * u * k * c1[0] + 3 * u * k * k * c2[0] + k * k * k * b[0], u * u * u * a[1] + 3 * u * u * k * c1[1] + 3 * u * k * k * c2[1] + k * k * k * b[1]];
+};
+const bezPath = (a: number[], b: number[]) => `M ${a[0]} ${a[1]} C ${a[0]} ${lerp(a[1], b[1], 0.55)}, ${b[0]} ${lerp(a[1], b[1], 0.45)}, ${b[0]} ${b[1]}`;
+const typedText = (s: string, t: number, at: number) => s.slice(0, Math.max(0, Math.floor((t - at) * 30)));
+const pulse = (t: number, at: number) => (t >= at && t < at + 0.26 ? Math.sin(((t - at) / 0.26) * Math.PI) : 0);
+
+const Spawn: React.FC<{ t: number; v: LabProps }> = ({ t }) => {
+  const P = [960, 300];
+  const names = ["Research", "Build", "Review"];
+  const slots = [[500, 720], [960, 720], [1420, 720]];
+  const T = { parent: 0.3, spawn: 1.0, flow: 2.0, tasks: 3.0, tag: 5.0, fold: 7.6, end: 10 };
+  const foldK = (i: number) => p(t, T.fold + i * STAG, MOVE * 0.85, inOut);
+  const spawnK = (i: number) => p(t, T.spawn + i * STAG, MOVE, out);
+  const pos = (i: number) => {
+    const k = spawnK(i) * (1 - foldK(i));
+    return [lerp(P[0], slots[i][0], k), lerp(P[1], slots[i][1], k)];
+  };
+  const foot = [P[0], P[1] + 48];
+  const head = (i: number) => [pos(i)[0], pos(i)[1] - 58];
+  const done = p(t, T.fold + 2 * STAG + MOVE * 0.85, MOVE, inOut);
+  const tagAt = T.tag, tagK = p(t, tagAt, 0.73, inOut);
+  const parentPulse = pulse(t, tagAt + 0.73) + 0.6 * pulse(t, T.fold + 2 * STAG + MOVE * 0.85);
+  const pk = p(t, T.parent, FAST);
+  const flowOn = p(t, T.flow, 0.4) * (1 - p(t, T.fold - 0.3, 0.3));
+  return (
+    <AbsoluteFill>
+      <Stage t={t} />
+      <AbsoluteFill style={{ scale: "1.15", transformOrigin: "50% 48%" }}>
+      <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
+        {names.map((_, i) => {
+          const live = spawnK(i) * (1 - foldK(i));
+          if (live <= 0.01) return null;
+          return <path key={i} d={bezPath(foot, head(i))} fill="none" stroke="rgba(247,243,236,0.28)" strokeWidth={2.5} />;
+        })}
+        {/* ambient flow: two dots per edge, parent to child, about 1.5 s per trip */}
+        {flowOn > 0 &&
+          names.flatMap((_, i) =>
+            [0, 0.5].map((off) => {
+              const k = (((t - T.flow) / 1.5 + off + i * 0.17) % 1 + 1) % 1;
+              const [x, y] = bez(foot, head(i), k);
+              const fade = Math.min(1, k * 6, (1 - k) * 6);
+              return <circle key={`${i}-${off}`} cx={x} cy={y} r={5} fill={C.sage} opacity={flowOn * fade * 0.85} />;
+            }),
+          )}
+      </svg>
+      {/* tasks ride out to each child; the child pulses when its task lands */}
+      {names.map((_, i) => {
+        const at = T.tasks + i * 0.15;
+        const k = p(t, at, 0.73, inOut);
+        if (t < at || k >= 1) return null;
+        const [x, y] = bez(foot, head(i), k);
+        return (
+          <div key={`task${i}`} style={{ position: "absolute", left: x, top: y, translate: "-50% -50%", padding: "6px 14px", borderRadius: 8, background: "#2A2927", border: "1px solid rgba(247,243,236,0.22)", fontFamily: SANS, fontWeight: 600, fontSize: 22, color: C.ink, whiteSpace: "nowrap" }}>task</div>
+        );
+      })}
+      {/* a finding rides the Review edge home */}
+      {t >= tagAt && tagK < 1 && (() => {
+        const [x, y] = bez(foot, head(2), 1 - tagK);
+        return <div style={{ position: "absolute", left: x, top: y, translate: "-50% -50%", padding: "8px 16px", borderRadius: 20, background: C.sage, fontFamily: SANS, fontWeight: 700, fontSize: 24, color: "#1B1B1A", whiteSpace: "nowrap", boxShadow: "0 10px 30px rgba(0,0,0,0.4)" }}>finding</div>;
+      })()}
+      {/* children: spawn out of the parent, fold back into it */}
+      {names.map((name, i) => {
+        const [x, y] = pos(i);
+        const s = spawnK(i) * (1 - foldK(i));
+        if (s <= 0.01) return null;
+        const landed = pulse(t, T.tasks + i * 0.15 + 0.73);
+        const labelAt = T.spawn + MOVE + i * STAG;
+        return (
+          <div key={name} style={{ position: "absolute", left: x, top: y, translate: "-50% -50%", width: 300, height: 116, borderRadius: 18, background: "#232220", border: `1.5px solid ${landed > 0.1 ? C.sage : "rgba(247,243,236,0.16)"}`, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 6, opacity: Math.min(1, s * 2), scale: String((0.55 + 0.45 * s) * (1 + 0.1 * landed)), boxShadow: "0 24px 60px rgba(0,0,0,0.45)" }}>
+            <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: 36, letterSpacing: "-0.01em", color: C.ink, minHeight: 40 }}>{typedText(name, t, labelAt)}</div>
+            <div style={{ fontFamily: '"SF Mono", Menlo, monospace', fontSize: 18, color: C.muted, opacity: p(t, labelAt + 0.2, FAST) }}>subagent</div>
+          </div>
+        );
+      })}
+      {/* parent: arrives, receives the finding, grows as the children fold in, its label rewrites */}
+      <div style={{ position: "absolute", left: P[0], top: P[1], translate: "-50% -50%", minWidth: 330, textAlign: "center", padding: "26px 44px", borderRadius: 22, background: "#F2EFEA", color: "#1B1B1A", fontFamily: SANS, fontWeight: 800, fontSize: 40, letterSpacing: "-0.02em", whiteSpace: "nowrap", opacity: pk, filter: `blur(${(1 - pk) * 8}px)`, scale: String((0.9 + 0.1 * pk) * (1 + 0.15 * done) * (1 + 0.1 * parentPulse)), boxShadow: `0 0 0 ${8 * parentPulse}px rgba(183,205,191,0.45), 0 30px 80px rgba(0,0,0,0.5)` }}>
+        {done > 0.5 ? typedText("3 results in", t, T.fold + 2 * STAG + MOVE * 0.85 + 0.15) || "Coordinator" : "Coordinator"}
+      </div>
+      </AbsoluteFill>
+      <In t={t} at={0.1} style={{ position: "absolute", left: 96, top: 72 }}>
+        <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 24, letterSpacing: 4, color: C.muted }}>MOTION LAB · SPAWN, FLOW, TAG, FOLD</div>
+      </In>
+    </AbsoluteFill>
+  );
+};
+
 export const Lab: React.FC<LabProps> = (v) => {
   const t = v.from + useCurrentFrame() / 30;
-  const Idea = { chapter: Chapter, stage: StageCard, counter: Counter, lift: Lift, kinetic: Kinetic, flow: Flow, reviewmd: ReviewMd }[v.idea] ?? Chapter;
+  const Idea = { chapter: Chapter, stage: StageCard, counter: Counter, lift: Lift, kinetic: Kinetic, flow: Flow, reviewmd: ReviewMd, spawn: Spawn }[v.idea] ?? Chapter;
   return (
     <AbsoluteFill style={{ background: C.bg }}>
       <Idea t={t} v={v} />
