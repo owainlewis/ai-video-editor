@@ -63,7 +63,7 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
     box = { ...box, left: box.left + (box.width - width) / 2, width };
   }
   const cover = Math.max(box.width / sw, box.height / sh);
-  const base = Math.max(cover, faceScale);
+  const base = Math.max(cover, faceScale) * (shot.zoom ?? 1);
   // Every shot moves: a slow push-in across the shot.
   const progress = cameraProgress(shot.start, shot.end, time);
   const scale = base * (1 + 0.035 * progress);

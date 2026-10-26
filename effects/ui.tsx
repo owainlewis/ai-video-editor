@@ -460,7 +460,13 @@ const Custom: React.FC<Props & { v: V<"custom"> }> = ({ shot, time, v }) => {
   const box = useBox();
   const C = CUSTOM[v.name];
   if (!C) throw new Error(`no custom graphic "${v.name}" in effects/custom/index.ts`);
-  return <C shot={shot} time={time} props={v.props} times={v.times ?? []} {...box} />;
+  // A slow push across the shot, so a bespoke graphic never sits still.
+  const push = 1 + 0.06 * Math.min(1, Math.max(0, (time - shot.start) / Math.max(0.5, shot.end - shot.start)));
+  return (
+    <AbsoluteFill style={{ scale: String(push) }}>
+      <C shot={shot} time={time} props={v.props} times={v.times ?? []} {...box} />
+    </AbsoluteFill>
+  );
 };
 
 export const UI_KINDS = new Set(["custom", "claudecode", "search", "tiers", "compose", "divisions", "chips", "runs"]);

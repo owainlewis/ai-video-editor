@@ -331,6 +331,10 @@ export const Shot = z.object({
   shift: z.number().min(-2).max(2).optional(),
   // Sound on the cut into this shot. Most cuts should have none.
   sfx: SfxKind.optional(),
+  // A jump zoom on the speaker for this shot (1 = the layout's framing). Alternating 1 and ~1.18 on
+  // successive shots gives a reel a cut on every beat without changing the layout (Owain, 2026-10-26:
+  // "a bit dull and low energy"). Reels only: on YouTube the footage is never re-rendered.
+  zoom: z.number().min(1).max(1.6).optional(),
   // Starts a new chapter header from this shot on (false hides it).
   header: z.union([z.string(), z.literal(false)]).optional(),
   // Keep the previous shot's visual on screen and running, so a scene builds across shots
@@ -405,6 +409,7 @@ export type ResolvedShot = {
   layout: z.infer<typeof Layout>;
   visual?: ResolvedVisual;
   sfx?: z.infer<typeof SfxKind>;
+  zoom?: number;
   anchor: string;
   keep?: boolean;
   tone?: "light" | "dark";

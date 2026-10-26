@@ -18,27 +18,28 @@ const jitter = (i: number) => {
 
 // props: { cols?, rows? }   times: [the field starts filling]
 export const Swarm: React.FC<CustomProps> = ({ shot, time, props, times, width, height, panel }) => {
-  const cols = Number(props.cols ?? 13), rows = Number(props.rows ?? 8);
+  const paper = panel && shot.tone !== "dark";
+  const cols = Number(props.cols ?? 8), rows = Number(props.rows ?? 5);
   const at = times[0] ?? shot.start;
   const gap = Math.min((width * 0.92) / cols, (height * 0.86) / rows);
   const cell = gap * 0.78;
   const ox = (width - gap * cols) / 2, oy = (height - gap * rows) / 2;
   const cx = (cols - 1) / 2, cy = (rows - 1) / 2;
   const maxD = Math.hypot(cx, cy);
-  const edge = panel ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.14)";
+  const edge = paper ? "rgba(0,0,0,0.14)" : "rgba(183,205,191,0.32)";
   return (
     <AbsoluteFill>
       {Array.from({ length: cols * rows }, (_, i) => {
         const c = i % cols, r = Math.floor(i / cols);
         const d = Math.hypot(c - cx, r - cy) / maxD;
-        const t0 = at + d * 1.1 + jitter(i) * 0.25;
+        const t0 = at + d * 0.7 + jitter(i) * 0.15;
         const box = prog(time, t0 - 0.25, 0.25, easeOut);
         const agent = prog(time, t0, 0.22, easeOut);
         // A soft ripple keeps passing through the filled field.
         const ripple = 0.5 + 0.5 * Math.sin((time - at) * 3 - d * 6);
         return (
           <div key={i} style={{ position: "absolute", left: ox + c * gap + (gap - cell) / 2, top: oy + r * gap + (gap - cell) / 2, width: cell, height: cell, borderRadius: cell * 0.22, border: `1.5px solid ${edge}`, opacity: box, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: cell * 0.42, height: cell * 0.42, borderRadius: cell, background: agent > 0.5 ? PINE : SAGE, opacity: agent * (0.75 + 0.25 * ripple), scale: String(0.4 + 0.6 * agent) }} />
+            <div style={{ width: cell * 0.42, height: cell * 0.42, borderRadius: cell, background: agent > 0.5 ? (paper ? PINE : "#E3EEE6") : SAGE, boxShadow: `0 0 ${cell * 0.35}px rgba(183,205,191,${0.6 * agent})`, opacity: agent * (0.75 + 0.25 * ripple), scale: String(0.4 + 0.6 * agent) }} />
           </div>
         );
       })}
@@ -49,12 +50,13 @@ export const Swarm: React.FC<CustomProps> = ({ shot, time, props, times, width, 
 // props: { left?: "Kubernetes", leftSub?: "containers", right?: "AX", rightSub?: "agents", n?: 4 }
 // times: [left column lands, containers become agents]
 export const Analogy: React.FC<CustomProps> = ({ shot, time, props, times, width, height, panel }) => {
+  const paper = panel && shot.tone !== "dark";
   const n = Number(props.n ?? 4);
   const a = times[0] ?? shot.start + 0.2;
   const b = times[1] ?? a + 1.2;
   const fs = Math.round(width / 15);
-  const ink = panel ? "#1F1F1D" : "#F2EFEA";
-  const muted = panel ? "#6E6B65" : "#A3A19C";
+  const ink = paper ? "#1F1F1D" : "#F2EFEA";
+  const muted = paper ? "#6E6B65" : "#A3A19C";
   const L = width * 0.27, R = width * 0.73;
   const top = height * 0.4, step = (height * 0.52) / n;
   const head = (x: number, title: string, sub: string, k: number) => (
@@ -76,7 +78,7 @@ export const Analogy: React.FC<CustomProps> = ({ shot, time, props, times, width
         const y = top + step * i;
         const w = lerp(fs * 4.2, fs * 1.4, k), h = lerp(fs * 1.4, fs * 1.4, k);
         return (
-          <div key={i} style={{ position: "absolute", left: lerp(L, R, k), top: y, translate: "-50% -50%", width: w, height: h, borderRadius: lerp(fs * 0.25, fs, k), border: `2px solid ${k > 0.5 ? PINE : panel ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.4)"}`, background: k > 0.5 ? SAGE : "transparent", opacity: appear, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"SF Mono", Menlo, monospace', fontSize: fs * 0.55, color: muted }}>
+          <div key={i} style={{ position: "absolute", left: lerp(L, R, k), top: y, translate: "-50% -50%", width: w, height: h, borderRadius: lerp(fs * 0.25, fs, k), border: `2px solid ${k > 0.5 ? PINE : paper ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.4)"}`, background: k > 0.5 ? SAGE : "transparent", opacity: appear, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"SF Mono", Menlo, monospace', fontSize: fs * 0.55, color: muted }}>
             {k < 0.3 ? "container" : ""}
           </div>
         );
