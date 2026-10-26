@@ -56,7 +56,7 @@ export const Migrate: React.FC<CustomProps> = ({ shot, time, props, times, width
       {/* laptop */}
       <div style={{ position: "absolute", left: lx, top: ly, width: lw, height: lh, borderRadius: fs * 0.5, background: paper ? "#1A1918" : "#0F0F0E", border: `${fs * 0.25}px solid ${warm > 0.5 ? "#D97757" : paper ? "#2A2927" : "#5E5B56"}`, opacity: lerp(1, 0.4, left), boxShadow: `0 24px 60px rgba(0,0,0,0.25), 0 0 0 ${8 * warm}px rgba(217,119,87,0.3)` }} />
       <div style={{ position: "absolute", left: lx - lw * 0.08, top: ly + lh, width: lw * 1.16, height: fs * 0.55, borderRadius: `0 0 ${fs}px ${fs}px`, background: paper ? "#2A2927" : "#5E5B56", opacity: lerp(1, 0.4, left) }} />
-      <div style={{ position: "absolute", left: lx, width: lw, top: ly + lh + fs * 1.1, textAlign: "center", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: lerp(1, 0, left) > 0.5 ? ink : muted, opacity: lerp(1, 0.6, left) }}>{String(props.laptop ?? "Your laptop")}</div>
+      <div style={{ position: "absolute", left: lx, width: lw, top: ly + lh + fs * 1.1, textAlign: "center", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: lerp(1, 0, left) > 0.5 ? ink : muted, opacity: blind ? 1 - fog : lerp(1, 0.6, left) }}>{String(props.laptop ?? "Your laptop")}</div>
 
       {/* cluster */}
       <div style={{ position: "absolute", left: cx, top: cy, width: cw, height: chh, borderRadius: fs * 0.7, border: `2px dashed ${paper ? edge : "rgba(183,205,191,0.5)"}`, background: paper ? "rgba(255,255,255,0.55)" : "rgba(183,205,191,0.08)", opacity: clusterIn, scale: String(0.94 + 0.06 * clusterIn) }}>

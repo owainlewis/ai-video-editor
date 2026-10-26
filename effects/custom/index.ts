@@ -10,11 +10,13 @@ import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./
 import { Analogy, Swarm } from "./ax";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
+import { Skills } from "./skills";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   orgchart: OrgChart,
   migrate: Migrate,
+  skills: Skills,
   swarm: Swarm,
   analogy: Analogy,
   statbadge: StatBadge,
