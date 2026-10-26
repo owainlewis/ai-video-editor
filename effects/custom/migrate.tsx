@@ -1,8 +1,10 @@
 // "AX moves them onto shared infrastructure. Every agent runs isolated, in its own sandbox."
 // Agents sit on a laptop; on their word they arc across into a shared cluster, then each gets its
 // own sandbox drawn round it. Built for the Google AX reel (from Owain's post on the shift).
-// props: { agents?: number, laptop?: string, cluster?: string, sandbox?: string, mode?: "laptop" }
-// times: [agents move, cluster label lands, sandboxes draw]. mode "laptop" shows only the laptop.
+// props: { agents?: number, laptop?: string, cluster?: string, sandbox?: string, mode?: "laptop" | "blind", tags?: string[] }
+// times: [agents move, cluster label lands, sandboxes draw]. mode "laptop" shows only the laptop, its
+// edge warming on times[0] (a risk); mode "blind" fogs the screen on times[0] and pops one question
+// tag per later time (what you can't see).
 import React from "react";
 import { AbsoluteFill } from "remotion";
 import { easeInOut, lerp, prog } from "../motion";
@@ -14,7 +16,11 @@ const SAGE = "#B7CDBF";
 
 export const Migrate: React.FC<CustomProps> = ({ shot, time, props, times, width, height, panel }) => {
   const n = Number(props.agents ?? 6);
-  const laptopOnly = props.mode === "laptop";
+  const laptopOnly = props.mode === "laptop" || props.mode === "blind";
+  const blind = props.mode === "blind";
+  const tags = (Array.isArray(props.tags) ? props.tags : []) as string[];
+  const warm = props.mode === "laptop" ? prog(time, times[0] ?? Infinity, 0.3, easeInOut) : 0;
+  const fog = blind ? prog(time, times[0] ?? Infinity, 0.4, easeInOut) : 0;
   const moveAt = laptopOnly ? Infinity : (times[0] ?? shot.start + 0.6);
   const infraAt = times[1] ?? moveAt + 0.6;
   const boxAt = times[2] ?? infraAt + 1.5;
@@ -47,7 +53,7 @@ export const Migrate: React.FC<CustomProps> = ({ shot, time, props, times, width
   return (
     <AbsoluteFill style={{ opacity: appear }}>
       {/* laptop */}
-      <div style={{ position: "absolute", left: lx, top: ly, width: lw, height: lh, borderRadius: fs * 0.5, background: "#1A1918", border: `${fs * 0.25}px solid #2A2927`, opacity: lerp(1, 0.4, left), boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }} />
+      <div style={{ position: "absolute", left: lx, top: ly, width: lw, height: lh, borderRadius: fs * 0.5, background: "#1A1918", border: `${fs * 0.25}px solid ${warm > 0.5 ? "#D97757" : "#2A2927"}`, opacity: lerp(1, 0.4, left), boxShadow: `0 24px 60px rgba(0,0,0,0.25), 0 0 0 ${8 * warm}px rgba(217,119,87,0.3)` }} />
       <div style={{ position: "absolute", left: lx - lw * 0.08, top: ly + lh, width: lw * 1.16, height: fs * 0.55, borderRadius: `0 0 ${fs}px ${fs}px`, background: "#2A2927", opacity: lerp(1, 0.4, left) }} />
       <div style={{ position: "absolute", left: lx, width: lw, top: ly + lh + fs * 1.1, textAlign: "center", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, color: lerp(1, 0, left) > 0.5 ? ink : muted, opacity: lerp(1, 0.6, left) }}>{String(props.laptop ?? "Your laptop")}</div>
 
@@ -67,6 +73,22 @@ export const Migrate: React.FC<CustomProps> = ({ shot, time, props, times, width
         <div style={{ position: "absolute", left: cx, width: cw, top: cy + chh + fs * 0.5, textAlign: "center", fontFamily: type.serif, fontStyle: "italic", fontSize: fs * 0.95, color: PINE, opacity: prog(time, boxAt + n * 0.08, 0.3) }}>{String(props.sandbox ?? "one sandbox each")}</div>
       )}
 
+      {/* blind: the screen fogs over the agents, and a question pops for each thing you can't see */}
+      {blind && (
+        <div style={{ position: "absolute", left: lx + fs * 0.25, top: ly + fs * 0.25, width: lw - fs * 0.5, height: lh - fs * 0.5, borderRadius: fs * 0.3, background: `rgba(120,118,114,${0.85 * fog})`, backdropFilter: `blur(${fog * 10}px)`, zIndex: 2 }} />
+      )}
+      {blind &&
+        tags.map((tag, i) => {
+          const k = prog(time, times[i + 1] ?? Infinity, 0.25, easeInOut);
+          const spots = [[lx + lw * 0.5, ly - fs * 1.2], [lx + lw * 0.5, ly + lh * 0.45], [lx + lw * 0.5, ly + lh + fs * 2.6]];
+          const [x, y] = spots[i % 3];
+          return (
+            <div key={`q${i}`} style={{ position: "absolute", left: x, top: y, translate: "-50% -50%", zIndex: 3, padding: `${fs * 0.35}px ${fs * 0.7}px`, borderRadius: fs, background: "#1A1918", color: "#F2EFEA", fontFamily: type.sans, fontWeight: 700, fontSize: fs * 0.95, whiteSpace: "nowrap", opacity: k, scale: String(0.8 + 0.2 * k), boxShadow: "0 16px 40px rgba(0,0,0,0.35)" }}>
+              <span style={{ color: "#D97757", marginRight: fs * 0.35 }}>?</span>
+              {tag}
+            </div>
+          );
+        })}
       {/* agents: they idle on the laptop, then arc across into their slots */}
       {Array.from({ length: n }, (_, i) => {
         const a = home(i);
