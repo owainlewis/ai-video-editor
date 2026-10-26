@@ -112,10 +112,20 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
       const where = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
       const files: string[] = [];
       let measured = false;
+      let crashed = false;
       for (const [k, t] of all.entries()) {
         const file = join(out, "frames", `${String(i + 1).padStart(3, "0")}-${k}.jpg`);
         await shoot(t, file);
         files.push(file);
+        // A graphic that throws is the worst failure there is: say so plainly, once, and skip measuring it.
+        const crash = (await page.evaluate(() => window.qcError ?? null)) as string | null;
+        // The frame just before a shot belongs to the shot before it; its crash is reported there.
+        if (crash && t < s.start) continue;
+        if (crash) {
+          if (!crashed) issues.push({ level: "error", message: `${where}: the graphic crashed at ${t.toFixed(1)}s: ${crash}` });
+          crashed = true;
+          continue;
+        }
         if (checks.has(t)) {
           if (t === settled) (measured = true), settledShots.push(file);
           const m = (await page.evaluate(() => window.qcMeasure!())) as Measure;
@@ -130,7 +140,7 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
         }
       }
       // Every graphic must be measured; a silent skip is how a bad layout gets through.
-      if (!measured) issues.push({ level: "error", message: `${where}: QC could not measure its settled frame` });
+      if (!measured && !crashed) issues.push({ level: "error", message: `${where}: QC could not measure its settled frame` });
       // One strip per graphic: before, first frame, reveals, settled, after.
       const sheet = join(out, `${String(i + 1).padStart(3, "0")}-${s.visual!.kind}.jpg`);
       run("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, sheet], { log });

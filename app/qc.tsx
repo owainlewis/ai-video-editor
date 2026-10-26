@@ -14,6 +14,8 @@ declare global {
     qcReady?: boolean;
     qcSeek?: (frame: number) => Promise<void>;
     qcMeasure?: () => unknown;
+    // The message of a graphic that threw while rendering the current frame (cleared on each seek).
+    qcError?: string | null;
   }
 }
 
@@ -22,9 +24,12 @@ const nextPaint = () => new Promise<void>((ok) => requestAnimationFrame(() => re
 
 const App: React.FC<{ r: Resolved }> = ({ r }) => {
   const [frame, setFrame] = useState(0);
+  // An error boundary stays tripped until it remounts; after a crash the next seek remounts it.
+  const [mount, setMount] = useState(0);
   const comp = compositionFor(r.canvas);
   useEffect(() => {
     window.qcSeek = async (f: number) => {
+      if (window.qcError) (window.qcError = null), setMount((m) => m + 1);
       setFrame(f);
       await nextPaint();
       await document.fonts.ready;
@@ -38,6 +43,13 @@ const App: React.FC<{ r: Resolved }> = ({ r }) => {
   }, []);
   return (
     <Thumbnail
+      key={mount}
+      // A graphic that throws used to leave Remotion's small error badge, which QC measured as a
+      // "⚠️" too small to read (2026-10-25). Now the crash itself is reported.
+      errorFallback={({ error }) => {
+        window.qcError = error?.message || String(error);
+        return null;
+      }}
       component={(r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>}
       inputProps={r}
       compositionWidth={comp.width}
