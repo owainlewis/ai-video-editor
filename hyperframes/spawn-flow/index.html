@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!-- Spawn, flow, tag, fold: a port of Studio's motion-lab diagram (effects/Lab.tsx, Spawn) to
+         HyperFrames, for a side-by-side comparison (2026-10-26). Graphite, Helvetica, sage, our two
+         speeds (180 ms content, 460 ms moves) and 80 ms staggers. -->
+    <style>
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Helvetica"); font-weight: 400; }
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue Medium"), local("HelveticaNeue-Medium"); font-weight: 500 600; }
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"); font-weight: 700 900; }
+      :root {
+        --ground: #1b1b1a;
+        --ink: #f7f3ec;
+        --muted: #a3a19c;
+        --sage: #b7cdbf;
+        --card: #232220;
+        --font-display: "House Sans";
+        --font-mono: "JetBrains Mono";
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+      #root { width: 100%; height: 100%; position: relative; font-family: var(--font-display); }
+      #stage { position: absolute; inset: 0; background: var(--ground); overflow: hidden; }
+      #grid {
+        position: absolute; inset: -64px;
+        background-image: linear-gradient(rgba(247,243,236,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(247,243,236,0.14) 1px, transparent 1px);
+        background-size: 64px 64px; opacity: 0.22;
+      }
+      #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%); }
+      #edges { position: absolute; inset: 0; }
+      #kicker { position: absolute; left: 96px; top: 72px; font-weight: 600; font-size: 28px; letter-spacing: 4px; color: var(--muted); }
+      .node-host { position: absolute; }
+      #parent { left: 960px; top: 250px; }
+      #parent-pill {
+        position: absolute; left: 0; top: 0; min-width: 380px; padding: 30px 50px; border-radius: 26px;
+        background: #f2efea; color: #1b1b1a; font-weight: 800; font-size: 46px; letter-spacing: -0.02em;
+        white-space: nowrap; text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+      }
+      #parent-pill span { display: inline-block; }
+      #parent-done { position: absolute; left: 0; right: 0; }
+      .card {
+        position: absolute; left: 0; top: 0; width: 345px; height: 133px; border-radius: 21px;
+        background: var(--card); border: 1.5px solid rgba(247,243,236,0.16);
+        display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 7px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      }
+      .card .name { font-weight: 700; font-size: 41px; letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; }
+      .card .kind { font-family: var(--font-mono); font-size: 28px; color: var(--muted); }
+      .tag {
+        position: absolute; left: 0; top: 0; white-space: nowrap; font-weight: 600; font-size: 28px;
+        padding: 7px 16px; border-radius: 9px; background: #2a2927; border: 1px solid rgba(247,243,236,0.22); color: var(--ink);
+      }
+      #finding { background: var(--sage); color: #1b1b1a; font-weight: 700; font-size: 28px; padding: 9px 18px; border-radius: 22px; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="10" data-width="1920" data-height="1080">
+      <div id="stage" class="clip" data-start="0" data-duration="10" data-track-index="0" data-layout-ignore>
+        <div id="grid"></div>
+        <div id="vignette"></div>
+      </div>
+
+      <svg id="edges" class="clip" data-start="0" data-duration="10" data-track-index="1" width="1920" height="1080" data-layout-ignore>
+        <path id="e0" fill="none" stroke="rgba(247,243,236,0.28)" stroke-width="2.5" />
+        <path id="e1" fill="none" stroke="rgba(247,243,236,0.28)" stroke-width="2.5" />
+        <path id="e2" fill="none" stroke="rgba(247,243,236,0.28)" stroke-width="2.5" />
+        <circle id="d0a" r="6" fill="#b7cdbf" /><circle id="d0b" r="6" fill="#b7cdbf" />
+        <circle id="d1a" r="6" fill="#b7cdbf" /><circle id="d1b" r="6" fill="#b7cdbf" />
+        <circle id="d2a" r="6" fill="#b7cdbf" /><circle id="d2b" r="6" fill="#b7cdbf" />
+      </svg>
+
+      <div id="kicker" class="clip" data-start="0" data-duration="10" data-track-index="2">MOTION LAB · SPAWN, FLOW, TAG, FOLD</div>
+
+      <!-- children: hosts sit at their slots; the cards inside move out of the parent and back -->
+      <div id="slot0" class="clip node-host" data-start="0" data-duration="10" data-track-index="3" style="left: 430px; top: 735px">
+        <div id="c0" class="card"><div id="n0" class="name">Research</div><div id="k0" class="kind">subagent</div></div>
+      </div>
+      <div id="slot1" class="clip node-host" data-start="0" data-duration="10" data-track-index="3" style="left: 960px; top: 735px">
+        <div id="c1" class="card"><div id="n1" class="name">Build</div><div id="k1" class="kind">subagent</div></div>
+      </div>
+      <div id="slot2" class="clip node-host" data-start="0" data-duration="10" data-track-index="3" style="left: 1490px; top: 735px">
+        <div id="c2" class="card"><div id="n2" class="name">Review</div><div id="k2" class="kind">subagent</div></div>
+      </div>
+
+      <div id="tags" class="clip" data-start="0" data-duration="10" data-track-index="4" style="position: absolute; inset: 0" data-layout-allow-overlap>
+        <div id="task0" class="tag">task</div>
+        <div id="task1" class="tag">task</div>
+        <div id="task2" class="tag">task</div>
+        <div id="finding" class="tag">finding</div>
+      </div>
+
+      <div id="parent" class="clip node-host" data-start="0" data-duration="10" data-track-index="5">
+        <div id="parent-pill"><span id="parent-label">Coordinator</span><span id="parent-done">3 results in</span></div>
+      </div>
+    </div>
+
+    <script>
+      // Geometry (px). Parent and slots are the centres; cards are 345 x 133.
+      const P = [960, 250];
+      const FOOT = [P[0], P[1] + 55];
+      const SLOTS = [[430, 735], [960, 735], [1490, 735]];
+      const FAST = 0.18, MOVE = 0.46, STAG = 0.08;
+      const T = { parent: 0.3, spawn: 1.0, flow: 2.0, tasks: 3.0, tag: 5.0, fold: 7.1 };
+      const OUT = "power4.out", INOUT = "power3.inOut";
+
+      const tl = gsap.timeline({ paused: true });
+
+      // Centre every node on its point (no CSS transform: GSAP owns the transforms).
+      gsap.set(["#parent-pill", ".card"], { xPercent: -50, yPercent: -50 });
+      gsap.set(".tag", { xPercent: -50, yPercent: -50, opacity: 0 });
+
+      // Parent: blur in.
+      tl.fromTo("#parent-pill", { opacity: 0, scale: 0.9, filter: "blur(8px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: FAST, ease: OUT }, T.parent);
+      tl.fromTo("#parent-done", { opacity: 0, filter: "blur(8px)" }, { opacity: 0, filter: "blur(8px)", duration: 0.01 }, 0);
+      tl.fromTo("#kicker", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: FAST, ease: OUT }, 0.1);
+
+      // Children spawn out of the parent's centre, staggered; names write on a letter a frame.
+      SLOTS.forEach((s, i) => {
+        const at = T.spawn + i * STAG;
+        const dx = P[0] - s[0], dy = P[1] - s[1];
+        tl.fromTo(`#c${i}`, { x: dx, y: dy, scale: 0.55, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: MOVE, ease: OUT }, at);
+        const len = document.getElementById(`n${i}`).textContent.length;
+        tl.fromTo(`#n${i}`, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: len / 30, ease: `steps(${len})` }, at + MOVE);
+        tl.fromTo(`#k${i}`, { opacity: 0 }, { opacity: 1, duration: FAST, ease: OUT }, at + MOVE + 0.2);
+        // A task lands: the card pulses and its edge flashes sage.
+        const land = T.tasks + i * 0.15 + 0.73;
+        tl.fromTo(`#c${i}`, { scale: 1 }, { scale: 1.1, duration: 0.13, ease: "power2.out", immediateRender: false }, land);
+        tl.to(`#c${i}`, { scale: 1, duration: 0.13, ease: "power2.in" }, land + 0.13);
+        tl.fromTo(`#c${i}`, { borderColor: "rgba(183,205,191,1)" }, { borderColor: "rgba(247,243,236,0.16)", duration: 0.4, ease: "power2.out", immediateRender: false }, land);
+        // Fold back into the parent.
+        tl.to(`#c${i}`, { x: dx, y: dy, scale: 0.55, duration: MOVE * 0.85, ease: INOUT }, T.fold + i * STAG);
+        tl.to(`#c${i}`, { opacity: 0, duration: 0.15, ease: "power2.in" }, T.fold + i * STAG + MOVE * 0.85 - 0.15);
+      });
+
+      // The parent receives the finding (pulse), grows as the children fold in, and its label swaps.
+      const home = T.tag + 0.73;
+      tl.to("#parent-pill", { scale: 1.1, boxShadow: "0 0 0 8px rgba(183,205,191,0.45), 0 30px 80px rgba(0,0,0,0.5)", duration: 0.13, ease: "power2.out" }, home);
+      tl.to("#parent-pill", { scale: 1, boxShadow: "0 0 0 0px rgba(183,205,191,0), 0 30px 80px rgba(0,0,0,0.5)", duration: 0.13, ease: "power2.in" }, home + 0.13);
+      const folded = T.fold + 2 * STAG + MOVE * 0.85;
+      tl.to("#parent-pill", { scale: 1.15, duration: MOVE, ease: INOUT }, folded);
+      tl.to("#parent-label", { opacity: 0, filter: "blur(8px)", duration: 0.15, ease: "power2.in" }, folded + 0.1);
+      tl.to("#parent-done", { opacity: 1, filter: "blur(0px)", duration: FAST, ease: OUT }, folded + 0.25);
+
+      // Proxies for things that ride the edges, eased on the timeline like any tween.
+      const ride = { t0: 0, t1: 0, t2: 0, f: 0 };
+      [0, 1, 2].forEach((i) => tl.fromTo(ride, { [`t${i}`]: 0 }, { [`t${i}`]: 1, duration: 0.73, ease: INOUT, immediateRender: false }, T.tasks + i * 0.15));
+      tl.fromTo(ride, { f: 0 }, { f: 1, duration: 0.73, ease: INOUT, immediateRender: false }, T.tag);
+
+      // An S-curve from the parent's foot to a child's head, sampled for riders and dots.
+      const lerp = (a, b, k) => a + (b - a) * k;
+      const curve = (a, b) => [a, [a[0], lerp(a[1], b[1], 0.55)], [b[0], lerp(a[1], b[1], 0.45)], b];
+      const at = (c, k) => {
+        const u = 1 - k;
+        return [0, 1].map((d) => u * u * u * c[0][d] + 3 * u * u * k * c[1][d] + 3 * u * k * k * c[2][d] + k * k * k * c[3][d]);
+      };
+      const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+      // Lines, flow dots and riders are drawn from the timeline's own time, so every frame seeks the same.
+      function draw() {
+        const t = tl.time();
+        const flowOn = clamp01((t - T.flow) / 0.4) * (1 - clamp01((t - (T.fold - 0.3)) / 0.3));
+        SLOTS.forEach((s, i) => {
+          const card = document.getElementById(`c${i}`);
+          const x = gsap.getProperty(card, "x"), y = gsap.getProperty(card, "y");
+          const live = Number(gsap.getProperty(card, "opacity"));
+          const head = [s[0] + x, s[1] + y - 66];
+          const c = curve(FOOT, head);
+          const e = document.getElementById(`e${i}`);
+          e.setAttribute("d", `M ${c[0][0]} ${c[0][1]} C ${c[1][0]} ${c[1][1]}, ${c[2][0]} ${c[2][1]}, ${c[3][0]} ${c[3][1]}`);
+          e.setAttribute("opacity", live > 0.02 ? 1 : 0);
+          ["a", "b"].forEach((n, j) => {
+            const k = ((((t - T.flow) / 1.5 + j * 0.5 + i * 0.17) % 1) + 1) % 1;
+            const p = at(c, k);
+            const d = document.getElementById(`d${i}${n}`);
+            d.setAttribute("cx", p[0]);
+            d.setAttribute("cy", p[1]);
+            d.setAttribute("opacity", flowOn * Math.min(1, k * 6, (1 - k) * 6) * 0.85);
+          });
+          const k = ride[`t${i}`];
+          const p = at(c, k);
+          gsap.set(`#task${i}`, { x: p[0], y: p[1], opacity: k > 0 && k < 1 ? 1 : 0 });
+          if (i === 2) {
+            const q = at(c, 1 - ride.f);
+            gsap.set("#finding", { x: q[0], y: q[1], opacity: ride.f > 0 && ride.f < 1 ? 1 : 0 });
+          }
+        });
+        // The grid drifts about a pixel a second: a stage that is alive.
+        gsap.set("#grid", { x: (t * 1.2) % 64, y: ((t * 1.2) % 64) * 0.5 });
+      }
+      tl.eventCallback("onUpdate", draw);
+      tl.to({}, { duration: 10 }, 0);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+      draw();
+    </script>
+  </body>
+</html>
