@@ -2,7 +2,7 @@ Anthropic keeps seeing the same mistake in company AI agents. Too many subagents
 
 They compared designs across several big deployments. One agent with skills often beat a team of subagents. Better answers, and often cheaper and faster. One customer saw it run about twice as fast.
 
-Here's how it goes wrong. Every team builds its own subagent, so the agent ends up a copy of the org chart. And every team adds a line to the system prompt. Anthropic calls it the Frankenprompt.
+Here's how it goes wrong. Too often, companies give each team its own subagent, so the agent ends up a copy of the org chart. And every team adds a line to the system prompt. Anthropic calls it the Frankenprompt.
 
 So what do they do instead?
 
