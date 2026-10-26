@@ -32,6 +32,16 @@ Fixing a graphic after an export costs ten minutes; fixing it before costs secon
 4. After an export, read `checks/export-check.json`: length, every graphic placed, loudness.
 When Owain flags a layout or pacing problem, add it to `engine/qc.ts` as a check, not only to RULES.md.
 
+## Design per video
+
+Owain (2026-10-26): "I'd ideally like you to edit per video rather than rely on just a few stock presets." Every video and reel gets graphics designed for its own argument.
+
+1. Read the whole transcript, then write `projects/<slug>/DESIGN.md`: the argument in three lines, and the four to eight moments that carry it. For each moment: what the viewer must understand, the picture that shows it (structure, cause, flow, before and after), and how it moves. Diagrams first: they are what Owain's tech audience values most.
+2. Draw each moment for this video: a custom graphic in `effects/custom/` (Remotion, used from the plan as `custom`) or a scene in `hyperframes/<slug>/` (HyperFrames). Use the video's own nouns and the source's real words.
+3. Library kinds and registry blocks are parts (the look, the speeds, a counter, a code window), not presets. Use one as it is only when it is exactly the right picture; never pick from the menu first and fit the words to it.
+4. No two videos should look like the same template: vary the stage, the camera and the transitions, keep the house look (Graphite or Ivory, Helvetica and Signifier, sage accent, the two speeds).
+5. A bespoke graphic that keeps earning its place graduates into the library.
+
 ## How a plan works
 
 - `shots` run in order. Each starts on a spoken phrase (`at`, a few exact words from the transcript) and lasts until the next.
@@ -72,7 +82,7 @@ When Owain asks for a change in the chat panel you get the project, the selected
 
 - Never invent facts, numbers, UI or quotes. A graphic shows what is said or what a source shows.
 - Graphics on YouTube go only where the speaker is on camera, never over b-roll or a screen recording.
-- Something on screen changes every 2 to 3 seconds in a reel.
+- Something on screen changes every 2 seconds at most in a reel.
 - No grading and no voice processing: Owain does both. Music and sound effects are ours.
 - Fonts: Helvetica and Signifier only.
 
