@@ -52,6 +52,7 @@ const ImageVisual: React.FC<Props & { v: V<"image"> }> = (props) => {
   // are large and nothing unrelated from the page sits around them.
   // Split panels too (Owain, 2026-10-25: "the text positioning is really off"): a paragraph card
   // shows that paragraph, not half-lines of the page cut off above and below it.
+  if ((shot.layout === "scene" || shot.layout === "split") && v.from && (v.mat || v.label || v.lift)) return <MattedImage {...props} />;
   if ((shot.layout === "scene" || shot.layout === "split") && v.from) {
     const [iw, ih] = v.size ?? [1600, 1000];
     const tall = (r: number[]) => (w * r[3] * ih) / (r[2] * iw);
@@ -66,6 +67,41 @@ const ImageVisual: React.FC<Props & { v: V<"image"> }> = (props) => {
     );
   }
   return <ImageCard {...props} />;
+};
+
+// A capture on a coloured mat, the source's real logo and name above it, and optionally one real
+// element lifted out of the capture and shown large (after the creator reels Owain sent, 2026-10-26).
+const MattedImage: React.FC<Props & { v: V<"image"> }> = (props) => {
+  const { slug, w, h, v, time, shot } = props;
+  const [iw, ih] = v.size ?? [1600, 1000];
+  const pad = Math.round(w * 0.045);
+  const labelH = v.label ? Math.round(w * 0.11) : 0;
+  const cw = w - pad * 2;
+  const tall = (r: number[]) => (cw * r[3] * ih) / (r[2] * iw);
+  const cardH = Math.min(h - pad * 2 - labelH, Math.max(240, tall(v.from!), tall(v.to ?? v.from!)));
+  const fs = Math.round(w * 0.042);
+  // The lift: the element grows out of its place on the card to fill the mat's width.
+  const liftAt = v.lift ? (v.times?.[v.highlight.length] ?? shot.start + 0.6) : Infinity;
+  const k = v.lift ? prog(time, liftAt, 0.46) : 0;
+  const lw = cw * 0.92, lh = v.lift ? (lw * v.lift.rect[3] * ih) / (v.lift.rect[2] * iw) : 0;
+  return (
+    <div style={{ width: w, height: h, borderRadius: 34, background: v.mat ?? "transparent", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: v.label ? fs * 0.7 : 0 }}>
+      {v.label && (
+        <div style={{ display: "flex", alignItems: "center", gap: fs * 0.45, fontFamily: t.sans, fontWeight: 700, fontSize: fs, color: "#1F1F1D", letterSpacing: -0.3, opacity: 1 - 0.6 * k }}>
+          {v.label.logo && <Img src={src(slug, v.label.logo)} style={{ height: fs * 1.25, width: "auto" }} />}
+          {v.label.text}
+        </div>
+      )}
+      <div style={{ opacity: 1 - 0.65 * k, scale: String(1 - 0.04 * k), filter: `blur(${4 * k}px)` }}>
+        <ImageCard {...props} w={cw} h={cardH} />
+      </div>
+      {v.lift && k > 0 && (
+        <div style={{ position: "absolute", left: "50%", top: "50%", translate: "-50% -50%", width: lw, height: lh, borderRadius: 18, overflow: "hidden", background: t.card, boxShadow: "0 30px 70px rgba(0,0,0,0.28)", opacity: Math.min(1, k * 2), scale: String(0.7 + 0.3 * k) }}>
+          <Img src={src(slug, v.src)} style={{ position: "absolute", width: lw / v.lift.rect[2], height: (lw / v.lift.rect[2]) * (ih / iw), left: -(lw / v.lift.rect[2]) * v.lift.rect[0], top: -(lw / v.lift.rect[2]) * (ih / iw) * v.lift.rect[1] }} />
+        </div>
+      )}
+    </div>
+  );
 };
 
 const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h, v }) => {

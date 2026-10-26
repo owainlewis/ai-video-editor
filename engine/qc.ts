@@ -8,7 +8,7 @@ import type { Resolved, ResolvedShot, Word } from "./schema.ts";
 
 // ---------- plan checks ----------
 
-const SKIP = new Set(["color", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of"]);
+const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of"]);
 
 // Every piece of text a visual puts on screen.
 export const visualText = (v: unknown): string[] => {

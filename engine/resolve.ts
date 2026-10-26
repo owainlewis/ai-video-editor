@@ -39,7 +39,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
       return v.items.map((it) => it.at);
     case "terminal": return v.lines.map((it) => it.at);
     case "logos": return v.items.map((it) => it.at);
-    case "image": return v.highlight.map((h) => h.at);
+    case "image": return [...v.highlight.map((h) => h.at), ...(v.lift ? [v.lift.at] : [])];
     case "compare": return [v.right.at];
     case "beforeafter": return [v.after.at];
     case "prompt":

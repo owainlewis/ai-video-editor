@@ -29,6 +29,12 @@ export const Visual = z.discriminatedUnion("kind", [
     icon: z.string().optional(),
     // A marker over a region, swept in on `at`. `label` adds a callout tag pointing at it.
     highlight: z.array(z.object({ rect: Rect, at: Anchor.optional(), label: z.string().optional() })).default([]),
+    // On a split, the card sits on a coloured `mat` (a colour from the subject's own brand), with the
+    // source's real logo and name above it (`label`), so a plain capture reads as designed (Owain, 2026-10-26).
+    mat: z.string().optional(),
+    label: z.object({ text: z.string(), logo: z.string().optional() }).optional(),
+    // Lifts one real element out of the capture on `at` and shows it large, the card dimmed behind.
+    lift: z.object({ rect: Rect, at: Anchor }).optional(),
   }),
   // B-roll footage: a project file, or "broll:<id>" for a clip from the library.
   // `start` is the offset into the clip in seconds.
