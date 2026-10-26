@@ -121,3 +121,24 @@ Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare se
 **Watch out.** The Agency Agents reel's badges say 282 and 163k while the voice says 200 and 160k. Our rule holds: the number on screen matches what is said, or the note says why.
 
 **Built (2026-10-25).** All seven are in `effects/custom/moves.tsx` as `statbadge`, `stopwatch`, `timeline`, `hub`, `phases`, `verifier`, `igcta`, shown one per section in `projects/moves-lab`. Use them from a plan as `{ "kind": "custom", "name": "<name>", "at": [...], "props": {...} }`; the props and beats are documented at the top of the file.
+
+## Diagram motion: "Anthropic Says You're Using Subagents WRONG" (studied 2026-10-26)
+
+27 min, about 85% hand-drawn diagrams on near-black with the speaker in a small box, builds landing on the spoken word with almost no lead. The look (Excalidraw wobble, neon) does not fit us; the motion does. Measured frame by frame at 30 fps (±1 frame):
+
+| Move | Timing | Notes |
+|---|---|---|
+| Stroke draws on (lines, outlines, arcs) | 3 to 5 frames (100 to 170 ms) | faster than our FAST (180 ms) |
+| Node enters | 2 to 3 frames, fade plus scale from about 90% | no overshoot |
+| Label writes on | 1 character per frame (about 30 a second) | lands on its word |
+| Children spawn from the parent | each starts at the parent's centre, slides to its slot in 8 to 10 frames, ease-out, staggered 2 to 3 frames left to right | the edge stretches with the child |
+| Fold back into the parent | the reverse over about 12 frames, staggered; then the parent grows about 15% | |
+| Ambient flow | small dots keep travelling along live edges, about 1.5 s per edge | nothing ever fully stops |
+| Packet or tag rides an edge | about 22 frames, ease-in-out; the node it reaches pulses to about 110% for 4 frames | shows cause and flow |
+| Gauge needle | arc draws in 4 frames, needle holds at the middle about 10 frames, then sweeps 14 frames ease-in-out with a long tail, no overshoot; the value fades in after | |
+| Scene exit | whole canvas fades over about 7 frames, annotations leading | screen to diagram: a 5-frame crossfade |
+| Carry-over | one node stays put while the rest fades over 8 frames, its label rewrites, new children spawn from it | links scenes |
+
+Best to borrow, in our style (Helvetica, clean strokes, sage): spawn from the parent and fold back into it, plus things travelling along edges (context dots that arrive or fall away at a red X, a tag riding a return edge, a node pulsing when it receives). Also: a structure trace (retrace one tree in the accent, then the matching edges in another to show "same shape"), and the same nodes with clean edges swapped for tangled ones.
+
+Our MOVE (460 ms) is about 1.5x slower than their child spawn (270 to 330 ms) and our FAST (180 ms) slower than their strokes and node fades (70 to 170 ms). Their diagrams feel lively because the parts are quick and something is always flowing, not because anything is big.
