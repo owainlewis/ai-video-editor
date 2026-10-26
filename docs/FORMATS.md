@@ -4,6 +4,43 @@ Owain (2026-10-26): "AI News works because it's repeatable. I think practical st
 
 All three: 35 to 55 seconds, one idea, a concrete outcome in the first line, every fact checked against its source, a keyword CTA at the end.
 
+## Script anatomy (every format)
+
+Owain, 2026-10-26, from a scriptwriting guide he shared. Every script is built from these parts, in this order:
+
+| Part | Lines | Job |
+|---|---|---|
+| Hook | 1 to 2 | Say the subject and open a question. |
+| Lock-in | 2 to 4 | Raise the curiosity and give a reason to trust what's coming (a source, a number, who did it). |
+| Body blocks | 2 to 3 blocks | One point each, then the fact, example or reason that backs it. |
+| Rehook | 1, between blocks | One sentence that opens a new question or moves to the next block. |
+| Wrap-up | 1 | The takeaway in one line. Optional. |
+| CTA | 1 | What to do for more. Only if Owain will say it. |
+
+Rules: cut fluff; 45 to 90 seconds, shorter if it's done; each sentence follows from the last or clearly starts a new thread; say why to keep watching early; the simplest words that carry the meaning.
+
+### Example: "Too many skills", rewritten (55 s)
+
+Source: claude.dev, "Lessons from building Claude Code: How we use skills" (Thariq Shihipar, 3 Jun 2026). Every claim below is in the article, or marked as Owain's view.
+
+> **Hook.** Adding more skills to Claude Code can make it worse. Anthropic explained why.
+>
+> **Lock-in.** They went through every skill they use inside the company. The bad ones had one thing in common.
+>
+> **Body 1.** They try to do too much. Anthropic found skills fall into nine types. The good ones fit one. The bad ones cover several, and in Anthropic's words, they "confuse the agent."
+>
+> **Rehook.** And there's a second cost most people miss.
+>
+> **Body 2.** Every skill you add puts a little more into the model's context. Install twenty you don't need, and you pay for all twenty.
+>
+> **Rehook.** So if the leverage isn't in skills, where is it?
+>
+> **Body 3 (Owain's view).** In design, planning and decisions. The models are good enough to build on their own. Your job is to tell them what to build.
+>
+> **Wrap-up.** The best engineers I know run the smallest setups.
+>
+> **CTA.** Comment SKILLS and I'll send you the article.
+
 ## 1. How to
 
 One outcome, one method, shown working.
