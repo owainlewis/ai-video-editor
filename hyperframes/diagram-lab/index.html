@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!-- Diagram lab (2026-10-26): five tech diagrams to choose from, in the Graphite look. Two are
+         library blocks restyled (exploded-stack, code-diff); three are drawn here. -->
+    <style>
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Helvetica"); font-weight: 400; }
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue Medium"), local("HelveticaNeue-Medium"); font-weight: 500 600; }
+      @font-face { font-family: "House Sans"; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"); font-weight: 700 900; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #1b1b1a; }
+      #root { width: 100%; height: 100%; position: relative; font-family: "House Sans"; }
+      #ground { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, #1f1f1e 40%, #141413 100%); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="29" data-width="1920" data-height="1080">
+      <div id="ground" class="clip" data-start="0" data-duration="29" data-track-index="0"></div>
+      <div
+        id="exploded-stack" data-composition-id="exploded-stack" data-composition-src="compositions/exploded-stack.html"
+        data-start="0" data-duration="5" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"
+        data-variable-values='{"title":"The AX stack","layer_1":"Your agents","layer_2":"AX","layer_3":"Agent Substrate","layer_4":"Kubernetes","accent":"#B7CDBF","background":"#1B1B1A"}'
+      ></div>
+      <div
+        id="code-diff" data-composition-id="code-diff" data-composition-src="compositions/code-diff.html"
+        data-start="5" data-duration="6" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"
+      ></div>
+      <div
+        id="agent-loop" data-composition-id="agent-loop" data-composition-src="compositions/agent-loop.html"
+        data-start="11" data-duration="6" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"
+      ></div>
+      <div
+        id="context-window" data-composition-id="context-window" data-composition-src="compositions/context-window.html"
+        data-start="17" data-duration="6" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"
+      ></div>
+      <div
+        id="fan-out" data-composition-id="fan-out" data-composition-src="compositions/fan-out.html"
+        data-start="23" data-duration="6" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"
+      ></div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,77 @@
+<template>
+  <!-- The agent loop: think, act, observe. A dot laps the ring; each node lights as it passes and
+       the step count ticks over each lap, then it stops on Think and the centre reads Done. -->
+  <style>
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Helvetica"); font-weight: 400; }
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue Medium"), local("HelveticaNeue-Medium"); font-weight: 500 600; }
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"); font-weight: 700 900; }
+    #root { position: absolute; inset: 0; font-family: "House Sans"; }
+    #al-scene { position: absolute; inset: 0; }
+    #al-kicker { position: absolute; left: 96px; top: 72px; font-weight: 600; font-size: 28px; letter-spacing: 4px; color: #a3a19c; }
+    #al-ring { position: absolute; inset: 0; }
+    .al-node {
+      position: absolute; padding: 22px 40px; border-radius: 22px; background: #232220; color: #f7f3ec;
+      border: 1.5px solid rgba(247,243,236,0.16); font-weight: 700; font-size: 44px; letter-spacing: -0.01em;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45); white-space: nowrap;
+    }
+    #al-centre { position: absolute; left: 960px; top: 560px; text-align: center; }
+    #al-step { font-weight: 800; font-size: 96px; letter-spacing: -0.03em; color: #f7f3ec; }
+    #al-sub { font-family: "JetBrains Mono"; font-size: 28px; color: #a3a19c; }
+  </style>
+  <div id="root" data-composition-id="agent-loop" data-width="1920" data-height="1080">
+    <div id="al-scene" class="clip" data-start="0" data-duration="6">
+      <div id="al-kicker">THE AGENT LOOP</div>
+      <svg id="al-ring" width="1920" height="1080">
+        <circle id="al-track" cx="960" cy="560" r="300" fill="none" stroke="rgba(247,243,236,0.22)" stroke-width="3" />
+        <circle id="al-dot" r="13" fill="#b7cdbf" />
+      </svg>
+      <div id="al-think" class="al-node">Think</div>
+      <div id="al-act" class="al-node">Act</div>
+      <div id="al-observe" class="al-node">Observe</div>
+      <div id="al-centre"><div id="al-step">Step 1</div><div id="al-sub">until the task is done</div></div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const C = [960, 560], R = 300;
+      const NODES = [["#al-think", -90], ["#al-act", 30], ["#al-observe", 150]];
+      const LAP = 1.4, GO = 1.2, LAPS = 3;
+      const STOP = GO + LAP * LAPS;
+      const tl = gsap.timeline({ paused: true });
+      const pos = (deg) => [C[0] + Math.cos((deg * Math.PI) / 180) * R, C[1] + Math.sin((deg * Math.PI) / 180) * R];
+
+      gsap.set(".al-node", { xPercent: -50, yPercent: -50 });
+      gsap.set("#al-centre", { xPercent: -50, yPercent: -50 });
+      NODES.forEach(([sel, deg]) => { const [x, y] = pos(deg); gsap.set(sel, { x, y }); });
+
+      tl.fromTo("#al-kicker", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, ease: "power4.out" }, 0.1);
+      const circ = 2 * Math.PI * R;
+      tl.fromTo("#al-track", { strokeDasharray: circ, strokeDashoffset: circ }, { strokeDashoffset: 0, duration: 0.6, ease: "power3.inOut" }, 0.2);
+      NODES.forEach(([sel], i) => tl.fromTo(sel, { opacity: 0, scale: 0.9, filter: "blur(8px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.18, ease: "power4.out" }, 0.5 + i * 0.08));
+      tl.fromTo("#al-centre", { opacity: 0 }, { opacity: 1, duration: 0.18, ease: "power4.out" }, 0.9);
+      tl.to({}, { duration: 6 }, 0);
+
+      // The dot, the node highlights and the step count follow the timeline's time.
+      function draw() {
+        const t = tl.time();
+        const run = Math.max(0, Math.min(t, STOP) - GO);
+        const deg = -90 + (run / LAP) * 360;
+        const [x, y] = pos(deg);
+        const dot = document.getElementById("al-dot");
+        dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+        dot.setAttribute("opacity", t < GO - 0.2 ? 0 : 1);
+        NODES.forEach(([sel, d]) => {
+          const off = (((deg - d) % 360) + 360) % 360; // degrees since the dot passed this node
+          const lit = t >= GO ? Math.max(0, 1 - off / 50) : 0;
+          gsap.set(sel, { backgroundColor: `rgba(183,205,191,${0.9 * lit})`, color: lit > 0.5 ? "#1b1b1a" : "#f7f3ec", scale: 1 + 0.06 * lit });
+        });
+        const lap = Math.min(LAPS, Math.floor(run / LAP) + 1);
+        document.getElementById("al-step").textContent = t >= STOP + 0.15 ? "Done" : `Step ${lap}`;
+      }
+      tl.eventCallback("onUpdate", draw);
+      window.__timelines["agent-loop"] = tl;
+      tl.seek(0);
+      draw();
+    })();
+  </script>
+</template>

@@ -1,0 +1,59 @@
+<template>
+  <!-- A context window filling: chunks slide in and stack along a bar; past three quarters the
+       bar warms and says so; then compaction squeezes the tool output and chat into one summary. -->
+  <style>
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Helvetica"); font-weight: 400; }
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue Medium"), local("HelveticaNeue-Medium"); font-weight: 500 600; }
+    @font-face { font-family: "House Sans"; src: local("Helvetica Neue Bold"), local("HelveticaNeue-Bold"), local("Helvetica Bold"); font-weight: 700 900; }
+    #root { position: absolute; inset: 0; font-family: "House Sans"; }
+    #cw-scene { position: absolute; inset: 0; }
+    #cw-kicker { position: absolute; left: 96px; top: 72px; font-weight: 600; font-size: 28px; letter-spacing: 4px; color: #a3a19c; }
+    #cw-title { position: absolute; left: 260px; top: 330px; font-weight: 800; font-size: 72px; letter-spacing: -0.03em; color: #f7f3ec; }
+    #cw-bar { position: absolute; left: 260px; top: 470px; width: 1400px; height: 110px; border-radius: 20px; border: 2px solid rgba(247,243,236,0.22); overflow: hidden; }
+    .cw-seg { position: absolute; top: 0; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 30px; color: #1b1b1a; white-space: nowrap; transform-origin: left center; border-right: 3px solid #1b1b1a; }
+    #cw-state { position: absolute; left: 260px; top: 620px; font-family: "JetBrains Mono"; font-size: 32px; color: #a3a19c; }
+  </style>
+  <div id="root" data-composition-id="context-window" data-width="1920" data-height="1080">
+    <div id="cw-scene" class="clip" data-start="0" data-duration="6">
+      <div id="cw-kicker">CONTEXT WINDOW</div>
+      <div id="cw-title">What the model can see</div>
+      <div id="cw-bar">
+        <div id="cw-sys" class="cw-seg" style="left: 0px; width: 112px; background: #8a867f">sys</div>
+        <div id="cw-files" class="cw-seg" style="left: 112px; width: 420px; background: #b7cdbf">files</div>
+        <div id="cw-tools" class="cw-seg" style="left: 532px; width: 392px; background: #d9c9a8">tool output</div>
+        <div id="cw-chat" class="cw-seg" style="left: 924px; width: 252px; background: #c9b7d9">chat</div>
+        <div id="cw-summary" class="cw-seg" style="left: 532px; width: 210px; background: #e8e2d6">summary</div>
+      </div>
+      <div id="cw-state">filling</div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const tl = gsap.timeline({ paused: true });
+      const OUT = "power4.out", INOUT = "power3.inOut";
+      tl.fromTo("#cw-kicker", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, ease: OUT }, 0.1);
+      tl.fromTo("#cw-title", { opacity: 0, filter: "blur(8px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, ease: OUT }, 0.2);
+      tl.fromTo("#cw-bar", { opacity: 0 }, { opacity: 1, duration: 0.18, ease: OUT }, 0.35);
+      // Each chunk slides in from the left edge of the bar and settles in its place.
+      [["#cw-sys", 0.6], ["#cw-files", 1.0], ["#cw-tools", 1.5], ["#cw-chat", 2.0]].forEach(([sel, at]) =>
+        tl.fromTo(sel, { x: -260, opacity: 0 }, { x: 0, opacity: 1, duration: 0.46, ease: OUT }, at),
+      );
+      tl.fromTo("#cw-summary", { scaleX: 0, opacity: 0 }, { scaleX: 0, opacity: 0, duration: 0.01 }, 0);
+      // Past three quarters full, the frame warms and the state says so.
+      tl.to("#cw-bar", { borderColor: "rgba(217,119,87,0.95)", duration: 0.3, ease: "power2.out" }, 2.4);
+      tl.to("#cw-state", { color: "#d97757", duration: 0.2 }, 2.4);
+      // Compaction: tool output and chat squeeze away, a short summary takes their place.
+      tl.to(["#cw-tools", "#cw-chat"], { scaleX: 0, opacity: 0, duration: 0.46, ease: INOUT, stagger: 0.08 }, 3.6);
+      tl.to("#cw-summary", { scaleX: 1, opacity: 1, duration: 0.46, ease: OUT }, 3.95);
+      tl.to("#cw-bar", { borderColor: "rgba(183,205,191,0.8)", duration: 0.3, ease: "power2.out" }, 4.1);
+      tl.to("#cw-state", { color: "#b7cdbf", duration: 0.2 }, 4.1);
+      tl.to({}, { duration: 6 }, 0);
+      tl.eventCallback("onUpdate", () => {
+        const t = tl.time();
+        document.getElementById("cw-state").textContent = t < 2.4 ? "filling" : t < 3.6 ? "almost full" : t < 4.1 ? "compacting" : "compacted: room to work";
+      });
+      window.__timelines["context-window"] = tl;
+      tl.seek(0);
+    })();
+  </script>
+</template>
