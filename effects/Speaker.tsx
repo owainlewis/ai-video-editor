@@ -12,7 +12,8 @@ const framing = (layout: ResolvedShot["layout"], r: Resolved): { box: Box; faceH
   switch (layout) {
     case "split": {
       const inset = r.split === "inset";
-      return { box: splitGeom(r.split).speaker, faceH: inset ? 0.62 : 0.52, faceAt: inset ? 0.48 : 0.4, visible: true };
+      // A little wider than before, so the room shows round the head (Owain, 2026-10-26).
+      return { box: splitGeom(r.split).speaker, faceH: inset ? 0.54 : 0.44, faceAt: inset ? 0.48 : 0.4, visible: true };
     }
     case "punch":
       // A gentle push, never an extreme close-up (Owain is self-conscious about them, 2026-10-21):

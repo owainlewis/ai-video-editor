@@ -385,7 +385,9 @@ export const Edit = z.object({
   music: z.union([
     z.literal(false),
     // `start`: seconds into the track to begin, to skip a slow intro and land on its steady part.
-    z.object({ mood: z.enum(["focus", "uplift", "dark"]).default("focus"), track: z.string().optional(), level: z.number().default(-20), start: z.number().min(0).optional() }),
+    // `under`: how many LU the bed sits under the voice, measured on this take; it replaces `level`,
+    // which is a fixed gain and so changes with how loud the take was recorded. Chill is 15 to 18.
+    z.object({ mood: z.enum(["focus", "uplift", "dark"]).default("focus"), track: z.string().optional(), level: z.number().default(-20), under: z.number().min(0).optional(), start: z.number().min(0).optional() }),
   ]).default({ mood: "focus", level: -20 }),
   // A light colour grade on the speaker footage, as CSS filter amounts (1 = unchanged).
   grade: z.object({ brightness: z.number().default(1), contrast: z.number().default(1), saturate: z.number().default(1) }).default({ brightness: 1, contrast: 1, saturate: 1 }),

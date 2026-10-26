@@ -79,6 +79,11 @@ def main(project: Path) -> None:
         print(f"  music: {pick.name}")
         sf.write(work / "music.wav", fit(bed), SR, subtype="FLOAT")
         music_db = float(m.get("level", -20))
+        if m.get("under") is not None:
+            # Set the bed relative to this take's voice, so "15 LU under" sounds the same on every recording.
+            voice_i = float(loudness(work / "voice.wav")["input_i"]) + float(cfg.get("voiceGain", 0))
+            music_db = voice_i - float(m["under"]) - float(loudness(work / "music.wav")["input_i"])
+            print(f"  music: {m['under']} LU under the voice ({music_db:+.1f} dB)")
     else:
         # A synthesised bed always sounded cheap; no music beats bad music.
         if m:
