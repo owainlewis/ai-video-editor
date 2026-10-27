@@ -17,6 +17,7 @@ import { dropBroll } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
+import { timeline } from "../media/bin.ts";
 import { EFFECTS, effectList } from "../media/effects.ts";
 
 const TYPES: Record<string, string> = {
@@ -200,7 +201,7 @@ export async function startServer(port = 4747) {
         status,
         resolved,
         issues,
-        words: readJson(join(dir, "transcript.json")),
+        words: timeline(dir).words,
         plan: readFileSync(join(dir, "edit.json"), "utf8"),
         versions: versions(dir),
         chat: loadChat(dir).messages,

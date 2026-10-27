@@ -9,16 +9,19 @@ export type Placed = CutSegment & { start: number; end: number };
 // A project with no cut.json: its one clip, whole.
 export const wholeCut = (duration: number): CutPlan => ({ segments: [{ id: "s1", src: MAIN, in: 0, out: duration }] });
 
+// Sums are kept to the microsecond, so the same cut split differently adds up to the same times.
+const us = (t: number) => Math.round(t * 1e6) / 1e6;
+
 export const placed = (cut: CutPlan): Placed[] => {
   let t = 0;
   return cut.segments.map((s) => {
     const start = t;
-    t += s.out - s.in;
+    t = us(t + s.out - s.in);
     return { ...s, start, end: t };
   });
 };
 
-export const cutLength = (cut: CutPlan) => cut.segments.reduce((sum, s) => sum + s.out - s.in, 0);
+export const cutLength = (cut: CutPlan) => us(cut.segments.reduce((sum, s) => sum + s.out - s.in, 0));
 
 // What is said on the timeline: each segment's words, moved to where the segment plays. A word cut
 // through by an edge stays if most of it plays, clamped to the edge (`clippedWords` warns about it).

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { atTime, clippedWords, cutLength, cutWords, insertSegment, joins, mapRanges, moveSegment, placed, rippleDelete, slotAt, snapEdge, splitAt, trimEdge, wholeCut } from "../engine/cut.ts";
-import { Cut } from "../engine/schema.ts";
+import { Cut, Edit } from "../engine/schema.ts";
+import { resolveShots } from "../engine/resolve.ts";
 
 const said = (text: string, gap = 0.3) => text.split(" ").map((t, i) => ({ text: t, start: +(i * gap).toFixed(3), end: +(i * gap + 0.25).toFixed(3) }));
 // "one" 0-0.25, "two" 0.3-0.55, ... "six" 1.5-1.75
@@ -73,5 +74,62 @@ describe("editing the cut", () => {
   it("warns about an edge inside a word", () => {
     expect(clippedWords({ segments: [{ id: "a", src: "main", in: 0.4, out: 1.8 }] }, { main })[0].message).toMatch(/inside the word "two"/);
     expect(clippedWords(wholeCut(1.8), { main })).toEqual([]);
+  });
+});
+
+describe("graphics follow the words through a re-cut", () => {
+  // Two sentences: a title lands on "five", a list reveal on "six".
+  const plan = Edit.parse({
+    title: "t",
+    face: { x: 0.5, y: 0.3, h: 0.2 },
+    shots: [
+      { at: "one two", layout: "full" },
+      { at: "five", layout: "split", visual: { kind: "list", items: [{ text: "a" }, { text: "b", at: "six" }] } },
+      { at: "alpha", layout: "full" },
+    ],
+  });
+  const words = { main, b };
+  const resolve = (cut: ReturnType<typeof wholeCut>) => resolveShots(plan, cutWords(cut, words), cutLength(cut), 30, true);
+  const both = { segments: [{ id: "s1", src: "main", in: 0, out: 1.8 }, { id: "s2", src: "b", in: 0, out: 0.9 }] };
+  const at = (r: ReturnType<typeof resolve>, anchor: string) => r.shots.find((s) => s.anchor === anchor);
+
+  it("a split changes nothing", () => {
+    const before = resolve(both);
+    const after = resolve(splitAt(both, 0.58));
+    expect(after.shots).toEqual(before.shots);
+    expect(after.issues).toEqual([]);
+  });
+
+  it("a ripple delete before an anchor pulls it and its reveals earlier", () => {
+    const before = resolve(both);
+    // Cut "three four" (0.58 to 1.18 in main).
+    const cut = splitAt(splitAt(both, 0.58), 1.18);
+    const after = resolve(rippleDelete(cut, cut.segments[1].id));
+    expect(at(after, "five")!.start).toBeCloseTo(at(before, "five")!.start - 0.6, 1);
+    expect(at(after, "five")!.visual!.times![1]).toBeCloseTo(before.shots[1].visual!.times![1] - 0.6, 5);
+    expect(at(after, "alpha")!.start).toBeCloseTo(at(before, "alpha")!.start - 0.6, 1);
+    expect(after.issues).toEqual([]);
+  });
+
+  it("a reorder moves the shot with its words", () => {
+    // Clip b now plays first: "alpha" opens the video, "one two" follows it.
+    const after = resolve(moveSegment(both, "s2", 0));
+    expect(after.shots.map((s) => s.anchor)).toEqual(["alpha", "one two", "five"]);
+    expect(at(after, "alpha")!.start).toBe(0);
+    expect(at(after, "one two")!.start).toBeCloseTo(Math.round((0.9 - 0.05) * 30) / 30);
+    expect(at(after, "five")!.visual!.times![1]).toBeCloseTo(0.9 + 1.5 - 0.05);
+    expect(after.issues).toEqual([]);
+  });
+
+  it("a shot whose words were cut is left out with a warning, not an error", () => {
+    const cut = splitAt(splitAt(both, 1.18), 1.48);
+    const after = resolve(rippleDelete(cut, cut.segments[1].id));
+    expect(after.shots.map((s) => s.anchor)).toEqual(["one two", "alpha"]);
+    expect(after.issues.map((i) => i.level)).toEqual(["warn"]);
+  });
+
+  it("without a cut, anchors out of order are still an error", () => {
+    const { issues } = resolveShots(plan, cutWords(moveSegment(both, "s2", 0), words), 2.7, 30, false);
+    expect(issues.some((i) => i.level === "error")).toBe(true);
   });
 });

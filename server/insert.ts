@@ -9,6 +9,7 @@ import type { Word } from "../engine/schema.ts";
 import { resolveProject } from "../media/project.ts";
 import { probeDuration, readJson } from "../media/tools.ts";
 import { loadLibrary } from "../media/broll.ts";
+import { timeline } from "../media/bin.ts";
 
 const brollLength = (id: string) => loadLibrary().find((c) => c.id === id)?.duration ?? 0;
 
@@ -18,7 +19,7 @@ export function insertAt(projects: string, slug: string, added: { start: number;
   const dir = join(projects, slug);
   const before = readFileSync(join(dir, "edit.json"), "utf8");
   const plan = JSON.parse(before) as { shots: Shot[] };
-  const words = readJson<Word[]>(join(dir, "transcript.json"));
+  const words = timeline(dir).words;
   const { resolved, issues } = resolveProject(projects, slug);
   if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
   const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
@@ -58,7 +59,7 @@ export function insertAt(projects: string, slug: string, added: { start: number;
 export function placeOver(projects: string, slug: string, shot: Shot, start: number, length: number, stretch = 1) {
   const { resolved } = resolveProject(projects, slug);
   if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
-  const words = readJson<Word[]>(join(projects, slug, "transcript.json"));
+  const words = timeline(join(projects, slug)).words;
   const from = words[wordAt(words, start)]?.start;
   if (from === undefined) throw Object.assign(new Error("nothing is said after that point"), { code: 400 });
   const here = resolved.shots.find((s) => from >= s.start && from < s.end);
