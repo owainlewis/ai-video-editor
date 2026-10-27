@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
-import { deleteRange, rippleDelete, splitAt, wholeCut } from "../engine/cut";
+import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
 import type { CutPlan, Resolved } from "../engine/schema";
 import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
 import { Library } from "./Library";
@@ -28,6 +28,16 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [segment, setSegment] = useState<string | null>(null);
   const [rate, setRate] = useState(1);
   const player = useRef<PlayerRef>(null);
+  // Each clip's loudness, read once, so trims snap to the real pauses between words.
+  const [levels, setLevels] = useState<Record<string, Levels>>({});
+  const ready = (p?.bin ?? []).filter((c) => c.ready).map((c) => c.id).join(",");
+  useEffect(() => {
+    for (const id of ready.split(",").filter((x) => x && !levels[x]))
+      fetch(`/${id === "main" ? slug : `${slug}/clips/${id}`}/build/level.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((l: Levels | null) => l && setLevels((m) => ({ ...m, [id]: l })))
+        .catch(() => {});
+  }, [slug, ready]);
 
   const load = useCallback(
     () =>
@@ -251,7 +261,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         />
         <section className="bottom">
           <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))}
-            cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart} />
+            cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart} />
           {dropError && (
             <div className="toast" onClick={() => setDropError("")}>
               {dropError}

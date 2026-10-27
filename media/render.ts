@@ -5,14 +5,16 @@ import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
 import { resolveProject } from "./project.ts";
+import { type FlatCut, hasCut, renderCut } from "./cutrender.ts";
 import { FPS, type Log, ROOT, run } from "./tools.ts";
 
-export function mixAudio(projects: string, slug: string, log?: Log) {
-  run("uv", ["run", "--quiet", "--with", "numpy", "--with", "scipy", "--with", "soundfile", "python", "-m", "audio.mix", join(projects, slug)], { log });
+// `flat`: mix the flattened cut's voice, with the settings its export wrote.
+export function mixAudio(projects: string, slug: string, log?: Log, flat?: FlatCut) {
+  run("uv", ["run", "--quiet", "--with", "numpy", "--with", "scipy", "--with", "soundfile", "python", "-m", "audio.mix", join(projects, slug), ...(flat ? ["build/audio.export.json"] : [])], { log });
 }
 
-const ensureResolved = (projects: string, slug: string) => {
-  const { resolved, issues } = resolveProject(projects, slug);
+const ensureResolved = (projects: string, slug: string, flat?: FlatCut) => {
+  const { resolved, issues } = resolveProject(projects, slug, flat);
   const errors = issues.filter((i) => i.level === "error");
   if (!resolved || errors.length) throw new Error(errors.map((i) => i.message).join("\n") || "the plan does not resolve");
   return resolved;
@@ -35,14 +37,17 @@ export function stills(projects: string, slug: string, times: number[], log?: Lo
 
 // The finished video: mix the audio, then render every frame. Progress comes from Remotion's
 // "Rendered n/total" lines.
-export function renderFinal(projects: string, slug: string, onProgress: (done: number, total: number) => void, log?: Log): Promise<string> {
+export async function renderFinal(projects: string, slug: string, onProgress: (done: number, total: number) => void, log?: Log, onStage: (stage: string) => void = () => {}): Promise<string> {
   ensureResolved(projects, slug);
-  mixAudio(projects, slug, log);
-  const resolved = ensureResolved(projects, slug);
+  // A cut is flattened from the originals first, and the render draws the picture from that file.
+  const flat = hasCut(projects, slug) ? await renderCut(projects, slug, onStage, log) : undefined;
+  ensureResolved(projects, slug, flat);
+  mixAudio(projects, slug, log, flat);
+  const resolved = ensureResolved(projects, slug, flat);
   const out = join(projects, slug, "renders/final.mp4");
   mkdirSync(join(projects, slug, "renders"), { recursive: true });
   return new Promise((ok, fail) => {
-    const p = spawn("npx", ["remotion", "render", "effects/index.ts", compositionFor(resolved.canvas).id, out, `--props=${join(projects, slug, "build/edit.resolved.json")}`], { cwd: ROOT });
+    const p = spawn("npx", ["remotion", "render", "effects/index.ts", compositionFor(resolved.canvas).id, out, `--props=${join(projects, slug, flat ? "build/edit.export.json" : "build/edit.resolved.json")}`], { cwd: ROOT });
     let tail = "";
     const read = (chunk: Buffer) => {
       const s = chunk.toString();

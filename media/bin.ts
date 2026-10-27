@@ -1,12 +1,13 @@
 // A project's media bin and its cut. The clip a project was made from is "main", with its files at
 // the project's root as always; clips added later each get the same import (working copy, preview,
 // voice, word transcript) in clips/<id>/. cut.json says which stretches of them play, in order.
-import { existsSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { cutLength, cutWords, wholeCut } from "../engine/cut.ts";
+import { cutLength, cutWords, type Levels, wholeCut } from "../engine/cut.ts";
 import { Cut, type CutPlan, MAIN, type Word } from "../engine/schema.ts";
 import { liveStatus, type Status } from "./ingest.ts";
-import { readJson } from "./tools.ts";
+import { readJson, writeJson } from "./tools.ts";
 
 export type Clip = { id: string; name: string; duration: number; original: string; status: Status | null; ready: boolean };
 
@@ -68,4 +69,35 @@ export function timeline(dir: string) {
   }
   const byClip = clipWords(dir, cut.segments.map((s) => s.src));
   return { cut, explicit, error, words: cutWords(cut, byClip), byClip, duration: cutLength(cut) };
+}
+
+// A clip's loudness every 10 ms, from its voice, cached in build/level.json until the voice changes.
+// The editor reads the same file to snap trims to the real pauses. A pause is 18 dB under the
+// clip's speech (its loudest fifth), so it does not depend on how loud the take was recorded.
+export function clipLevels(dir: string, id: string): Levels | null {
+  const at = clipDir(dir, id);
+  const voice = join(at, "source/voice.wav");
+  const file = join(at, "build/level.json");
+  if (!existsSync(voice)) return null;
+  const made = statSync(voice).mtimeMs;
+  // Wide enough to hear an "s" or "f" (mostly above 4 kHz): at a lower rate the end of a word like
+  // "this" measures as silence, and a trim snapped there cuts it.
+  const rate = 100, sr = 24000, n = sr / rate;
+  if (existsSync(file)) {
+    const cached = readJson<Levels & { made: number; sr?: number }>(file);
+    if (cached.made === made && cached.sr === sr) return cached;
+  }
+  const pcm = spawnSync("ffmpeg", ["-v", "error", "-i", voice, "-ac", "1", "-ar", String(sr), "-f", "s16le", "-"], { maxBuffer: 1 << 30 }).stdout as Buffer;
+  const samples = new Int16Array(Uint8Array.prototype.slice.call(pcm, 0, pcm.length - (pcm.length % 2)).buffer);
+  const db: number[] = [];
+  for (let i = 0; i + n <= samples.length; i += n) {
+    let sum = 0;
+    for (let j = i; j < i + n; j++) sum += (samples[j] / 32768) ** 2;
+    db.push(Math.round(10 * Math.log10(sum / n + 1e-10)));
+  }
+  const sorted = [...db].sort((a, b) => a - b);
+  const speech = sorted[Math.floor(sorted.length * 0.8)] ?? -30;
+  const levels = { rate, quiet: speech - 18, db };
+  writeJson(file, { made, sr, ...levels });
+  return levels;
 }

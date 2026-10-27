@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { cutLength, insertSegment, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
+import { cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
 import { type BinClip, clock, type Suggestion } from "./api";
 
@@ -21,7 +21,7 @@ type Track = { id: string; label: string; height: number; render: (pps: number) 
 // captions, music and sound. Click empty space to move the playhead, drag to select a section, click
 // a clip to select it. The selection is what Claude gets as "this".
 // The A-roll track edits the cut: drop a clip from the bin, drag a segment to reorder it, drag its
-// edges to trim (snapping to word edges; hold Alt for frame-accurate). B-roll clips trim the same way.
+// edges to trim (snapping to word edges and the pause beside them; hold Alt for frame-accurate). B-roll clips trim the same way.
 // Each change goes to the server as a new cut.json, so it is a version that undo and redo step through.
 export const Timeline: React.FC<{
   r: Resolved;
@@ -37,11 +37,12 @@ export const Timeline: React.FC<{
   cut: CutPlan;
   bin: BinClip[];
   clipWords: Record<string, Word[]>;
+  levels: Record<string, Levels>;
   segment: string | null;
   onSegment: (id: string | null) => void;
   onCut: (cut: CutPlan) => Promise<unknown>;
   onShotStart: (from: number, to: number) => Promise<unknown>;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, segment, onSegment, onCut, onShotStart }) => {
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart }) => {
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   // A cut being trimmed shows live while the drag lasts, and until the server sends the new one back.
   const [live, setLive] = useState<CutPlan | null>(null);
@@ -90,7 +91,7 @@ export const Timeline: React.FC<{
     follow(
       (m) => {
         const raw = seg[edge] + (m.clientX - x0) / pps;
-        const t = m.altKey ? Math.round(raw * 30) / 30 : snapEdge(clipWords[seg.src] ?? [], raw, edge);
+        const t = m.altKey ? Math.round(raw * 30) / 30 : snapEdge(clipWords[seg.src] ?? [], raw, edge, levels[seg.src]);
         next = trimEdge(cut, id, edge, t, names.get(seg.src)?.duration ?? Infinity);
         setLive(next);
       },

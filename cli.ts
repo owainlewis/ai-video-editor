@@ -159,7 +159,7 @@ async function main() {
           : await renderFinal(projects, slug, (done, total) => {
               const pct = Math.floor((100 * done) / total);
               if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
-            }, log);
+            }, log, (stage) => setStatus(dir, stage));
         writeJson(join(dir, "status.json"), { stage: "Rendered", done: true, at: new Date().toISOString() });
         console.log(`Rendered ${out}`);
       } catch (e) {

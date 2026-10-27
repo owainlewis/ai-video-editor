@@ -10,8 +10,8 @@ import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
 import { useClip } from "./broll.ts";
-import { clipPath, timeline } from "./bin.ts";
-import { clippedWords, joins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
+import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
+import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
 import { MAIN } from "../engine/schema.ts";
 import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
 
@@ -42,7 +42,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
 
   const { shots, issues } = resolveShots(plan, words, meta.duration, FPS, explicit);
   if (explicit) {
-    issues.push(...clippedWords(cut, line.byClip));
+    // The words can be a tenth of a second off; the sound says whether a join cuts into speech.
+    const ids = [...new Set(cut.segments.map((x) => x.src))];
+    const levels = Object.fromEntries(ids.flatMap((id) => { const l = clipLevels(dir, id); return l ? [[id, l]] : []; }));
+    const lengths = Object.fromEntries(clips(dir).map((c) => [c.id, c.duration]));
+    issues.push(...clippedWords(cut, line.byClip, levels), ...loudJoins(cut, levels, lengths));
     if (!cut.segments.length) issues.push({ level: "error", message: "the cut is empty; drag a clip onto the A-roll track" });
     // Stretches in seconds belong to a project without a cut; a cut removes by ripple delete instead.
     if (plan.remove.length) issues.push({ level: "error", message: 'this project has a cut, so "remove" no longer applies; delete the stretch from the cut instead' });
@@ -155,7 +159,10 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const cuts = explicit ? [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b) : found;
   issues.push(...qcPlan(resolved, words, plan.shots.map((s) => s.note), cuts));
   if (youtube) issues.push(...saidTwice(words, plan.remove));
-  writeJson(join(dir, "build/edit.resolved.json"), resolved);
-  writeJson(join(dir, "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
+  // An export of a cut writes its own files: the editor re-resolves the plan whenever it reloads,
+  // and must not swap the flattened cut out from under a running export.
+  const name = exportCut ? "export" : "resolved";
+  writeJson(join(dir, `build/edit.${name}.json`), resolved);
+  writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
   return { resolved, issues };
 }

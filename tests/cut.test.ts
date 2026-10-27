@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { atTime, clippedWords, deleteRange, cutLength, cutWords, insertSegment, joins, mapRanges, moveSegment, placed, rippleDelete, slotAt, snapEdge, splitAt, trimEdge, wholeCut } from "../engine/cut.ts";
+import { atTime, clippedWords, deleteRange, loudJoins, quietest, cutLength, cutWords, insertSegment, joins, mapRanges, moveSegment, placed, rippleDelete, slotAt, snapEdge, splitAt, trimEdge, wholeCut } from "../engine/cut.ts";
 import { Cut, Edit } from "../engine/schema.ts";
 import { resolveShots } from "../engine/resolve.ts";
+import { segmentFrames } from "../media/cutrender.ts";
 
 const said = (text: string, gap = 0.3) => text.split(" ").map((t, i) => ({ text: t, start: +(i * gap).toFixed(3), end: +(i * gap + 0.25).toFixed(3) }));
 // "one" 0-0.25, "two" 0.3-0.55, ... "six" 1.5-1.75
@@ -148,5 +149,40 @@ describe("graphics follow the words through a re-cut", () => {
   it("without a cut, anchors out of order are still an error", () => {
     const { issues } = resolveShots(plan, cutWords(moveSegment(both, "s2", 0), words), 2.7, 30, false);
     expect(issues.some((i) => i.level === "error")).toBe(true);
+  });
+});
+
+describe("flattening the cut for export", () => {
+  it("cuts segments to whole frames that always add up to the timeline", () => {
+    // Thirty segments of an awkward length at 23.976 fps: rounding each one alone would drift.
+    const cut = { segments: Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, src: "main", in: 0, out: 1.013 })) };
+    const fps = 24000 / 1001;
+    const frames = segmentFrames(placed(cut), fps);
+    const total = frames.reduce((t, f) => t + f.n, 0);
+    expect(Math.abs(total / fps - cutLength(cut))).toBeLessThanOrEqual(0.5 / fps);
+    frames.forEach((f, i) => expect(Math.abs(f.a / fps - placed(cut)[i].start)).toBeLessThanOrEqual(0.5 / fps));
+  });
+});
+
+describe("snapping to the real pause", () => {
+  // 2 s of levels: speech at -30 dB with a pause from 0.70 to 0.80 s, later than Whisper's word edge.
+  const db = Array.from({ length: 200 }, (_, i) => (i >= 70 && i < 80 ? -70 : -30));
+  const levels = { rate: 100, quiet: -48, db };
+  it("finds the pause near an edge, or nothing in continuous speech", () => {
+    expect(quietest(levels, 0.6)).toBeCloseTo(0.715);
+    expect(quietest(levels, 1.5)).toBeNull();
+  });
+  it("does not take a short dip between syllables for a pause", () => {
+    const dip = { ...levels, db: levels.db.map((v, i) => (i === 120 || i === 121 ? -70 : v)) };
+    expect(quietest(dip, 1.2)).toBeNull();
+  });
+  it("moves a word-edge trim onto the pause beside it", () => {
+    const words = [{ text: "a", start: 0.2, end: 0.6 }, { text: "b", start: 0.6, end: 1.2 }];
+    expect(snapEdge(words, 0.58, "out")).toBeCloseTo(0.6);
+    expect(snapEdge(words, 0.58, "out", levels)).toBeCloseTo(0.715);
+  });
+  it("warns about a join on sound, not about the clip's own start and end", () => {
+    const issues = loudJoins({ segments: [{ id: "a", src: "main", in: 0, out: 0.5 }, { id: "b", src: "main", in: 0.75, out: 2 }] }, { main: levels }, { main: 2 });
+    expect(issues.map((i) => i.message)).toEqual([expect.stringMatching(/^segment 1 ends on sound .*pause is at 0\.7\ds/)]);
   });
 });

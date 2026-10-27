@@ -10,6 +10,7 @@ import { compositionFor } from "../effects/canvas.ts";
 import type { Issue } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { mixAudio } from "./render.ts";
+import { hasCut, renderCut } from "./cutrender.ts";
 import { resolveProject } from "./project.ts";
 import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
@@ -36,12 +37,16 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const dir = join(projects, slug);
   const first = resolveProject(projects, slug);
   if (!first.resolved || first.issues.some((i) => i.level === "error")) throw new Error(first.issues.filter((i) => i.level === "error").map((i) => i.message).join("\n"));
+  // A project with a cut is flattened to one picture and one voice from the originals first; from
+  // there the export is the same as for a single finished clip.
+  const flat = hasCut(projects, slug) ? await renderCut(projects, slug, onStage, log) : undefined;
+  if (flat) resolveProject(projects, slug, flat);
   onStage("Mixing audio");
-  mixAudio(projects, slug, log);
-  const { resolved } = resolveProject(projects, slug);
+  mixAudio(projects, slug, log, flat);
+  const { resolved } = resolveProject(projects, slug, flat);
   const r = resolved!;
   const meta = readJson<{ original: string }>(join(dir, "project.json"));
-  const original = meta.original;
+  const original = flat?.picture ?? meta.original;
   const [num, den] = probeRate(original);
   const fps = num / den;
   const [w] = probeSize(original);

@@ -19,7 +19,7 @@ import { dropBroll, moveShotStart } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
-import { clipDir, clips, timeline } from "../media/bin.ts";
+import { clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
 import { EFFECTS, effectList } from "../media/effects.ts";
 
 const TYPES: Record<string, string> = {
@@ -201,6 +201,8 @@ export async function startServer(port = 4747) {
       if (!versions(dir).length) snapshot(dir, "edit");
       const { resolved, issues } = resolveProject(projects, slug);
       const line = timeline(dir);
+      // Each clip's levels (build/level.json), which the editor reads to snap trims to pauses.
+      for (const c of clips(dir)) if (c.ready) clipLevels(dir, c.id);
       return send(res, 200, {
         slug,
         status,
