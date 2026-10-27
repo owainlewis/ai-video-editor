@@ -402,6 +402,29 @@ export const Edit = z.object({
   shots: z.array(Shot).min(1),
 });
 
+// The cut (`cut.json`): what of the footage plays, in order. A project holds several source clips
+// (its media bin); the cut is a list of segments, each a stretch of one clip from `in` to `out` in
+// that clip's own seconds. The plan (`edit.json`) sits on top of the cut and is anchored to words,
+// so its graphics follow the words when the cut changes. A project with no cut.json plays its one
+// clip whole, as before.
+// "main" is the clip the project was made from (its files sit at the project's root); added clips
+// live in clips/<id>/.
+export const MAIN = "main";
+export const Segment = z.object({
+  // Stable, so the editor can select and move a segment across versions.
+  id: z.string().min(1),
+  src: z.string().min(1),
+  in: z.number().min(0),
+  out: z.number(),
+  // J and L cuts (not used yet): seconds the sound starts before the picture (`audioIn`) or runs
+  // on after it (`audioOut`).
+  audioIn: z.number().min(0).optional(),
+  audioOut: z.number().min(0).optional(),
+}).refine((s) => s.out > s.in, "a segment's out must be after its in");
+export const Cut = z.object({ segments: z.array(Segment) });
+export type CutPlan = z.infer<typeof Cut>;
+export type CutSegment = z.infer<typeof Segment>;
+
 export type EditPlan = z.infer<typeof Edit>;
 export type VisualSpec = z.infer<typeof Visual>;
 
@@ -448,6 +471,10 @@ export type Resolved = {
   captions: boolean;
   // Light copies for the review board's players: 1080p H.264 video and AAC audio. Renders use the originals.
   preview?: { video?: string; audio?: string };
+  // The editor only, when the project has a cut: the segments to play from the clips' preview
+  // copies, `start` to `end` on the timeline from `in` in the clip. Exports flatten the cut to one
+  // file first (media/cutrender.ts), so they never see this.
+  cut?: { video: string; audio?: string; start: number; end: number; in: number }[];
   shots: ResolvedShot[];
   chunks: Chunk[];
   sfx: SfxEvent[];
