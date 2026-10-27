@@ -1,17 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Resolved, ResolvedShot, Word } from "../engine/schema";
-import { clock, type Suggestion } from "./api";
+import { cutLength, insertSegment, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
+import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
+import { type BinClip, clock, type Suggestion } from "./api";
 
 export type Range = { start: number; end: number; label?: string };
 
 // The drag type for a clip from the library panel.
 export const CLIP = "application/x-studio-clip";
+// The drag type for a clip from the project's bin, cut in on the A-roll track.
+export const SOURCE = "application/x-studio-source";
+
+// A drag on the timeline: a segment being moved, a segment edge, or a b-roll clip's edge.
+type Drag =
+  | { kind: "move"; id: string; slot: number }
+  | { kind: "shot"; from: number; edge: "in" | "out"; t: number };
 
 type Track = { id: string; label: string; height: number; render: (pps: number) => React.ReactNode };
 
-// The edit as tracks, like an editor: graphics, text, b-roll, the picture, what is said, captions,
-// music and sound. Click empty space to move the playhead, drag to select a section, click a clip
-// to select it. The selection is what Claude gets as "this".
+// The edit as tracks, like an editor: graphics, text, b-roll, the A-roll (the cut), what is said,
+// captions, music and sound. Click empty space to move the playhead, drag to select a section, click
+// a clip to select it. The selection is what Claude gets as "this".
+// The A-roll track edits the cut: drop a clip from the bin, drag a segment to reorder it, drag its
+// edges to trim (snapping to word edges; hold Alt for frame-accurate). B-roll clips trim the same way.
+// Each change goes to the server as a new cut.json, so it is a version that undo and redo step through.
 export const Timeline: React.FC<{
   r: Resolved;
   words: Word[];
@@ -23,8 +34,21 @@ export const Timeline: React.FC<{
   onSelect: (r: Range | null) => void;
   onDropClip: (ref: string, at: number, length: number) => void;
   drafts?: Suggestion[];
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [] }) => {
+  cut: CutPlan;
+  bin: BinClip[];
+  clipWords: Record<string, Word[]>;
+  segment: string | null;
+  onSegment: (id: string | null) => void;
+  onCut: (cut: CutPlan) => Promise<unknown>;
+  onShotStart: (from: number, to: number) => Promise<unknown>;
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, segment, onSegment, onCut, onShotStart }) => {
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
+  // A cut being trimmed shows live while the drag lasts, and until the server sends the new one back.
+  const [live, setLive] = useState<CutPlan | null>(null);
+  useEffect(() => setLive(null), [cut]);
+  const shown = live ?? cut;
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const names = useMemo(() => new Map(bin.map((c) => [c.id, c])), [bin]);
   const box = useRef<HTMLDivElement>(null);
   const sentences = useMemo(() => toSentences(words), [words]);
   // Fit shows the whole video in the visible width; zoom in from there.
@@ -39,14 +63,95 @@ export const Timeline: React.FC<{
   const fit = Math.max(0.3, Math.min(140, (view - 16) / Math.max(1, r.duration)));
   const [zoom, setZoom] = useState<number | null>(null);
   const pps = zoom ?? fit;
-  const width = r.duration * pps;
+  const length = Math.max(r.duration, cutLength(shown));
+  const width = length * pps;
   const at = (clientX: number) => {
     const el = box.current!;
-    return Math.max(0, Math.min(r.duration, (clientX - el.getBoundingClientRect().left + el.scrollLeft) / pps));
+    return Math.max(0, Math.min(length, (clientX - el.getBoundingClientRect().left + el.scrollLeft) / pps));
+  };
+
+  // Follows the pointer until it is released.
+  const follow = (move: (m: PointerEvent) => void, up: (m: PointerEvent) => void) => {
+    const end = (m: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      up(m);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+  };
+
+  // Trim a segment's edge. The edge snaps to the nearest word edge in its clip, or to a frame with Alt.
+  const trim = (e: React.PointerEvent, id: string, edge: "in" | "out") => {
+    e.stopPropagation();
+    const seg = cut.segments.find((s) => s.id === id)!;
+    const x0 = e.clientX;
+    let next: CutPlan | null = null;
+    follow(
+      (m) => {
+        const raw = seg[edge] + (m.clientX - x0) / pps;
+        const t = m.altKey ? Math.round(raw * 30) / 30 : snapEdge(clipWords[seg.src] ?? [], raw, edge);
+        next = trimEdge(cut, id, edge, t, names.get(seg.src)?.duration ?? Infinity);
+        setLive(next);
+      },
+      () => {
+        if (next && JSON.stringify(next) !== JSON.stringify(cut)) onCut(next).catch(() => setLive(null));
+        else setLive(null);
+      },
+    );
+  };
+
+  // Press on a segment: a click selects it, a drag moves it to another place in the cut.
+  const grab = (e: React.PointerEvent, id: string) => {
+    e.stopPropagation();
+    const x0 = e.clientX;
+    let slot = -1;
+    follow(
+      (m) => {
+        if (slot < 0 && Math.abs(m.clientX - x0) < 5) return;
+        slot = slotAt(cut, at(m.clientX));
+        setDrag({ kind: "move", id, slot });
+      },
+      () => {
+        setDrag(null);
+        const from = cut.segments.findIndex((s) => s.id === id);
+        if (slot < 0) {
+          const s = placed(cut)[from];
+          onSegment(id);
+          onSelect({ start: s.start, end: s.end, label: names.get(s.src)?.name ?? s.src });
+          return;
+        }
+        const to = slot > from ? slot - 1 : slot;
+        if (to !== from) {
+          const next = moveSegment(cut, id, to);
+          setLive(next);
+          onCut(next).catch(() => setLive(null));
+        }
+      },
+    );
+  };
+
+  // Trim a b-roll clip's edge: it lands on the word nearest the pointer.
+  const trimShot = (e: React.PointerEvent, from: number, edge: "in" | "out") => {
+    e.stopPropagation();
+    let t = from;
+    follow(
+      (m) => {
+        const raw = at(m.clientX);
+        const w = words.reduce((best, x) => (Math.abs(x.start - raw) < Math.abs(best.start - raw) ? x : best), words[0]);
+        t = w ? w.start - 0.05 : raw;
+        setDrag({ kind: "shot", from, edge, t });
+      },
+      () => {
+        if (Math.abs(t - from) > 0.02) onShotStart(from, t + 0.05).finally(() => setDrag(null));
+        else setDrag(null);
+      },
+    );
   };
 
   const down = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest(".clip")) return;
+    onSegment(null);
     const start = at(e.clientX);
     let moved = false;
     const move = (m: PointerEvent) => {
@@ -79,21 +184,29 @@ export const Timeline: React.FC<{
   }, [r.shots]);
   const isBroll = (s: ResolvedShot) => s.layout === "cutaway" || s.visual?.kind === "video";
   const isText = (s: ResolvedShot) => s.layout === "over";
-  const clip = (c: { shot: ResolvedShot; end: number }, pps: number, cls: string, label: string) => (
+  const clip = (c: { shot: ResolvedShot; end: number }, pps: number, cls: string, label: string, edges = false) => {
+    // A b-roll edge being dragged shows where it will land.
+    const d = drag?.kind === "shot" && (drag.edge === "in" ? drag.from === c.shot.start : drag.from === c.end) ? drag : null;
+    const a = d?.edge === "in" ? d.t : c.shot.start;
+    const b = d?.edge === "out" ? d.t : c.end;
+    return (
     <div
       key={`${c.shot.start}`}
       className={`clip ${cls} ${selection && Math.abs(selection.start - c.shot.start) < 0.01 && Math.abs(selection.end - c.end) < 0.01 ? "on" : ""}`}
-      style={{ left: c.shot.start * pps, width: Math.max(3, (c.end - c.shot.start) * pps - 2) }}
+      style={{ left: a * pps, width: Math.max(3, (b - a) * pps - 2) }}
       title={`${clock(c.shot.start)} ${label} · "${c.shot.anchor}"`}
       onClick={() => {
         onSelect({ start: c.shot.start, end: c.end, label: `${label} "${c.shot.anchor}"` });
         onSeek(c.shot.start + 0.05);
       }}
     >
+      {edges && <i className="edge in" title="Drag to trim the start" onPointerDown={(e) => trimShot(e, c.shot.start, "in")} onClick={(e) => e.stopPropagation()} />}
       <b>{label}</b>
       <span>{c.shot.anchor}</span>
+      {edges && <i className="edge out" title="Drag to trim the end" onPointerDown={(e) => trimShot(e, c.end, "out")} onClick={(e) => e.stopPropagation()} />}
     </div>
-  );
+    );
+  };
 
   const tracks: Track[] = [
     {
@@ -113,18 +226,39 @@ export const Timeline: React.FC<{
       ),
     },
     { id: "text", label: "Text", height: 34, render: (pps) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "title" ? "title" : "lower third")) },
-    { id: "broll", label: "B-roll", height: 34, render: (pps) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll")) },
+    { id: "broll", label: "B-roll", height: 34, render: (pps) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll", true)) },
     {
-      id: "picture",
-      label: "Picture",
-      height: 34,
-      render: (pps) => (
-        <>
-          <div className="tbar picture" style={{ left: 0, width: r.duration * pps }} />
-          {camera?.map(([a, b], i) => <div key={i} className="tbar camera" style={{ left: a * pps, width: (b - a) * pps }} title="On camera: graphics go here" />)}
-          {clips.filter((c) => c.shot.layout === "punch").map((c) => <div key={c.shot.start} className="tbar punch" style={{ left: c.shot.start * pps, width: (c.end - c.shot.start) * pps }} title="Punch-in" />)}
-        </>
-      ),
+      id: "aroll",
+      label: "A-roll",
+      height: 40,
+      render: (pps) => {
+        const segs = placed(shown);
+        const slot = drag?.kind === "move" ? drag.slot : -1;
+        return (
+          <>
+            {camera?.map(([a, b], i) => <div key={i} className="tbar camera" style={{ left: a * pps, width: (b - a) * pps }} title="On camera: graphics go here" />)}
+            {segs.map((s) => {
+              const clip = names.get(s.src);
+              return (
+                <div
+                  key={s.id}
+                  className={`clip seg ${segment === s.id ? "on" : ""} ${drag?.kind === "move" && drag.id === s.id ? "moving" : ""}`}
+                  style={{ left: s.start * pps, width: Math.max(3, (s.end - s.start) * pps - 2) }}
+                  title={`${clip?.name ?? s.src}, ${clock(s.in)} to ${clock(s.out)}. Drag to move, drag an edge to trim (Alt: by frame), Delete to remove.`}
+                  onPointerDown={(e) => grab(e, s.id)}
+                >
+                  <i className="edge in" onPointerDown={(e) => trim(e, s.id, "in")} />
+                  <b>{clip?.name.replace(/\.\w+$/, "") ?? s.src}</b>
+                  <span>{clock(s.in)}</span>
+                  <i className="edge out" onPointerDown={(e) => trim(e, s.id, "out")} />
+                </div>
+              );
+            })}
+            {slot >= 0 && <div className="slot" style={{ left: (segs[slot]?.start ?? cutLength(shown)) * pps - 1 }} />}
+            {clips.filter((c) => c.shot.layout === "punch").map((c) => <div key={c.shot.start} className="tbar punch" style={{ left: c.shot.start * pps, width: (c.end - c.shot.start) * pps }} title="Punch-in" />)}
+          </>
+        );
+      },
     },
     {
       id: "said",
@@ -143,7 +277,7 @@ export const Timeline: React.FC<{
   ];
 
   const step = pps < 1 ? 120 : pps < 3 ? 60 : pps < 12 ? 30 : pps < 30 ? 15 : pps < 70 ? 5 : 1;
-  const ticks = Array.from({ length: Math.floor(r.duration / step) + 1 }, (_, i) => i * step);
+  const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, i) => i * step);
 
   return (
     <div className="timeline">
@@ -179,13 +313,30 @@ export const Timeline: React.FC<{
           ref={box}
           onPointerDown={down}
           onDragOver={(e) => {
+            if (e.dataTransfer.types.includes(SOURCE)) {
+              // A clip from the bin goes in between segments, where the line shows.
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              setDrag({ kind: "move", id: "", slot: slotAt(cut, at(e.clientX)) });
+              return;
+            }
             if (!e.dataTransfer.types.includes(CLIP)) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";
             setGhost((g) => ({ at: at(e.clientX), length: g?.length ?? 3 }));
           }}
-          onDragLeave={() => setGhost(null)}
+          onDragLeave={() => (setGhost(null), setDrag(null))}
           onDrop={(e) => {
+            const source = e.dataTransfer.getData(SOURCE);
+            if (source) {
+              e.preventDefault();
+              setDrag(null);
+              const { src, length } = JSON.parse(source) as { src: string; length: number };
+              const next = insertSegment(cut, src, 0, length, slotAt(cut, at(e.clientX)));
+              setLive(next);
+              onCut(next).catch(() => setLive(null));
+              return;
+            }
             const raw = e.dataTransfer.getData(CLIP);
             setGhost(null);
             if (!raw) return;

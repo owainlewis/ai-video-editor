@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { Word } from "../engine/schema";
-import { api, type Asset, clock, type Effect, type LibraryClip } from "./api";
-import { CLIP, toSentences } from "./Timeline";
+import { api, type Asset, type BinClip, clock, type Effect, type LibraryClip } from "./api";
+import { CLIP, SOURCE, toSentences } from "./Timeline";
 
-// The left panel: the project's assets (drop b-roll and images in; click one to mention it in a
-// note) and the script (click a line to jump to it).
+// The left panel: the project's clips (its media bin: drag one onto the A-roll track to cut it in),
+// its assets (drop b-roll and images in; click one to mention it in a note) and the script (click a
+// line to jump to it).
 export const Library: React.FC<{
   slug: string;
   assets: Asset[];
@@ -13,8 +14,9 @@ export const Library: React.FC<{
   onUse: (ref: string) => void;
   onSeek: (t: number) => void;
   canvas: string;
-}> = ({ slug, assets, words, time, onUse, onSeek, canvas }) => {
-  const [tab, setTab] = useState<"assets" | "effects" | "script">("assets");
+  bin: BinClip[];
+}> = ({ slug, assets, words, time, onUse, onSeek, canvas, bin }) => {
+  const [tab, setTab] = useState<"clips" | "assets" | "effects" | "script">("assets");
   const [effects, setEffects] = useState<Effect[]>([]);
   useEffect(() => {
     api.effects(canvas).then(setEffects).catch(() => {});
@@ -64,9 +66,25 @@ export const Library: React.FC<{
     setUploading(null);
   };
 
+  const addClips = async (files: FileList | null) => {
+    setError("");
+    for (const f of Array.from(files ?? [])) {
+      setUploading(f.name);
+      try {
+        await api.upload(f, () => {}, `/api/projects/${slug}/clips`);
+      } catch (e) {
+        setError(String((e as Error).message));
+      }
+    }
+    setUploading(null);
+  };
+
   return (
     <aside className="library">
       <div className="tabs">
+        <button className={tab === "clips" ? "on" : ""} onClick={() => setTab("clips")}>
+          Clips
+        </button>
         <button className={tab === "assets" ? "on" : ""} onClick={() => setTab("assets")}>
           Assets
         </button>
@@ -77,7 +95,47 @@ export const Library: React.FC<{
           Script
         </button>
       </div>
-      {tab === "assets" ? (
+      {tab === "clips" ? (
+        <div
+          className={`assets ${over ? "over" : ""}`}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes(SOURCE) || e.dataTransfer.types.includes(CLIP)) return;
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            addClips(e.dataTransfer.files);
+          }}
+        >
+          <p className="muted small">Takes and recordings for this video. Drag one onto the A-roll track to cut it in; split with B, trim by dragging an edge.</p>
+          <label className="add">
+            <input type="file" accept="video/*" multiple hidden onChange={(e) => addClips(e.target.files)} />
+            {uploading ? `Adding ${uploading}…` : "Drop takes here, or click to add"}
+          </label>
+          {error && <p className="error small">{error}</p>}
+          <div className="grid">
+            {bin.map((c) => (
+              <button
+                key={c.id}
+                className="asset"
+                draggable={c.ready}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(SOURCE, JSON.stringify({ src: c.id, length: c.duration }));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                title={c.ready ? `${c.name}. Drag onto the A-roll track.` : c.status?.error ?? c.status?.stage ?? "Importing"}
+              >
+                {c.ready ? <img src={`/${c.id === "main" ? slug : `${slug}/clips/${c.id}`}/checks/frame.jpg`} alt="" loading="lazy" /> : <span className="pending">{c.status?.error ? "Failed" : (c.status?.stage ?? "Importing")}</span>}
+                <span className="name">{c.name}</span>
+                {c.ready && <span className="dur">{clock(c.duration)}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : tab === "assets" ? (
         <div
           className={`assets ${over ? "over" : ""}`}
           onDragOver={(e) => {

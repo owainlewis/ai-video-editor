@@ -145,3 +145,10 @@ export function snapEdge(words: Word[], t: number, edge: "in" | "out"): number {
   });
   return edges.reduce((best, e) => (Math.abs(e - t) < Math.abs(best - t) ? e : best), edges[0]);
 }
+
+// Ripple delete timeline time `a` to `b` (an I to O range): split at both ends, drop what is between.
+export function deleteRange(cut: CutPlan, a: number, b: number): CutPlan {
+  const split = splitAt(splitAt(cut, a), b);
+  const keep = new Set(placed(split).filter((s) => s.end <= a + 1e-6 || s.start >= b - 1e-6).map((s) => s.id));
+  return { segments: split.segments.filter((s) => keep.has(s.id)) };
+}

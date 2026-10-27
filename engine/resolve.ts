@@ -98,6 +98,10 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     found.push({ s, i });
   }
   if (cut) found.sort((a, b) => a.i - b.i);
+  // Over a cut, a shot starts on its own words, so a shot whose words moved later never stretches
+  // back over what now plays first. Plain picture fills the start until the first shot (all of it
+  // when every anchor's words were cut out).
+  if (cut && duration > 0 && (!found.length || found[0].i > 0)) shots.push({ start: 0, end: duration, layout: "full", anchor: "", index: -1, header });
   for (const { s, i } of found) {
     const start = shots.length === 0 ? 0 : snap(Math.max(0, words[i].start - CUT_LEAD + (s.shift ?? 0)), fps);
     // The header carries forward until a shot sets a new one, or false to hide it.

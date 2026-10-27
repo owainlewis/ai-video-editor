@@ -3,7 +3,7 @@
 // the reason is returned.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mergeShots, wordAt } from "../engine/insert.ts";
+import { mergeShots, phraseAt, wordAt } from "../engine/insert.ts";
 import { findPhrase } from "../engine/resolve.ts";
 import type { Word } from "../engine/schema.ts";
 import { resolveProject } from "../media/project.ts";
@@ -87,4 +87,63 @@ export function dropBroll(projects: string, slug: string, ref: string, at: numbe
   const src = ref.startsWith("broll:") || ref.startsWith("assets/") ? ref : `assets/broll/${ref}`;
   // Short clips may be slowed to as little as 0.65x to reach the next word.
   placeOver(projects, slug, { at: "", layout: "cutaway", visual: { kind: "video", src, start: 0 } }, at, length - 0.1, 1 / 0.65);
+}
+
+// The plan's shot behind resolved shot k: the same anchor, counted in order. -1 for none (the plain
+// picture that fills the start of a cut has no shot in the plan).
+const planIndex = (plan: Shot[], resolved: { anchor: string }[], k: number) => {
+  const anchor = resolved[k]?.anchor;
+  if (!anchor) return -1;
+  const nth = resolved.slice(0, k).filter((s) => s.anchor === anchor).length;
+  return plan.map((s, i) => ({ s, i })).filter(({ s }) => s.at === anchor)[nth]?.i ?? -1;
+};
+
+// Move the start of the shot that starts at timeline time `from` to the word at `to`: trimming the
+// edge of a b-roll clip on the timeline (its in edge is its own start, its out edge the start of
+// the shot after it). The shot is re-anchored on the words there, so it still follows them through
+// a re-cut. Like any insert, a change that adds an error is put back and the reason returned.
+export function moveShotStart(projects: string, slug: string, from: number, to: number) {
+  const dir = join(projects, slug);
+  const before = readFileSync(join(dir, "edit.json"), "utf8");
+  const plan = JSON.parse(before) as { shots: Shot[] };
+  const { resolved, issues } = resolveProject(projects, slug);
+  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  const k = resolved.shots.findIndex((s) => Math.abs(s.start - from) < 0.02);
+  if (k < 0) throw Object.assign(new Error("nothing follows this clip to move; it runs to the end"), { code: 409 });
+  if (k === 0) throw Object.assign(new Error("the first shot always starts the video"), { code: 409 });
+  const words = timeline(dir).words;
+  const index = wordAt(words, to);
+  const prev = resolved.shots[k - 1].start;
+  const next = resolved.shots[k + 1]?.start ?? resolved.duration;
+  if (index < 0 || words[index].start <= prev + 0.3 || words[index].start >= next - 0.3)
+    throw Object.assign(new Error("a clip edge has to stay between the shots either side of it"), { code: 409 });
+  const at = phraseAt(words, index, wordAt(words, prev));
+  if (!at) throw Object.assign(new Error(`no unique phrase at "${words[index].text}" to anchor on`), { code: 409 });
+  const target = planIndex(plan.shots, resolved.shots, k);
+  if (target < 0) throw Object.assign(new Error(`no shot "${resolved.shots[k].anchor}" in the plan`), { code: 409 });
+  // A b-roll clip on either side of the edge is slowed to fill its new length, as on a drop.
+  const video = [k - 1, k].map((j) => planIndex(plan.shots, resolved.shots, j)).filter((p) => p >= 0 && (plan.shots[p] as { visual?: { kind?: string } }).visual?.kind === "video");
+  plan.shots[target] = { ...plan.shots[target], at };
+  if (video.length) {
+    writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+    const moved = resolveProject(projects, slug).resolved;
+    for (const p of video) {
+      const shot = plan.shots[p] as Shot & { visual: { src: string; start?: number; rate?: number } };
+      const now = moved?.shots.find((s) => s.anchor === shot.at);
+      if (!now) continue;
+      const file = shot.visual.src.startsWith("broll:") ? null : join(dir, shot.visual.src);
+      const clip = file && existsSync(file) ? probeDuration(file) : brollLength(shot.visual.src.slice(6));
+      const rate = clip ? Math.min(1, (clip - (shot.visual.start ?? 0)) / (now.end - now.start + 0.05)) : 1;
+      shot.visual = { ...shot.visual, rate: Math.max(0.65, Math.floor(rate * 100) / 100) };
+      if (rate >= 1) delete shot.visual.rate;
+    }
+  }
+  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
+  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+  const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
+  if (fresh.length) {
+    writeFileSync(join(dir, "edit.json"), before);
+    resolveProject(projects, slug);
+    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
+  }
 }

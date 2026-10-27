@@ -12,9 +12,10 @@ import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { redo, redoable, snapshot, undo, versions } from "./history.ts";
-import { Cut } from "../engine/schema.ts";
+import { Cut, MAIN } from "../engine/schema.ts";
+import { mapRanges } from "../engine/cut.ts";
 import { trashProject } from "./trash.ts";
-import { dropBroll } from "./insert.ts";
+import { dropBroll, moveShotStart } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
@@ -217,7 +218,8 @@ export async function startServer(port = 4747) {
         working: isRunning(slug),
         assets: listAssets(dir, slug),
         suggestions: loadSuggestions(dir),
-        camera: existsSync(join(dir, "build/camera.json")) ? readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges : undefined,
+        // The scan is in the main clip's time; with a cut it is shown where those stretches play.
+        camera: existsSync(join(dir, "build/camera.json")) ? (line.explicit ? mapRanges(line.cut, MAIN, readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : undefined,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
     }
@@ -266,6 +268,10 @@ export async function startServer(port = 4747) {
     }
     if (action === "drop") {
       dropBroll(projects, slug, String(input.ref ?? ""), Number(input.at ?? 0), Number(input.length ?? 3));
+      return send(res, 200, { ok: true });
+    }
+    if (action === "shot-start") {
+      moveShotStart(projects, slug, Number(input.from), Number(input.to));
       return send(res, 200, { ok: true });
     }
     if (action === "stop") return stop(slug), send(res, 200, { ok: true });

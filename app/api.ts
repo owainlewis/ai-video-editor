@@ -1,5 +1,5 @@
 // The editor's view of the server API (server/index.ts).
-import type { Resolved, Word } from "../engine/schema";
+import type { CutPlan, Resolved, Word } from "../engine/schema";
 
 export type Issue = { level: "error" | "warn"; message: string };
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
@@ -9,6 +9,8 @@ export type LibraryClip = { id: string; duration: number; description: string; t
 export type Suggestion = { id: string; start: number; end: number; layout: string; visual: { kind: string }; reason: string; status: "pending" | "accepted" | "rejected"; note?: string };
 export type Effect = { id: string; kind: string; purpose: string; summary: string; thumb: string };
 export type Version = { n: number; at: string; by: string };
+// A clip in the project's bin. "main" is the one the project was made from.
+export type BinClip = { id: string; name: string; duration: number; status: Status; ready: boolean };
 export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status };
 export type Project = {
   slug: string;
@@ -24,6 +26,10 @@ export type Project = {
   assets?: Asset[];
   suggestions?: Suggestion[];
   render?: { file: string; at: number } | null;
+  redo?: number;
+  bin?: BinClip[];
+  cut?: CutPlan;
+  clipWords?: Record<string, Word[]>;
 };
 export type Event =
   | { type: "plan" | "status"; slug: string }
