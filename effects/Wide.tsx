@@ -7,6 +7,7 @@ import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
+import { CutAudio, CutVideo } from "./cut";
 
 // YouTube, 16:9. The picture is a rough cut Owain edited by hand; this only lays graphics and
 // text over it, sparsely. Minimal: one idea on screen, monochrome plus one accent, serif titles,
@@ -38,7 +39,9 @@ const stageK = (shots: ResolvedShot[], i: number, time: number) => {
 // The footage. Exports read frames exactly (OffthreadVideo): the browser's own video decoder shifted
 // the colour, which is what spoiled punch-ins (2026-10-24). The editor plays it live.
 const Picture: React.FC<{ r: Resolved; style: React.CSSProperties }> = ({ r, style }) =>
-  getRemotionEnvironment().isRendering ? (
+  r.cut ? (
+    <CutVideo r={r} style={style} />
+  ) : getRemotionEnvironment().isRendering ? (
     <OffthreadVideo src={staticFile(r.video)} muted style={{ position: "absolute", ...style }} />
   ) : (
     <Video src={staticFile(r.video)} muted={!!r.audio} style={{ position: "absolute", ...style }} />
@@ -58,7 +61,7 @@ const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; k: number; dim: numbe
   const srcY = Math.min(WH - srcH, Math.max(0, (WH - srcH) / 2));
   return (
     <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, borderRadius: 24 * k, overflow: "hidden", background: "#121417", boxShadow: k > 0 ? `0 ${30 * k}px ${80 * k}px rgba(0,0,0,${0.5 * k})` : "none" }}>
-      {r.video && <Picture r={r} style={{ left: -srcX * scale, top: -srcY * scale, width: WW * scale, height: WH * scale, filter: grade }} />}
+      {(r.video || r.cut) && <Picture r={r} style={{ left: -srcX * scale, top: -srcY * scale, width: WW * scale, height: WH * scale, filter: grade }} />}
     </div>
   );
 };
@@ -181,6 +184,7 @@ export const Wide: React.FC<Resolved> = (r) => {
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
       {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}
+      {r.cut && !r.alpha && <CutAudio r={r} />}
     </AbsoluteFill>
   );
 };
