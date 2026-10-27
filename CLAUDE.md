@@ -42,6 +42,14 @@ Owain (2026-10-26): "I'd ideally like you to edit per video rather than rely on 
 4. No two videos should look like the same template: vary the stage, the camera and the transitions, keep the house look (Graphite or Ivory, Helvetica and Signifier, sage accent, the two speeds).
 5. A bespoke graphic that keeps earning its place graduates into the library.
 
+## The cut (`cut.json`)
+
+A project can hold several clips (its bin: the first clip at the project's root, more in `clips/<id>/`, each with its own `transcript.json`). `cut.json` lists the segments that play, in order: `{ "id", "src": "main" | <clip id>, "in", "out" }`, in that clip's own seconds. Owain edits it on the A-roll track (drag clips in, B to split, drag edges to trim, Delete to ripple delete). With a cut:
+
+- The plan's anchors are matched against the words as they play in the cut, so graphics follow their words through any re-cut. A shot whose words were cut out is left out (`check` warns). Times in the editor, the chat and `check` are times in the cut.
+- `remove` no longer applies; a stretch is cut by deleting it from the cut.
+- Do not change `cut.json` unless Owain asks for a change to the cut itself. If you do, put every edge in a pause: `check` warns when a join lands on sound and names the nearest pause (`build/level.json` in each clip folder has the levels).
+
 ## How a plan works
 
 - `shots` run in order. Each starts on a spoken phrase (`at`, a few exact words from the transcript) and lasts until the next.
