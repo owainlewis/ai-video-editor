@@ -9,15 +9,16 @@ import { extname, join, normalize, sep } from "node:path";
 import { createServer as createVite } from "vite";
 import { resolveProject } from "../media/project.ts";
 import { liveStatus, slugFor } from "../media/ingest.ts";
-import { readJson, ROOT } from "../media/tools.ts";
+import { readJson, ROOT, writeJson } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
-import { snapshot, undo, versions } from "./history.ts";
+import { redo, redoable, snapshot, undo, versions } from "./history.ts";
+import { Cut } from "../engine/schema.ts";
 import { trashProject } from "./trash.ts";
 import { dropBroll } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
-import { timeline } from "../media/bin.ts";
+import { clipDir, clips, timeline } from "../media/bin.ts";
 import { EFFECTS, effectList } from "../media/effects.ts";
 
 const TYPES: Record<string, string> = {
@@ -100,8 +101,10 @@ export async function startServer(port = 4747) {
   watch(BROLL, (_e, file) => String(file) === "index.json" && broadcast({ type: "library" }));
   watch(projects, { recursive: true }, (_e, file) => {
     const parts = String(file ?? "").split(/[/\\]/);
+    // An added clip's import reports in clips/<id>/status.json.
+    if (parts.length === 4 && parts[1] === "clips" && parts[3] === "status.json") return broadcast({ type: "status", slug: parts[0] });
     if (parts.length !== 2) return;
-    if (parts[1] === "edit.json") planChanged(parts[0]);
+    if (parts[1] === "edit.json" || parts[1] === "cut.json") planChanged(parts[0]);
     if (parts[1] === "status.json") broadcast({ type: "status", slug: parts[0] });
     if (parts[1] === "suggestions.json") broadcast({ type: "plan", slug: parts[0] });
   });
@@ -196,14 +199,20 @@ export async function startServer(port = 4747) {
       // The first version of a project; later ones come from the watcher and from finished notes.
       if (!versions(dir).length) snapshot(dir, "edit");
       const { resolved, issues } = resolveProject(projects, slug);
+      const line = timeline(dir);
       return send(res, 200, {
         slug,
         status,
         resolved,
         issues,
-        words: timeline(dir).words,
+        words: line.words,
+        // The media bin and the cut, with each clip's own words for trimming to word edges.
+        bin: clips(dir),
+        cut: line.cut,
+        clipWords: Object.fromEntries(clips(dir).filter((c) => c.ready).map((c) => [c.id, readJson(join(clipDir(dir, c.id), "transcript.json"))])),
         plan: readFileSync(join(dir, "edit.json"), "utf8"),
         versions: versions(dir),
+        redo: redoable(dir),
         chat: loadChat(dir).messages,
         working: isRunning(slug),
         assets: listAssets(dir, slug),
@@ -212,7 +221,24 @@ export async function startServer(port = 4747) {
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
     }
+    if (action === "clips" && req.method === "GET") return send(res, 200, clips(dir));
     if (req.method !== "POST") return send(res, 405, { error: "method" });
+    // A clip for the bin: saved, then imported in a detached job like a new project.
+    if (action === "clips") {
+      const name = url.searchParams.get("name") ?? "clip.mp4";
+      if (!/\.(mp4|mov|m4v|mkv|webm)$/i.test(name)) return send(res, 400, { error: "only video clips go in the bin" });
+      const base = slugFor(name);
+      let id = base;
+      for (let i = 2; id === "main" || existsSync(join(dir, "clips", id)); i++) id = `${base}-${i}`;
+      mkdirSync(join(dir, "clips", id), { recursive: true });
+      mkdirSync(join(projects, ".uploads"), { recursive: true });
+      const file = join(projects, ".uploads", `${slug}-${id}${extname(name)}`);
+      await new Promise<void>((ok, fail) => req.pipe(createWriteStream(file)).on("finish", ok).on("error", fail));
+      writeJson(join(dir, "clips", id, "status.json"), { stage: "Queued", done: false, at: new Date().toISOString() });
+      job(slug, ["clip", slug, file, "--id", id, "--name", name]);
+      broadcast({ type: "status", slug });
+      return send(res, 200, { id });
+    }
     if (action === "assets") {
       const path = await saveAsset(dir, url.searchParams.get("name") ?? "asset", req);
       broadcast({ type: "plan", slug });
@@ -244,6 +270,23 @@ export async function startServer(port = 4747) {
     }
     if (action === "stop") return stop(slug), send(res, 200, { ok: true });
     if (action === "undo") return send(res, 200, { ok: undo(dir) });
+    if (action === "redo") return send(res, 200, { ok: redo(dir) });
+    // The editor's cut edits (split, trim, ripple delete, move, add a clip) write the whole cut,
+    // which is saved as a version like any change to the plan.
+    if (action === "cut") {
+      const parsed = Cut.safeParse(input.cut);
+      if (!parsed.success) return send(res, 400, { error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
+      const bin = new Map(clips(dir).map((c) => [c.id, c]));
+      for (const seg of parsed.data.segments) {
+        const clip = bin.get(seg.src);
+        if (!clip?.ready) return send(res, 400, { error: `no clip ${seg.src} ready in the bin` });
+        if (seg.out > clip.duration + 0.05) return send(res, 400, { error: `${clip.name} is ${clip.duration.toFixed(2)}s; a segment cannot run to ${seg.out.toFixed(2)}s` });
+      }
+      writeJson(join(dir, "cut.json"), parsed.data);
+      snapshot(dir, "cut");
+      planChanged(slug);
+      return send(res, 200, { ok: true });
+    }
     if (action === "render") {
       if (!liveStatus(dir)?.done && existsSync(join(dir, "status.json"))) return send(res, 409, { error: "a job is already running" });
       return job(slug, ["render", slug]), send(res, 200, { ok: true });
