@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyReview, formatFeedback, mergeReview, reelHash, shotIds, shotInfo, type Review } from "../review/model.ts";
-import type { Resolved, ResolvedShot } from "../src/schema.ts";
+import type { Resolved, ResolvedShot } from "../../engine/schema.ts";
 
 const shot = (anchor: string, start: number, end: number, extra: Partial<ResolvedShot> = {}): ResolvedShot => ({ anchor, start, end, layout: "split", ...extra });
 
@@ -120,5 +120,22 @@ describe("formatFeedback", () => {
     expect(out).toContain('#2 that-is  1.0s +1.0s  punch  at "That is"');
     expect(out).toContain("> Make it a split with the list");
     expect(out).not.toContain("#1 ");
+  });
+});
+
+// Moved from the reel editor's own catalog tests when reels/ folded into Studio (the style lab's
+// review store lives in reels/review).
+describe("style lab review", () => {
+  it("sends a changed card back to waiting and keeps the old note", async () => {
+    const { cards } = await import("../../styles/blueprint/style.ts");
+    const { mergeStyleReview } = await import("../review/styles.ts");
+    const first = mergeStyleReview(undefined, { id: "blueprint", cards }, "t0");
+    const id = cards[0].id;
+    first.cards[id] = { ...first.cards[id], status: "change", comment: "bigger number" };
+    const edited = [{ ...cards[0], summary: "changed" }, ...cards.slice(1)];
+    const next = mergeStyleReview(first, { id: "blueprint", cards: edited }, "t1");
+    expect(next.cards[id].status).toBe("waiting");
+    expect(next.cards[id].history.at(-1)?.comment).toBe("bigger number");
+    expect(next.cards[cards[1].id]).toEqual(first.cards[cards[1].id]);
   });
 });

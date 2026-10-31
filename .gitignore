@@ -7,3 +7,4 @@ library/*
 *.log
 .DS_Store
 __pycache__/
+styles/*/checks/

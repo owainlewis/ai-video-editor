@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 
-import { Reel } from "../src/Reel";
-import { Wide } from "../src/Wide";
+import { Reel } from "../../effects/Reel";
+import { Wide } from "../../effects/Wide";
 import type { Status } from "./model";
 import type { StyleReview } from "./styles";
-import type { Card } from "../styles/catalog";
-import { labResolved, labViews, type LabSize, type LabText, type LabTone } from "../styles/lab";
+import type { Card } from "../../styles/catalog";
+import { labResolved, labViews, type LabSize, type LabText, type LabTone } from "../../styles/lab";
 import { Accented, frames } from "./shared";
 
 type Data = { review: StyleReview; cards: (Card & { hash: string })[]; name: string; active: boolean; activeName: string };
@@ -114,7 +114,7 @@ export const StyleLab: React.FC<{ id: string }> = ({ id }) => {
       <div className="lab">
         {!data.active && (
           <div className="history">
-            Players render with the active style's tokens ({data.activeName}). Point src/style.ts at styles/{id}/tokens.ts to see this style's own look.
+            Players render with the active style's tokens ({data.activeName}). Point effects/style.ts at styles/{id}/tokens.ts to see this style's own look.
           </div>
         )}
         <StyleNotes key={data.review.notes} text={data.review.notes} onSave={(text) => put("notes", { text })} />
