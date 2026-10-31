@@ -8,7 +8,8 @@
     "studio": "tsx cli.ts",
     "dev": "tsx cli.ts serve",
     "typecheck": "tsc -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "reel": "tsx reels/tools/cli.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.532",
@@ -16,6 +17,7 @@
     "@remotion/media": "4.0.532",
     "@remotion/player": "4.0.532",
     "@remotion/renderer": "4.0.532",
+    "puppeteer-core": "25.12.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "remotion": "4.0.532",

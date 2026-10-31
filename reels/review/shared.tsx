@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
-import { Reel } from "../src/Reel";
-import { Wide } from "../src/Wide";
-import { compositionFor } from "../src/canvas";
-import type { Resolved } from "../src/schema";
+import { Reel } from "../../effects/Reel";
+import { Wide } from "../../effects/Wide";
+import { compositionFor } from "../../effects/canvas";
+import type { Resolved } from "../../engine/schema";
 
 // The board plays light preview copies (see makePreviews in tools/cli.ts): 1080p video and AAC
 // audio from the mix, or the voice before a mix exists, so it is never silent or blank.

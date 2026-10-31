@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { hash, stable, type Past, type Status } from "./model.ts";
-import type { Card, StyleDef } from "../styles/catalog.ts";
+import type { Card, StyleDef } from "../../styles/catalog.ts";
 
 export type CardReview = { hash: string; status: Status; comment: string; at: string; history: Past[] };
 export type StyleReview = { version: 1; style: string; notes: string; cards: Record<string, CardReview> };

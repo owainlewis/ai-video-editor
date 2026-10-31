@@ -34,7 +34,7 @@ Graphics only where the speaker is on camera, never over b-roll or a screen reco
 
 The look is a named style with a card catalog, modelled on herk-edit-kit's style library. The first is **Blueprint**, in `styles/blueprint/`:
 
-- `tokens.ts`: palette, type, spacing, grid and motion in one place. Components read them through `src/style.ts`; swapping a style is swapping that module.
+- `tokens.ts`: palette, type, spacing, grid and motion in one place. Components read them through `effects/style.ts`; swapping a style is swapping that module.
 - `DESIGN.md`: the spec, how to pick a card for a line, and what not to do.
 - `style.ts` and `style.json`: every visual kind as a card (`blueprint.t1.stat`, `blueprint.t2.kpi`, `blueprint.overlay.lower`), with its tier, purpose, layouts, duration and typed slot limits (`maxChars`, `maxItems`). `t1` is a full-frame scene, `t2` sits beside the speaker, `overlay` sits over the picture.
 - The style lab on the review board plays every card live, light and dark, split and scene, with Approve / Change and a note per card (`styles/blueprint/review.json`, printed by `npm run reel -- styles feedback`).
@@ -132,6 +132,6 @@ Never:
 
 - Music bed about 20 dB under the voice, ducked under speech. Off when the footage already has music.
 - Sound is rare and tactile: soft whooshes on scene changes, mechanical clicks when something lands, a camera focus beep on a highlight, a real key on typing. At most one sound every 2.5 s apart from typing. Most cuts get nothing. Never drops, glitches, swords, static or synthesised tones.
-- No music is better than generic music. With no track in `music/`, the reel has none. Owain's picks for reels live in `music/reels/`; a talking head wants a steady bed at about `"level": -18`, ducked gently (ratio 3, slow release) so it never pumps.
+- No music is better than generic music. With no track in `library/music/`, the reel has none. Owain's picks for reels live in `library/music/reels/`; a talking head wants a steady bed at about `"level": -18`, ducked gently (ratio 3, slow release) so it never pumps.
 - Pace comes from trimming dead air, not from stretching the voice: `reel tighten` trims pauses over 0.55 s to a natural breath (0.2 s) with click-free joins. `--speed` is capped at 1.05.
 - Master at -14 LUFS integrated, true peak at or under -1 dBTP. The last word is never faded.

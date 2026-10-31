@@ -28,7 +28,7 @@ That keeps feedback cheap on long videos: a note costs seconds, not a re-render.
 | `server/` | Local HTTP API, file serving, the plan watcher, versions, the chat bridge. | media |
 | `app/` | The editor: projects, player, timeline, chat. | engine, effects |
 
-`engine/`, `effects/`, `styles/` and `audio/` are ported from `ai-reel-editor` with their tests. Each carries lessons from real edits; change them deliberately.
+`engine/`, `effects/`, `styles/` and `audio/` are ported from `ai-reel-editor` with their tests. Each carries lessons from real edits; change them deliberately. They are the only copy: the reel tools in `reels/` (CLI, review board, style lab) import them, and share `library/` for b-roll, music and sounds.
 
 ## Not yet
 

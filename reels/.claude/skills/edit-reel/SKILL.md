@@ -6,7 +6,7 @@ description: Edit a talking head clip into a finished 9:16 Instagram reel with r
 # Edit a reel
 
 You are the editor. The `reel` CLI does the mechanical work; you make every creative call.
-Read `docs/STYLE.md` and `docs/RULES.md` before planning. Rules in RULES.md came from real notes and override everything else here.
+Read `reels/docs/STYLE.md` and `reels/docs/RULES.md` before planning. Rules in RULES.md came from real notes and override everything else here.
 
 ## 1. Set up
 
@@ -53,27 +53,27 @@ npm run reel -- fetch <slug> <logo-url> --name github.svg
 
 ### B-roll library
 
-Owain's own cinematic shots (typing, working, desk details) live in `broll/`. They make a reel feel shot, not generated.
+Owain's own cinematic shots (typing, working, desk details) live in `library/broll/`. They make a reel feel shot, not generated.
 
 ```sh
-npm run reel -- index            # splits new files into shots, crops letterboxing, writes broll/index.json
+npm run reel -- index            # splits new files into shots, crops letterboxing, describes them in library/broll/index.json
 npm run reel -- broll typing     # list clips, best matches first
 ```
 
-- After `index`, look at `broll/sheet.jpg` (or `broll/.clips/<id>.jpg`) and fill in each new clip's `description` and `tags` in `broll/index.json`. Describe what is visible, not what it means.
+- `index` describes new clips itself. Check a description against `library/broll/.clips/<id>.jpg` before you rely on it, and fix it in `library/broll/index.json` if it is wrong. Describe what is visible, not what it means.
 - Use a clip with `{ "kind": "video", "src": "broll:<id>" }`. `validate` copies it into the project.
 - Put b-roll on human or abstract lines ("if you're building with AI", "it runs locally"). Keep captures and logos on factual claims. B-roll is never evidence.
 - A shot can't run longer than its clip; `validate` errors if it does. Each clip once per reel.
 
 ## 4. Pick the format, plan the story, then the shots
 
-Set `format` first (see `docs/STYLE.md`):
+Set `format` first (see `reels/docs/STYLE.md`):
 - **Tool drop** (a new repo, release, feature or post): `react`. Plan it as a walk through the source: every claim gets a capture with a highlight on the words being said. Use b-roll only inside the split panel.
 - **How it works** or **my setup**: `mixed`.
 
 Then set `header` to the hook as a short title (it is the on-screen text in frame 1) and plan chapters: a new `header` on the shot where each section starts. Choose `split`: `inset` when captures with text carry the reel, `half` when the delivery does.
 
-Write `projects/<slug>/edit.json` (schema: `src/schema.ts`). First decide, in your head or in a `note`:
+Write `projects/<slug>/edit.json` (schema: `engine/schema.ts`). First decide, in your head or in a `note`:
 
 - **Hook (0 to 3 s):** what the viewer sees in frame one that makes them stay. Prefer the product working or the real thing named.
 - **Proof:** one shot of evidence that the claim is real (the repo, the source line, the number on the page).
@@ -134,7 +134,7 @@ When Owain says he left comments ("left comments, let's amend"):
 1. `npm run reel -- feedback <slug>` prints the open changes: the whole-reel notes, then each shot to change with its time, what is said in it and the note. Ignore approved and waiting shots.
 2. Apply every change in `edit.json`. Change only the shots named, so approved shots keep their review. Changing a shot's anchor changes its neighbour's length too, and both go back to waiting.
 3. `npm run reel -- validate <slug>`. The board reloads; every changed shot goes back to "waiting" and its old note moves to history. Whole-reel notes move to history once the reel changes, so apply them in the same pass.
-4. A note Owain has given before, or one that would apply to any reel, goes in `docs/RULES.md` (section 7), and into a check or component where it can be.
+4. A note Owain has given before, or one that would apply to any reel, goes in `reels/docs/RULES.md` (section 7), and into a check or component where it can be.
 5. Run `feedback` again to confirm nothing is still open, then tell Owain which shots to re-review, by number.
 
 ## 6c. YouTube longform (16:9)
@@ -157,7 +157,7 @@ npm run reel -- transcribe <slug>
 When the user gives a note on a draft:
 
 1. Fix the edit.
-2. Decide where the fix belongs: a rule in `docs/RULES.md`, a check in `tools/`, or a change to a component in `src/`. Prefer a check or code change over a written rule when the problem can be detected or prevented mechanically.
-3. Add a row to the log in `docs/RULES.md`: the note, in the user's words, and what changed.
+2. Decide where the fix belongs: a rule in `reels/docs/RULES.md`, a check in `engine/` or `reels/tools/`, or a change to a component in `effects/`. Prefer a check or code change over a written rule when the problem can be detected or prevented mechanically.
+3. Add a row to the log in `reels/docs/RULES.md`: the note, in the user's words, and what changed.
 
 The same note should never be needed twice.

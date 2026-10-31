@@ -1,7 +1,7 @@
 // Reads and writes review.json next to a project's plan. Used by the board's server and `reel feedback`.
 import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Resolved } from "../src/schema.ts";
+import type { Resolved } from "../../engine/schema.ts";
 import { counts, emptyReview, mergeReview, reelHash, shotInfo, type Review } from "./model.ts";
 
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8"));
