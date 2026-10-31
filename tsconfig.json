@@ -24,6 +24,7 @@
     "cli.ts",
     "reels/tools",
     "reels/review",
-    "reels/tests"
+    "reels/tests",
+    "pipeline"
   ]
 }
