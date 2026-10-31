@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Thumbnail } from "@remotion/player";
 
-import type { Resolved } from "../src/schema";
+import type { Resolved } from "../../engine/schema";
 import type { Status } from "./model";
-import { styles } from "../styles/index";
+import { styles } from "../../styles/index";
 import { Accented, ago, frames, playable, secs, stage, usePlanEvents } from "./shared";
 
 type Row = {

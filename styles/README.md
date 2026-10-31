@@ -23,8 +23,8 @@ styles/
 
 ## Cards
 
-A card is a visual kind (`src/schema.ts`, drawn by `src/Visuals.tsx`, `src/elements.tsx`,
-`src/soft.tsx` or `src/cards.tsx`) as this style offers it: an id
+A card is a visual kind (`engine/schema.ts`, drawn by `effects/Visuals.tsx`, `effects/elements.tsx`,
+`effects/soft.tsx` or `effects/cards.tsx`) as this style offers it: an id
 `<style>.<tier>.<purpose or kind>[.<treatment>]`, a tier (`t1` full frame, `t2` beside the
 speaker, `overlay` over the picture), the layouts it fits, and its slots. Slot limits are typed
 (`maxChars`, `minItems`, `maxItems`), every card is sized and tested for them, and `validate`
@@ -63,5 +63,5 @@ dark, split and scene, with sample text or every slot at its max.
 3. Keep, drop or add cards in `style.ts`. A new kind needs a schema entry, a component that reads tokens, anchors in `engine/resolve.ts` `visualAnchors`, and a geometry function tested in `tests/catalog.test.ts`.
 4. Register it in `styles/index.ts`, run `styles --write`, and review it in the style lab.
 
-Rendering reads the active style from `src/style.ts`, so one style renders at a time. Point that
+Rendering reads the active style from `effects/style.ts`, so one style renders at a time. Point that
 import at the new folder to see it in the lab and in reels.

@@ -21,6 +21,9 @@
     "server",
     "app",
     "tests",
-    "cli.ts"
+    "cli.ts",
+    "reels/tools",
+    "reels/review",
+    "reels/tests"
   ]
 }

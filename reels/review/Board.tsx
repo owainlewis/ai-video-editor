@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 
-import type { Resolved } from "../src/schema";
+import type { Resolved } from "../../engine/schema";
 import type { Review, ShotInfo, Status } from "./model";
 import { Accented, frames, playable, secs, stage, usePlanEvents } from "./shared";
 

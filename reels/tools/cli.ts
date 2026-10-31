@@ -26,18 +26,25 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { Edit, type Resolved, type Word } from "../src/schema.ts";
-import { frameRect } from "../src/camera.ts";
-import { HEADER, MEDIA, splitGeom } from "../src/theme.ts";
-import { cameraRanges, lintOnCamera, chunkWords, estimateWords, lintShots, resolveShots, sfxEvents } from "./resolve.ts";
-import { indexLibrary, listLibrary, useClip } from "./broll.ts";
-import { compositionFor } from "../src/canvas.ts";
+import { Edit, type Resolved, type Word } from "../../engine/schema.ts";
+import { frameRect } from "../../effects/camera.ts";
+import { HEADER, MEDIA, splitGeom } from "../../effects/theme.ts";
+import { cameraRanges, lintOnCamera, chunkWords, estimateWords, lintShots, resolveShots, sfxEvents } from "../../engine/resolve.ts";
+import { describeLibrary, indexLibrary, searchLibrary, useClip } from "../../media/broll.ts";
+import { compositionFor } from "../../effects/canvas.ts";
 import { formatFeedback } from "../review/model.ts";
 import { loadReel } from "../review/store.ts";
-import { slotIssues } from "../styles/blueprint/style.ts";
-import { registry, styleById, styles } from "../styles/index.ts";
+import { slotIssues } from "../../styles/blueprint/style.ts";
+import { registry, styleById, styles } from "../../styles/index.ts";
 
+// ROOT is reels/ (its projects, examples and voice tool). REPO is Studio's root: the one engine, effects,
+// styles, audio mixer and library that reels share with every other video.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// `npm run reel` runs from the repo root; file arguments are relative to where it was typed.
+if (process.env.INIT_CWD) process.chdir(process.env.INIT_CWD);
+const REPO = resolve(ROOT, "..");
+const ENTRY = "effects/index.ts";
+const PUBLIC = "--public-dir=reels/projects";
 const FPS = 30;
 const project = (slug: string) => join(ROOT, "projects", slug);
 
@@ -125,7 +132,7 @@ function cmdNew(slug: string, video: string) {
   console.log(`Created ${dir}\nNext: npm run reel -- transcribe ${slug}, then look at checks/frame.jpg to set "face" in edit.json`);
 }
 
-// Where the placeholder speaker's face sits in its 1080x1920 frame (see src/Speaker.tsx).
+// Where the placeholder speaker's face sits in its 1080x1920 frame (see effects/Speaker.tsx).
 const PLACEHOLDER_FACE = { x: 0.5, y: 0.3, h: 0.17 };
 
 const writeTranscript = (dir: string, words: Word[]) => {
@@ -415,7 +422,7 @@ function cmdValidate(slug: string, quiet = false): Resolved {
   const parsed = Edit.safeParse(readJson(join(dir, "edit.json")));
   if (!parsed.success) {
     console.error(parsed.error.issues.map((i) => `  error  ${i.path.join(".")}: ${i.message}`).join("\n"));
-    throw new Error("edit.json does not match the schema (src/schema.ts)");
+    throw new Error("edit.json does not match the schema (engine/schema.ts)");
   }
   const plan = parsed.data;
   const youtube = plan.canvas === "youtube";
@@ -434,7 +441,7 @@ function cmdValidate(slug: string, quiet = false): Resolved {
   for (const s of shots) {
     const v = s.visual;
     if (v?.kind === "video" && v.src.startsWith("broll:")) {
-      const rel = useClip(ROOT, dir, v.src.slice(6));
+      const rel = useClip(dir, v.src.slice(6));
       if (!rel) issues.push({ level: "error", message: `no library clip ${v.src}; run reel index` });
       else s.visual = { ...v, src: rel };
     }
@@ -479,10 +486,10 @@ function cmdValidate(slug: string, quiet = false): Resolved {
   }
   // A reel without its music bed reads flat. Say so when the plan asks for music the library cannot give.
   if (plan.music) {
-    const lib = existsSync(join(ROOT, "music")) ? join(ROOT, "music") : "";
-    const track = plan.music.track ? join(ROOT, "music", plan.music.track) : "";
+    const lib = existsSync(join(REPO, "library", "music")) ? join(REPO, "library", "music") : "";
+    const track = plan.music.track ? join(REPO, "library", "music", plan.music.track) : "";
     const any = lib && readdirSync(lib, { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
-    if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at music/${plan.music.track}` : " in music/"}; the reel will have no bed` });
+    if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music/"}; the reel will have no bed` });
   }
   // A reel that stops on its last syllable feels cut off. Measured on the audio: Whisper's last
   // timestamp often runs into the silence.
@@ -531,11 +538,11 @@ function cmdValidate(slug: string, quiet = false): Resolved {
 
 function cmdAudio(slug: string) {
   const dir = project(slug);
-  run("uv", ["run", "--quiet", "--with", "numpy", "--with", "scipy", "--with", "soundfile", "python", "-m", "audio.mix", dir]);
+  run("uv", ["run", "--quiet", "--with", "numpy", "--with", "scipy", "--with", "soundfile", "python", "-m", "audio.mix", dir], { cwd: REPO });
 }
 
-const remotion = (argv: string[], _style?: string) => run("npx", ["remotion", ...argv]);
-const remotionProRes = (argv: string[]) => run("npx", ["remotion", ...argv], { env: { REEL_PRORES: "1" } });
+const remotion = (argv: string[], _style?: string) => run("npx", ["remotion", ...argv, PUBLIC], { cwd: REPO });
+const remotionProRes = (argv: string[]) => run("npx", ["remotion", ...argv, PUBLIC], { cwd: REPO, env: { REEL_PRORES: "1" } });
 
 function cmdRender(slug: string) {
   const dir = project(slug);
@@ -544,7 +551,7 @@ function cmdRender(slug: string) {
   const resolved = cmdValidate(slug, true);
   const draft = has("draft");
   const out = join(dir, "renders", draft ? "draft.mp4" : "final.mp4");
-  remotion(["render", "src/index.ts", compositionFor(resolved.canvas).id, out, `--props=${join(dir, "build/edit.resolved.json")}`, ...(draft ? ["--scale=0.5", "--crf=26"] : [])], resolved.style);
+  remotion(["render", ENTRY, compositionFor(resolved.canvas).id, out, `--props=${join(dir, "build/edit.resolved.json")}`, ...(draft ? ["--scale=0.5", "--crf=26"] : [])], resolved.style);
   console.log(`\nRendered ${out} (${resolved.duration.toFixed(1)}s)`);
 }
 
@@ -584,7 +591,7 @@ function cmdExport(slug: string) {
     const props = join(out, `props-${k + 1}.json`);
     writeJson(props, { ...r, fps, alpha });
     const from = Math.round(c.start * fps), to = Math.max(from, Math.round(c.end * fps) - 1);
-    remotionProRes(["render", "src/index.ts", compositionFor(r.canvas).id, join(out, name), `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
+    remotionProRes(["render", ENTRY, compositionFor(r.canvas).id, join(out, name), `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
       ...(alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])]);
     execFileSync("rm", [props]);
     rows.push(`| ${name} | ${tc(c.start)} | ${tc(c.end)} | ${(c.end - c.start).toFixed(1)}s | ${alpha ? "overlay (alpha), on top of your picture" : "replaces your picture for its length"} | ${c.head.anchor} |`);
@@ -643,7 +650,7 @@ function cmdStills(slug: string) {
   // One still per shot, a little after the cut so reveals have started.
   r.shots.forEach((s, i) => {
     const t = Math.min(s.end - 0.05, s.start + Math.min(0.9, (s.end - s.start) * 0.7));
-    remotion(["still", "src/index.ts", compositionFor(r.canvas).id, join(out, `${String(i + 1).padStart(2, "0")}.jpg`), `--props=${join(dir, "build/edit.resolved.json")}`,
+    remotion(["still", ENTRY, compositionFor(r.canvas).id, join(out, `${String(i + 1).padStart(2, "0")}.jpg`), `--props=${join(dir, "build/edit.resolved.json")}`,
       `--frame=${Math.round(t * FPS)}`, "--scale=0.4", "--log=error"], r.style);
   });
   ffmpeg(["-pattern_type", "glob", "-i", join(out, "*.jpg"), "-vf", `tile=${Math.min(8, r.shots.length)}x${Math.ceil(r.shots.length / 8)}:padding=8:color=white`, join(dir, "checks/stills.jpg")]);
@@ -721,19 +728,19 @@ function cmdFeedback(slug: string) {
 async function cmdStyles(sub?: string) {
   const def = styleById(flag("style") ?? "ivory");
   if (!def) throw new Error(`no style ${flag("style")}; styles: ${styles.map((s) => s.id).join(", ")}`);
-  const dir = join(ROOT, "styles", def.id);
+  const dir = join(REPO, "styles", def.id);
   if (sub === "new") return newStyle(positional[2]);
   if (sub === "stills") {
     const { renderCardSheet } = await import("./stylesheet.ts");
-    return renderCardSheet(ROOT, def, join(dir, "checks"), has("max") ? ["max"] : has("sample") ? ["sample"] : ["sample", "max"]);
+    return renderCardSheet(REPO, def, join(dir, "checks"), has("max") ? ["max"] : has("sample") ? ["sample"] : ["sample", "max"]);
   }
   if (sub === "feedback") {
     const { loadStyleReview, formatStyleFeedback } = await import("../review/styles.ts");
     return console.log(formatStyleFeedback(loadStyleReview(dir, def).review, def.cards));
   }
   if (has("write")) {
-    for (const s of styles) writeJson(join(ROOT, "styles", s.id, "style.json"), s);
-    writeJson(join(ROOT, "styles", "registry.json"), registry());
+    for (const s of styles) writeJson(join(REPO, "styles", s.id, "style.json"), s);
+    writeJson(join(REPO, "styles", "registry.json"), registry());
     console.log(`Wrote style.json for ${styles.map((s) => s.id).join(", ")} and styles/registry.json`);
   }
   console.log(`${def.name} (${def.id}): ${def.cards.length} cards\n`);
@@ -744,11 +751,11 @@ async function cmdStyles(sub?: string) {
 // A new style folder: Blueprint's tokens and catalog under the new id, and the DESIGN.md skeleton.
 function newStyle(id?: string) {
   if (!id || !/^[a-z][a-z0-9-]*$/.test(id)) throw new Error("usage: reel styles new <id> (lowercase, e.g. aurora)");
-  const dir = join(ROOT, "styles", id);
+  const dir = join(REPO, "styles", id);
   if (existsSync(dir)) throw new Error(`${dir} exists`);
   mkdirSync(dir, { recursive: true });
   const name = id.replace(/(^|-)(\w)/g, (_, d, c) => (d ? " " : "") + c.toUpperCase());
-  const from = (f: string) => readFileSync(join(ROOT, "styles", "blueprint", f), "utf8");
+  const from = (f: string) => readFileSync(join(REPO, "styles", "blueprint", f), "utf8");
   writeFileSync(join(dir, "tokens.ts"), from("tokens.ts").replace('id: "blueprint"', `id: "${id}"`).replace('name: "Blueprint"', `name: "${name}"`));
   writeFileSync(
     join(dir, "style.ts"),
@@ -758,7 +765,7 @@ function newStyle(id?: string) {
       .replace('number: "01"', `number: "${String(styles.length + 1).padStart(2, "0")}"`),
   );
   writeFileSync(join(dir, "samples.ts"), from("samples.ts"));
-  writeFileSync(join(dir, "DESIGN.md"), readFileSync(join(ROOT, "styles", "_template", "DESIGN.md"), "utf8").replace(/<Name>/g, name));
+  writeFileSync(join(dir, "DESIGN.md"), readFileSync(join(REPO, "styles", "_template", "DESIGN.md"), "utf8").replace(/<Name>/g, name));
   console.log(`Made ${dir} from Blueprint. Next: fill DESIGN.md, change tokens.ts, add it to styles/index.ts, then
   npm run reel -- styles --write --style ${id}   and review it in the style lab. See styles/README.md.`);
 }
@@ -782,8 +789,10 @@ async function main() {
     case "review": return cmdReview(slug);
     case "feedback": return cmdFeedback(slug);
     case "styles": return cmdStyles(slug);
-    case "index": return void indexLibrary(ROOT);
-    case "broll": return listLibrary(ROOT, positional.slice(1).join(" "));
+    case "index": { const clips = indexLibrary((l) => console.log(`  ${l}`)); const n = describeLibrary((l) => console.log(`  ${l}`)); return void console.log(`${clips.length} shots in library/broll${n ? `; described ${n} new ones` : ""}`); }
+    case "broll":
+      for (const c of searchLibrary(positional.slice(1).join(" "))) console.log(`  broll:${c.id.padEnd(14)} ${c.duration.toFixed(1).padStart(5)}s  ${c.description || "(not described)"}  [${c.tags.join(", ")}]`);
+      return;
     default:
       console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 21).join("\n"));
   }

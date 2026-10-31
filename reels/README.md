@@ -22,13 +22,10 @@ your clip ──> new ──> transcribe ──> research + capture ──> edit
 
 macOS with Apple Silicon, Homebrew `ffmpeg`, Node 22+, [uv](https://docs.astral.sh/uv/) and Google Chrome.
 
-```sh
-npm install
-npm test
-```
+Reels share Studio's `package.json`: run `npm install` and `npm test` at the repo root. `npm run reel -- <command>` works from the root or from `reels/`.
 
 Fonts are read from the machine: Helvetica Neue and [Signifier](https://klim.co.nz/retail-fonts/signifier/) (licensed, not included).
-Sound effects and music go in `sounds/` and `music/` (git-ignored, see their READMEs). Anything missing is synthesised.
+Sound effects, music and b-roll go in Studio's shared `library/` (git-ignored, see `library/README.md`). A missing sound or bed stays silent.
 
 ## Use it
 
@@ -36,7 +33,7 @@ Open the repo in Claude Code and ask:
 
 > Edit ~/Desktop/IG1.mp4 into a reel.
 
-The `edit-reel` skill (`.claude/skills/edit-reel/SKILL.md`) runs the whole process and sends you the MP4. Reply with notes in plain words; each one is fixed and written into `docs/RULES.md`.
+The `edit-reel` skill (`.claude/skills/edit-reel/SKILL.md`) runs the whole process and sends you the MP4. Reply with notes in plain words; each one is fixed and written into `reels/docs/RULES.md`.
 
 The CLI on its own:
 
@@ -52,7 +49,7 @@ npm run reel -- render ig1
 npm run reel -- check ig1
 ```
 
-Your own b-roll goes in `broll/` (git-ignored). Clips can be stitched together; `index` splits them into shots and crops any letterboxing:
+Your own b-roll goes in `library/broll/` (git-ignored), shared with every Studio video. Clips can be stitched together; `index` splits them into shots and crops any letterboxing:
 
 ```sh
 npm run reel -- index
@@ -64,7 +61,7 @@ Then use `{ "kind": "video", "src": "broll:1-4" }` in a plan.
 Preview a project live in Remotion Studio:
 
 ```sh
-npx remotion studio src/index.ts --props=projects/ig1/build/edit.resolved.json
+npx remotion studio effects/index.ts --public-dir=reels/projects --props=reels/projects/ig1/build/edit.resolved.json   # from the repo root
 ```
 
 Review a draft shot by shot on the review board. Every shot loops in its own player, with Approve, Change and a note. Notes save to `projects/<slug>/review.json`; tell Claude "left comments, let's amend" and it reads them with `feedback`, changes only those shots, and they come back as waiting:
@@ -76,9 +73,9 @@ npm run reel -- feedback ig1
 
 ## The edit plan
 
-`edit.json` is the whole edit. The schema is `src/schema.ts`. Two complete plans for the same clip: `examples/opencodereview-react.edit.json` (the tool-drop format) and `examples/opencodereview-mixed.edit.json`.
+`edit.json` is the whole edit. The schema is `engine/schema.ts`. Two complete plans for the same clip: `examples/opencodereview-react.edit.json` (the tool-drop format) and `examples/opencodereview-mixed.edit.json`.
 
-`format` is `react` (the default, for tool drops: your face stays on screen while the top panel walks through the source) or `mixed` (every layout, b-roll cutaways). `validate` checks the rules for each; see `docs/STYLE.md`.
+`format` is `react` (the default, for tool drops: your face stays on screen while the top panel walks through the source) or `mixed` (every layout, b-roll cutaways). `validate` checks the rules for each; see `reels/docs/STYLE.md`.
 
 ```json
 {
@@ -102,15 +99,15 @@ Layouts: `split`, `full`, `punch`, `media`, `cutaway`. Visuals: `image` (with ca
 ## Layout
 
 ```
-.claude/skills/edit-reel/   the editor's process
-docs/STYLE.md               house look, pacing, captions, sound
-docs/RULES.md               notes turned into rules, newest first
-src/                        Remotion composition (React)
-tools/                      the reel CLI and the timing resolver
-audio/                      mix, music bed and sound effect synthesis (Python, run with uv)
-examples/                   reference edit plans
-broll/                      your b-roll library and its index (git-ignored)
-projects/<slug>/            one folder per reel: source, assets, plan, renders, checks (git-ignored)
+reels/.claude/skills/edit-reel/   the editor's process
+reels/docs/STYLE.md               house look, pacing, captions, sound
+reels/docs/RULES.md               notes turned into rules, newest first
+reels/tools/                      the reel CLI, style contact sheets, the Kokoro voice
+reels/review/                     the review board and style lab
+reels/examples/                   reference edit plans and scripts
+reels/projects/<slug>/            one folder per reel: source, assets, plan, renders, checks (git-ignored)
+engine/ effects/ styles/ audio/   shared with all of Studio: plan schema and timing, Remotion compositions, looks, the mix
+library/                          shared b-roll, music and sound effects (git-ignored)
 ```
 
 ## Licence notes

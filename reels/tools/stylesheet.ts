@@ -7,9 +7,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { bundle } from "@remotion/bundler";
 import { renderStill, selectComposition } from "@remotion/renderer";
-import { compositionFor } from "../src/canvas.ts";
-import type { StyleDef } from "../styles/catalog.ts";
-import { labResolved, labViews, LAB_FPS, type LabSize, type LabText, type LabTone } from "../styles/lab.ts";
+import { compositionFor } from "../../effects/canvas.ts";
+import type { StyleDef } from "../../styles/catalog.ts";
+import { labResolved, labViews, LAB_FPS, type LabSize, type LabText, type LabTone } from "../../styles/lab.ts";
 
 const FONT = "/System/Library/Fonts/Supplemental/Courier New.ttf";
 
@@ -23,7 +23,7 @@ export async function renderCardSheet(root: string, def: StyleDef, out: string, 
   for (const f of existsSync(stills) ? readdirSync(stills) : []) if (texts.some((x) => f.startsWith(`${x}-`))) rmSync(join(stills, f));
   mkdirSync(stills, { recursive: true });
   console.log("Bundling…");
-  const serveUrl = await bundle({ entryPoint: join(root, "src/index.ts"), publicDir: join(root, "projects") });
+  const serveUrl = await bundle({ entryPoint: join(root, "effects/index.ts"), publicDir: join(root, "reels", "projects") });
   const jobs: { file: string; label: string; size: LabSize; tone: LabTone; text: LabText }[] = [];
   for (const [n, card] of def.cards.entries()) {
     for (const text of texts)

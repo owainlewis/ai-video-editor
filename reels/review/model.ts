@@ -1,6 +1,6 @@
 // Review state for a reel: one entry per shot in projects/<slug>/review.json.
 // Pure functions, shared by the board's server and `reel feedback`, so they are easy to test.
-import type { Resolved, ResolvedShot } from "../src/schema.ts";
+import type { Resolved, ResolvedShot } from "../../engine/schema.ts";
 
 export type Status = "waiting" | "approved" | "change";
 // A past review of a shot, kept when the shot changes so the old note is never lost.
