@@ -9,7 +9,8 @@
     "dev": "tsx cli.ts serve",
     "typecheck": "tsc -p .",
     "test": "vitest run",
-    "reel": "tsx reels/tools/cli.ts"
+    "reel": "tsx reels/tools/cli.ts",
+    "edit": "tsx pipeline/cli.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.532",

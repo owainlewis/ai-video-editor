@@ -1,8 +1,9 @@
 """Mix a reel's audio: the speaker, a music bed ducked under speech, and sound effects.
 
-    python -m audio.mix projects/<slug>
+    python -m audio.mix projects/<slug> [build/audio.export.json]
 
-Reads build/audio.json (written by `reel validate`) and source/voice.wav,
+Reads build/audio.json (written by `reel validate`) and source/voice.wav (or the
+cut's voice that audio.json names),
 writes build/mix.wav at -14 LUFS integrated and -1 dBTP, the level the
 platforms normalise to. Sound files come from sounds/<kind>/ and music/<mood>/;
 anything missing is synthesised.
@@ -55,8 +56,8 @@ def loudness(path: Path) -> dict:
     return json.loads(out[out.rindex("{") : out.rindex("}") + 1])
 
 
-def main(project: Path) -> None:
-    cfg = json.loads((project / "build/audio.json").read_text())
+def main(project: Path, config: str = "build/audio.json") -> None:
+    cfg = json.loads((project / config).read_text())
     seconds = float(cfg["duration"])
     cache = ROOT / ".cache/audio"
     work = project / "build/audio"
@@ -67,7 +68,8 @@ def main(project: Path) -> None:
         x = x[:n]
         return np.concatenate([x, np.zeros((n - len(x), 2), dtype=np.float32)]) if len(x) < n else x
 
-    voice = fit(decode(project / "source/voice.wav", cache))
+    # A project with a cut mixes the cut's voice (media/cutrender.ts), not the first clip's.
+    voice = fit(decode(project / cfg.get("voice", "source/voice.wav"), cache))
     sf.write(work / "voice.wav", voice, SR, subtype="FLOAT")
 
     lib = library_root()
@@ -121,4 +123,5 @@ def main(project: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]).resolve())
+    # An export of a cut passes its own settings (build/audio.export.json), which the editor never rewrites.
+    main(Path(sys.argv[1]).resolve(), *sys.argv[2:3])

@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Word } from "../engine/schema.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
+import { timeline } from "../media/bin.ts";
 
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
 export type Selection = { start: number; end: number } | undefined;
@@ -47,7 +48,8 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
   if (running.has(slug)) throw new Error("Claude is still working on the last note");
   const project = join(projects, slug);
   const state = loadChat(project);
-  const words = readJson<Word[]>(join(project, "transcript.json"));
+  // Times in the note are on the timeline, so the words are the cut's.
+  const words = timeline(project).words;
   const request = prompt ?? promptFor(slug, note, selection, playhead, words);
   const now = () => new Date().toISOString();
   const add = (m: ChatMessage) => {

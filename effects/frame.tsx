@@ -9,6 +9,7 @@ import { UI_KINDS, UiVisual } from "./ui";
 import type { Resolved, ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
 import { pal } from "./soft";
+import { CutVideo } from "./cut";
 import { t as type } from "./theme";
 
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
@@ -21,6 +22,7 @@ export const isFrame = (s: ResolvedShot) => s.layout === "media" && !!s.visual &
 // matches the original; the editor plays it live.
 export const Footage: React.FC<{ r: Resolved; from: number; style?: React.CSSProperties }> = ({ r, from, style }) => {
   const s: React.CSSProperties = { position: "absolute", left: 0, top: 0, width: 1920, height: 1080, ...style };
+  if (r.cut) return <CutVideo r={r} from={from} style={s} />;
   return getRemotionEnvironment().isRendering ? (
     <OffthreadVideo src={staticFile(r.video)} startFrom={Math.round(from * r.fps)} muted style={s} />
   ) : (

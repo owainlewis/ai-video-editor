@@ -74,18 +74,35 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
   }
 };
 
-export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fps = 30) => {
+// `cut`: the words are the cut's (engine/cut.ts), which can reorder and drop what was said. A shot
+// whose anchor now plays earlier is found anyway and moved to where its words play, and a shot
+// whose words were cut out is left out with a warning, so graphics follow the words through a re-cut.
+export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fps = 30, cut = false) => {
   const issues: Issue[] = [];
   const shots: (ResolvedShot & { index: number })[] = [];
   let cursor = 0;
   let header = plan.header;
+  const found: { s: (typeof plan.shots)[number]; i: number }[] = [];
   for (const s of plan.shots) {
-    const i = findPhrase(words, s.at, cursor);
+    let i = findPhrase(words, s.at, cursor);
+    if (i < 0 && cut) {
+      const used = new Set(found.map((f) => f.i));
+      for (let from = 0; (i = findPhrase(words, s.at, from)) >= 0 && used.has(i); from = i + 1);
+    }
     if (i < 0) {
-      issues.push({ level: "error", message: `shot anchor not found after word ${cursor}: "${s.at}"` });
+      if (cut) issues.push({ level: "warn", message: `"${s.at}" is no longer said in the cut, so its shot is left out` });
+      else issues.push({ level: "error", message: `shot anchor not found after word ${cursor}: "${s.at}"` });
       continue;
     }
     cursor = i + 1;
+    found.push({ s, i });
+  }
+  if (cut) found.sort((a, b) => a.i - b.i);
+  // Over a cut, a shot starts on its own words, so a shot whose words moved later never stretches
+  // back over what now plays first. Plain picture fills the start until the first shot (all of it
+  // when every anchor's words were cut out).
+  if (cut && duration > 0 && (!found.length || found[0].i > 0)) shots.push({ start: 0, end: duration, layout: "full", anchor: "", index: -1, header });
+  for (const { s, i } of found) {
     const start = shots.length === 0 ? 0 : snap(Math.max(0, words[i].start - CUT_LEAD + (s.shift ?? 0)), fps);
     // The header carries forward until a shot sets a new one, or false to hide it.
     header = s.header === false ? undefined : (s.header ?? header);
@@ -123,7 +140,9 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       if (!a) return shot.start + n * 0.12;
       const j = findPhrase(words, a, from);
       if (j < 0) {
-        issues.push({ level: "error", message: `reveal anchor not found in shot "${shot.anchor}": "${a}"` });
+        issues.push(cut
+          ? { level: "warn", message: `reveal "${a}" in shot "${shot.anchor}" is no longer said after it in the cut; it shows at the start` }
+          : { level: "error", message: `reveal anchor not found in shot "${shot.anchor}": "${a}"` });
         return shot.start;
       }
       from = j + 1;

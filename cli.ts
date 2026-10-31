@@ -1,6 +1,7 @@
 // Studio's command line. The editor uses it for long jobs; Claude uses it to check and preview edits.
 //   npm run dev                                   start the editor at http://localhost:4747
 //   npm run studio -- ingest <file> [--slug s] [--canvas reel|youtube] [--title t]   import a clip
+//   npm run studio -- clip <slug> <file> [--id c] [--name n]   add a clip to a project's bin (cut it in from the editor)
 //   npm run studio -- check <slug>                 resolve the plan, print the shots and every issue
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
@@ -10,7 +11,7 @@
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ingest, setStatus, slugFor } from "./media/ingest.ts";
+import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
@@ -45,6 +46,15 @@ async function main() {
       const canvas = flag("canvas");
       await ingest(projects, resolve(target), slug, log, { canvas: canvas === "reel" || canvas === "youtube" ? canvas : undefined, title: flag("title") });
       console.log(`Imported projects/${slug}. Open it in the editor, or run: npm run studio -- check ${slug}`);
+      return;
+    }
+    case "clip": {
+      const file = args[2];
+      if (!file || !existsSync(file)) throw new Error("clip needs a project and a video file");
+      const slug = need(target);
+      const id = flag("id") ?? slugFor(file);
+      await addClip(projects, slug, resolve(file), id, log, flag("name"));
+      console.log(`Added ${id} to projects/${slug}/clips. Drag it onto the A-roll track in the editor.`);
       return;
     }
     case "check": {
@@ -149,7 +159,7 @@ async function main() {
           : await renderFinal(projects, slug, (done, total) => {
               const pct = Math.floor((100 * done) / total);
               if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
-            }, log);
+            }, log, (stage) => setStatus(dir, stage));
         writeJson(join(dir, "status.json"), { stage: "Rendered", done: true, at: new Date().toISOString() });
         console.log(`Rendered ${out}`);
       } catch (e) {

@@ -4,6 +4,7 @@ import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from
 import { Captions } from "./Captions";
 import { FrameVisual, isFrame } from "./frame";
 import { Speaker } from "./Speaker";
+import { CutAudio } from "./cut";
 import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box, darkIsGraphite } from "./soft";
@@ -284,6 +285,7 @@ export const Reel: React.FC<Resolved> = (r) => {
       {onCanvas && !isFrame(shot) && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
       <Captions r={r} shot={shot} time={time} />
       {r.audio && <Audio src={staticFile(r.audio)} />}
+      {r.cut && <CutAudio r={r} />}
     </AbsoluteFill>
   );
 };

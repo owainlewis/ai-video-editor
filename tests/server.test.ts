@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { cleanWords, liveStatus, starterPlan } from "../media/ingest.ts";
 import { Edit } from "../engine/schema.ts";
 import { promptFor } from "../server/agent.ts";
-import { snapshot, undo, versions } from "../server/history.ts";
+import { redo, redoable, snapshot, undo, versions } from "../server/history.ts";
 import { trashProject } from "../server/trash.ts";
 
 const words = [
@@ -40,6 +40,41 @@ describe("version history", () => {
     expect(snapshot(dir, "edit")).toBe(false);
     expect(versions(dir)).toHaveLength(1);
     expect(undo(dir)).toBe(false);
+  });
+  it("redo brings back what undo took away, until a new change", () => {
+    const dir = project();
+    snapshot(dir, "edit");
+    writeFileSync(join(dir, "edit.json"), '{"v":2}');
+    snapshot(dir, "edit");
+    expect(redo(dir)).toBe(false);
+    undo(dir);
+    expect(redoable(dir)).toBe(1);
+    expect(redo(dir)).toBe(true);
+    expect(readFileSync(join(dir, "edit.json"), "utf8")).toBe('{"v":2}');
+    expect(snapshot(dir, "edit")).toBe(false);
+    undo(dir);
+    writeFileSync(join(dir, "edit.json"), '{"v":3}');
+    snapshot(dir, "edit");
+    expect(redoable(dir)).toBe(0);
+    expect(versions(dir)).toHaveLength(2);
+  });
+  it("versions the cut with the plan", () => {
+    const dir = project();
+    snapshot(dir, "edit");
+    writeFileSync(join(dir, "cut.json"), '{"segments":[1]}');
+    expect(snapshot(dir, "cut")).toBe(true);
+    writeFileSync(join(dir, "cut.json"), '{"segments":[2]}');
+    expect(snapshot(dir, "cut")).toBe(true);
+    undo(dir);
+    expect(readFileSync(join(dir, "cut.json"), "utf8")).toBe('{"segments":[1]}');
+    // Back before there was a cut: the project plays its clip whole again.
+    undo(dir);
+    expect(existsSync(join(dir, "cut.json"))).toBe(false);
+    expect(snapshot(dir, "edit")).toBe(false);
+    redo(dir);
+    redo(dir);
+    expect(readFileSync(join(dir, "cut.json"), "utf8")).toBe('{"segments":[2]}');
+    expect(snapshot(dir, "edit")).toBe(false);
   });
 });
 

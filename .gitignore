@@ -8,3 +8,4 @@ library/*
 .DS_Store
 __pycache__/
 styles/*/checks/
+pipeline/projects/

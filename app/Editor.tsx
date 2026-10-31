@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
-import type { Resolved } from "../engine/schema";
+import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
+import type { CutPlan, Resolved } from "../engine/schema";
 import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
@@ -24,7 +25,19 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState("");
   const [dropError, setDropError] = useState("");
+  const [segment, setSegment] = useState<string | null>(null);
+  const [rate, setRate] = useState(1);
   const player = useRef<PlayerRef>(null);
+  // Each clip's loudness, read once, so trims snap to the real pauses between words.
+  const [levels, setLevels] = useState<Record<string, Levels>>({});
+  const ready = (p?.bin ?? []).filter((c) => c.ready).map((c) => c.id).join(",");
+  useEffect(() => {
+    for (const id of ready.split(",").filter((x) => x && !levels[x]))
+      fetch(`/${id === "main" ? slug : `${slug}/clips/${id}`}/build/level.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((l: Levels | null) => l && setLevels((m) => ({ ...m, [id]: l })))
+        .catch(() => {});
+  }, [slug, ready]);
 
   const load = useCallback(
     () =>
@@ -65,6 +78,104 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     setTime(t);
   };
 
+  // Every cut edit writes the whole cut back; the server saves it as a version and resolves the
+  // plan on it, and the editor reloads when it says so.
+  const cut: CutPlan = p?.cut ?? wholeCut(r?.duration ?? 0);
+  // A re-cut moves what plays at every time, so a selected range no longer means the same words.
+  const cutKey = JSON.stringify(p?.cut ?? null);
+  const firstCut = useRef(cutKey);
+  useEffect(() => {
+    if (firstCut.current === cutKey) return;
+    firstCut.current = cutKey;
+    setSelection(null);
+    marks.current = {};
+  }, [cutKey]);
+  const saveCut = (next: CutPlan) =>
+    api.post(slug, "cut", { cut: next }).catch((e) => {
+      setDropError(String(e.message));
+      throw e;
+    });
+  const shotStart = (from: number, to: number) =>
+    api.post(slug, "shot-start", { from, to }).catch((e) => {
+      setDropError(String(e.message));
+    });
+
+  // The editor's keys, as in Final Cut: J K L to play back, pause and play (again to go faster),
+  // I and O to mark a range, B to blade at the playhead, Delete to ripple delete the selected
+  // segment or the marked range, Cmd-Z and Shift-Cmd-Z to undo and redo. Not while typing a note.
+  const keys = useRef({ time, selection, segment, cut, rate, duration: r?.duration ?? 0 });
+  const marks = useRef<{ in?: number; out?: number }>({});
+  // J K L: which way the playhead is moving, and the timer that steps it back for J.
+  const shuttle = useRef<{ dir: -1 | 0 | 1; speed: number; timer?: number }>({ dir: 0, speed: 1 });
+  const stopShuttle = () => {
+    clearInterval(shuttle.current.timer);
+    shuttle.current = { dir: 0, speed: 1 };
+    player.current?.pause();
+    setRate(1);
+  };
+  // Pausing from the player's own controls or the space bar ends the shuttle too.
+  useEffect(() => {
+    const pl = player.current;
+    if (!pl) return;
+    const paused = () => shuttle.current.dir === 1 && ((shuttle.current = { dir: 0, speed: 1 }), setRate(1));
+    pl.addEventListener("pause", paused);
+    return () => pl.removeEventListener("pause", paused);
+  }, [p?.resolved]);
+  keys.current = { time, selection, segment, cut, rate, duration: r?.duration ?? 0 };
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
+      const k = keys.current;
+      const pl = player.current;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        api.post(slug, e.shiftKey ? "redo" : "undo");
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "b") saveCut(splitAt(k.cut, k.time)).catch(() => {});
+      else if (key === "delete" || key === "backspace") {
+        e.preventDefault();
+        if (k.segment) saveCut(rippleDelete(k.cut, k.segment)).then(() => setSegment(null)).catch(() => {});
+        else if (k.selection && k.selection.end - k.selection.start > 0.04)
+          saveCut(deleteRange(k.cut, k.selection.start, k.selection.end)).then(() => (setSelection(null), seek(k.selection!.start))).catch(() => {});
+      } else if (key === "i" || key === "o") {
+        // The marks outlive the selection, so moving the playhead between I and O keeps the other one.
+        const m = marks.current;
+        if (key === "i") (m.in = k.time), m.out !== undefined && m.out <= k.time && (m.out = undefined);
+        else (m.out = k.time), m.in !== undefined && m.in >= k.time && (m.in = undefined);
+        setSelection({ start: m.in ?? 0, end: m.out ?? k.duration });
+      }
+      else if (key === "k") stopShuttle();
+      else if (key === "l") {
+        // Again while playing forward goes faster: 2x, then 4x.
+        if (shuttle.current.dir === 1) setRate(Math.min(4, k.rate * 2));
+        else {
+          clearInterval(shuttle.current.timer);
+          shuttle.current = { dir: 1, speed: 1 };
+          setRate(1);
+          pl?.play();
+        }
+      } else if (key === "j") {
+        // Backwards, silent: the player's audio cannot run in reverse, so the playhead steps back.
+        if (shuttle.current.dir === -1) shuttle.current.speed = Math.min(4, shuttle.current.speed * 2);
+        else {
+          stopShuttle();
+          const fps = r?.fps ?? 30;
+          shuttle.current = { dir: -1, speed: 1, timer: window.setInterval(() => {
+            const frame = (pl?.getCurrentFrame() ?? 0) - shuttle.current.speed;
+            pl?.seekTo(Math.max(0, frame));
+            if (frame <= 0) stopShuttle();
+          }, 1000 / fps) };
+        }
+      } else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [slug]);
+
   if (error) return <Shell title={slug}><p className="error pad">{error}</p></Shell>;
   if (!p) return <Shell title={slug}><p className="pad muted">Loading…</p></Shell>;
   if (!r || !p.words)
@@ -97,8 +208,11 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           <button className="quiet" onClick={() => api.remove(slug, r.title).then((done) => done && (location.hash = "#/")).catch((e) => setError(String(e.message)))}>
             Delete
           </button>
-          <button onClick={() => api.post(slug, "undo")} disabled={(p.versions?.length ?? 0) < 2} title="Go back to the previous version of the plan">
+          <button onClick={() => api.post(slug, "undo")} disabled={(p.versions?.length ?? 0) < 2} title="Go back to the previous version of the plan and cut (⌘Z)">
             Undo
+          </button>
+          <button onClick={() => api.post(slug, "redo")} disabled={!p.redo} title="Bring back what was undone (⇧⌘Z)">
+            Redo
           </button>
           <span className="muted small">v{p.versions?.length ?? 1}</span>
           {p.render && !rendering && (
@@ -113,7 +227,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
     >
       <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
-        <Library slug={slug} canvas={r.canvas} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
+        <Library slug={slug} bin={p.bin ?? []} canvas={r.canvas} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
           <Player
             ref={player}
@@ -124,6 +238,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             compositionWidth={comp.width}
             compositionHeight={comp.height}
             style={{ height: "100%", maxWidth: "100%", aspectRatio: `${comp.width} / ${comp.height}` }}
+            playbackRate={rate}
             controls
             clickToPlay
             spaceKeyToPlayOrPause
@@ -145,7 +260,8 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           onClear={() => setSelection(null)}
         />
         <section className="bottom">
-          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))} />
+          <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))}
+            cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart} />
           {dropError && (
             <div className="toast" onClick={() => setDropError("")}>
               {dropError}

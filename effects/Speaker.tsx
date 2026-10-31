@@ -4,6 +4,7 @@ import { staticFile } from "remotion";
 import { cameraProgress } from "./camera";
 import { H, splitGeom, W, type Box } from "./theme";
 import type { Resolved, ResolvedShot } from "../engine/schema";
+import { CutVideo } from "./cut";
 
 const FULL: Box = { left: 0, top: 0, width: W, height: H, radius: 0 };
 
@@ -94,7 +95,12 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
         opacity: f.visible ? 1 : 0,
       }}
     >
-      {r.video ? (
+      {r.cut ? (
+        <CutVideo
+          r={r}
+          style={{ left: x, top: y, width: vw, height: vh, filter: `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})` }}
+        />
+      ) : r.video ? (
         <Video
           src={staticFile(r.video)}
           muted={!!r.audio}
