@@ -207,7 +207,8 @@ const Grow: React.FC<{ b: Box; p: number; children: React.ReactNode }> = ({ b, p
 };
 
 export const Reel: React.FC<Resolved> = (r) => {
-  darkIsGraphite(false);
+  // The black theme (2026-10-31, the three-things reel): dark panels and scenes in pure black.
+  darkIsGraphite(r.theme === "black", r.theme === "black");
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));

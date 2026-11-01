@@ -256,6 +256,8 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
     if (s.keep) return;
     const v = s.visual;
     // The speaker card shrinks in and grows back out.
+    // The half split dissolves in and out: one soft whoosh in, none out.
+    if (s.layout === "half" && shots[i - 1]?.layout !== "half") whoosh(s.start, 0.3);
     if (s.layout === "side") {
       if (shots[i - 1]?.layout !== "side") whoosh(s.start);
       if (shots[i + 1]?.layout !== "side") whoosh(s.end - MOVE_S, 0.36);
@@ -371,7 +373,7 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     const len = s.end - s.start;
     const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
     if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
-    if ((s.layout === "side" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
+    if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title")
       issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
@@ -397,7 +399,7 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
   if (canvas === "youtube") return lintWide(shots, duration);
   const issues: Issue[] = [];
   for (const s of shots)
-    if (s.layout === "side" || s.layout === "over") issues.push({ level: "error", message: `"${s.anchor}": ${s.layout} is a YouTube layout; set "canvas": "youtube"` });
+    if (s.layout === "side" || s.layout === "half" || s.layout === "over") issues.push({ level: "error", message: `"${s.anchor}": ${s.layout} is a YouTube layout; set "canvas": "youtube"` });
   const speaker = (l: string) => l !== "media" && l !== "cutaway" && l !== "scene";
   const total = (pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
   let away = 0;

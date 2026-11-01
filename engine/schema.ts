@@ -49,7 +49,9 @@ export const Visual = z.discriminatedUnion("kind", [
   }),
   // A short headline. Wrap one word in *asterisks* for the Signifier italic accent.
   // `sync`: kinetic type, each word lands as Owain says its match (`words` is filled by the resolver).
-  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), words: z.array(z.number()).optional() }),
+  // `cine`: a cinematic quote title, one or two lines of Signifier on black, words fading in as said
+  // (Owain, 2026-10-30: "I love these cinematic quote titles", after Alex M H Smith).
+  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), cine: z.boolean().optional(), words: z.array(z.number()).optional() }),
   // `preview` shows every item dimmed from the start, an open loop the reel then closes item by item.
   // Repeat the same list in later shots to call back to it, with `active` on the current item.
   z.object({ kind: z.literal("list"), title: z.string().optional(), items: z.array(Item).min(2), active: z.number().optional(), preview: z.boolean().default(false) }),
@@ -323,6 +325,7 @@ export const Layout = z.enum([
   "scene", // a full-frame graphic scene: big headline on top, the visual below, light or dark
   // YouTube (16:9) only:
   "side", // the visual in a card, the speaker in a small rounded window at the side, voice continues
+  "half", // a paper panel on the left half, the speaker on the right half; dissolves in and out
   "over", // the speaker's picture as cut, with a quiet overlay on it (a lower third or a cinematic title)
 ]);
 
@@ -363,7 +366,8 @@ export const Edit = z.object({
   // The house style. Ivory is the only one; the field is kept so old plans still parse.
   style: z.string().default("ivory"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
-  theme: z.enum(["light", "dark"]).default("light"),
+  // Black (Owain, 2026-10-30: "classier - maybe black"): pure black cards, white type, no sage.
+  theme: z.enum(["light", "dark", "black"]).default("light"),
   // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
   leave: z.array(z.tuple([z.number(), z.number()])).default([]),
   // YouTube: stretches of the original to cut out of the export, [start, end] in seconds (a section
@@ -469,6 +473,7 @@ export type Resolved = {
   canvas: "reel" | "youtube";
   style?: string;
   captions: boolean;
+  theme?: "light" | "dark" | "black";
   // Light copies for the review board's players: 1080p H.264 video and AAC audio. Renders use the originals.
   preview?: { video?: string; audio?: string };
   // The editor only, when the project has a cut: the segments to play from the clips' preview

@@ -10,7 +10,10 @@ import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./
 import { Analogy, Swarm } from "./ax";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
+import { Points } from "./points";
 import { Skills } from "./skills";
+import { Blueprint, Commits, Swap, Three } from "./threethings";
+import { Tools } from "./tools";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
@@ -26,4 +29,10 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   phases: Phases,
   verifier: Verifier,
   igcta: IgCta,
+  points: Points,
+  three: Three,
+  blueprint: Blueprint,
+  swap: Swap,
+  commits: Commits,
+  tools: Tools,
 };

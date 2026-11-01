@@ -2,7 +2,7 @@ import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { clamp, ease, t } from "./theme";
 import { ACCENT, style, type ToneTokens } from "./style";
-import { GRAPHITE } from "../styles/ivory/tokens";
+import { BLACK, GRAPHITE } from "../styles/ivory/tokens";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 
 // Cool paper and graphite with grain, one clean blue, real content in every graphic. Owain picked
@@ -20,10 +20,14 @@ export { ACCENT };
 // On YouTube, dark is Graphite; reels keep the style's own dark (Forest). The composition sets it
 // once per render, before anything draws.
 let graphite = false;
-export const darkIsGraphite = (on: boolean) => {
+// A video with the black theme draws its dark graphics in pure black instead of Graphite.
+let black = false;
+export const darkIsGraphite = (on: boolean, isBlack = false) => {
   graphite = on;
+  black = on && isBlack;
 };
-export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (graphite ? GRAPHITE : style.color.dark) : style.color.light);
+export const isBlack = () => black;
+export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : graphite ? GRAPHITE : style.color.dark) : style.color.light);
 
 // Scene geometry: the headline on top, the visual below, captions low.
 export const SCENE = { headTop: 96, headHeight: 340, top: 470, bottom: 1600, caption: 1752 };
@@ -81,6 +85,21 @@ export const Blueprint: React.FC<{ tone: Tone; width?: number; height?: number; 
 
 export const SceneCanvas: React.FC<{ tone: Tone; time: number; width?: number; height?: number }> = ({ tone, time, width, height }) => {
   const c = pal(tone);
+  // Black is plain: no grid, only a little grain.
+  if (black && tone === "dark")
+    return (
+      <AbsoluteFill data-qc="canvas" style={{ background: c.bg }}>
+        <AbsoluteFill style={{ opacity: 0.06, mixBlendMode: "screen" }}>
+          <svg width="100%" height="100%">
+            <filter id="grain-black">
+              <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={Math.floor(time * 12) % 50} />
+              <feColorMatrix type="saturate" values="0" />
+            </filter>
+            <rect width="100%" height="100%" filter="url(#grain-black)" />
+          </svg>
+        </AbsoluteFill>
+      </AbsoluteFill>
+    );
   return (
     // data-qc="canvas": the background, which QC leaves out when it judges a graphic's layout.
     <AbsoluteFill data-qc="canvas" style={{ background: c.bg }}>

@@ -1,7 +1,7 @@
 // Turn a project's plan (edit.json) into what the compositions render (build/edit.resolved.json),
 // with every check the house rules need. The editor runs this on every change to the plan, so
 // the player always shows the plan as it is, and problems show next to it.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
 import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
@@ -9,7 +9,7 @@ import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
-import { useClip } from "./broll.ts";
+import { BROLL, useClip } from "./broll.ts";
 import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
 import { MAIN } from "../engine/schema.ts";
@@ -52,7 +52,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (plan.remove.length) issues.push({ level: "error", message: 'this project has a cut, so "remove" no longer applies; delete the stretch from the cut instead' });
   }
   // The video's theme is every graphic's tone unless a shot sets its own.
-  if (plan.theme === "dark") for (const s of shots) s.tone ??= "dark";
+  if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   // The scan is in the main clip's own time; added clips have none, so they count as off camera.
@@ -78,6 +78,14 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       else s.visual = { ...v, src: rel };
     }
   }
+  // Library logos ("logo:<name>", library/logos/<name>.png) become data URLs wherever they appear in a
+  // visual (custom props included).
+  const logos = (x: unknown): unknown =>
+    typeof x === "string" && x.startsWith("logo:") ? useLogo(x.slice(5)) ?? (issues.push({ level: "error", message: `no logo ${x} in library/logos` }), x)
+    : Array.isArray(x) ? x.map(logos)
+    : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, logos(v)]))
+    : x;
+  for (const s of shots) if (s.visual) s.visual = logos(s.visual) as typeof s.visual;
   const seen = new Set<string>();
   for (const s of shots) {
     const v = s.visual;
@@ -138,6 +146,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     canvas: plan.canvas,
     style: plan.style,
     captions: plan.captions ?? !youtube,
+    theme: plan.theme,
     preview: explicit
       ? {}
       : {
@@ -165,4 +174,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   writeJson(join(dir, `build/edit.${name}.json`), resolved);
   writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
   return { resolved, issues };
+}
+
+const LIBRARY_LOGOS = join(BROLL, "..", "logos");
+// A library logo as a data URL, so any visual can draw it without knowing the project's folder.
+function useLogo(name: string): string | undefined {
+  const from = join(LIBRARY_LOGOS, `${name}.png`);
+  return existsSync(from) ? `data:image/png;base64,${readFileSync(from).toString("base64")}` : undefined;
 }
