@@ -308,6 +308,25 @@ const CineTitle: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v })
 
 const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
   if (v.cine) return <CineTitle shot={shot} time={time} w={w} h={h} v={v} slug="" />;
+  if (v.block) {
+    // One clean reveal of the whole line: a short blur-in, no word-by-word stagger.
+    const a = prog(time, shot.start + 0.05, 0.3);
+    const rows = v.text.split("//").map((l) => l.trim());
+    const longest = Math.max(...rows.map((l) => l.replace(/\*/g, "").length));
+    const size = Math.min(120, Math.floor((w - 40) / (longest * 0.52)));
+    const c = pal(shot.tone);
+    return (
+      <div style={{ width: w, height: h, display: "flex", alignItems: "center" }}>
+        <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: size, lineHeight: 1.04, letterSpacing: -size * 0.03, color: c.ink, textAlign: "left", opacity: a, filter: `blur(${(1 - a) * 8}px)` }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{ whiteSpace: "nowrap" }}>
+              <SoftAccented text={row} c={c} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   const words = v.text.split(/\s+/);
   const len = v.text.replace(/\*/g, "").length;
   // "//" in the text is a line break the plan chose; the type is then sized to the longest line.
@@ -499,7 +518,8 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   const m = v.value.match(/^([^\d]*)([\d,.]+)(.*)$/);
   const p = prog(time, shot.start, 0.9);
   let shown = v.value;
-  if (m && !v.hit) {
+  // Count up only to a real quantity: a "1" or "2" counting from 0 shows a number nobody said (2026-10-25).
+  if (m && !v.hit && parseFloat(m[2].replace(/,/g, "")) >= 10) {
     const target = parseFloat(m[2].replace(/,/g, ""));
     const decimals = (m[2].split(".")[1] || "").length;
     shown = m[1] + (target * p).toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + m[3];

@@ -47,6 +47,16 @@ describe("qcPlan", () => {
     const r = plan([shot({ start: 10, end: 20, layout: "media", visual: { kind: "list", items: [{ text: "One" }, { text: "Two" }], preview: false, times: [10.2, 11] } as never }), shot({ start: 20, end: 30 })]);
     expect(msgs(qcPlan(r, words, []))).toMatch(/lingers 9.0s/);
   });
+  it("warns on a subtitle line in a side panel, not on a plain statement", () => {
+    const sub = plan([shot({ start: 10, end: 14, layout: "side", visual: { kind: "custom", name: "points", props: { title: "The shift", sub: "From chat to delegation", items: [] } } as never }), shot({ start: 14, end: 20 })]);
+    expect(msgs(qcPlan(sub, words, []))).toMatch(/subtitle line in a side panel/);
+    const plain = plan([shot({ start: 10, end: 14, layout: "side", visual: { kind: "title", text: "Delegate to agents" } as never }), shot({ start: 14, end: 20 })]);
+    expect(msgs(qcPlan(plain, words, []))).not.toMatch(/subtitle/);
+  });
+  it("warns on a side panel that is only a sentence", () => {
+    const text = plan([shot({ start: 10, end: 14, layout: "side", visual: { kind: "title", text: "Delegate to agents" } as never }), shot({ start: 14, end: 20 })]);
+    expect(msgs(qcPlan(text, words, []))).toMatch(/only text/);
+  });
   it("warns on a number nobody said, but not on one that was", () => {
     const said = plan([shot({ start: 10, end: 13, layout: "media", visual: { kind: "title", text: "90 percent" } as never }), shot({ start: 13, end: 20 })]);
     expect(msgs(qcPlan(said, words, []))).not.toMatch(/not said/);

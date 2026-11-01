@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
 import { isKeyword } from "../effects/Captions.tsx";
-import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, resolveShots, syncWords } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, musicInCut, resolveKinetic, resolveShots, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -259,6 +259,18 @@ describe("on camera", () => {
     expect(bad.map((i) => i.level)).toEqual(["error", "error"]);
     expect(bad[0].message).toMatch(/not on camera.*10.0-20.0s/);
   });
+  it("lets a full-frame card cut in later, but never over the opening b-roll", () => {
+    const card = (start: number, end: number) => ({ start, end, layout: "media" as const, anchor: `${start}`, visual: { kind: "title", text: "x" } as never });
+    const ranges: [number, number][] = [[10, 20]];
+    expect(lintOnCamera([card(30, 34)], ranges)).toEqual([]);
+    const bad = lintOnCamera([card(2, 5)], ranges);
+    expect(bad.map((i) => i.level)).toEqual(["error"]);
+    expect(bad[0].message).toMatch(/opening b-roll/);
+  });
+  it("lets a headline sit over b-roll, the opening included", () => {
+    const headline = { start: 2, end: 4, layout: "over" as const, anchor: "2", visual: { kind: "headline", text: "Code Review" } as never };
+    expect(lintOnCamera([headline], [[10, 20]])).toEqual([]);
+  });
 });
 
 describe("syncWords", () => {
@@ -277,5 +289,29 @@ describe("shift", () => {
     const plan = Edit.parse({ title: "t", canvas: "youtube", face: { x: 0.5, y: 0.3, h: 0.3 }, shots: [{ at: "one", layout: "full" }, { at: "three", layout: "full", shift: -0.5 }] });
     const { shots } = resolveShots(plan, words, 10, 30);
     expect(shots[1].start).toBeCloseTo(3.467, 2);
+  });
+});
+
+describe("resolveKinetic", () => {
+  const said = "So the goal we want is to be able to just delegate work to agents, and have them run parts of our business.".split(" ").map((text, i) => ({ text, start: 10 + i * 0.3, end: 10.25 + i * 0.3 }));
+  it("splits a phrase into short lines and marks the accent word", () => {
+    const { kinetic, issues } = resolveKinetic([{ text: "just delegate work to agents, and have them run parts", accent: "delegate" }], said, [], [[0, 60]]);
+    expect(issues).toEqual([]);
+    expect(kinetic[0].lines.map((l) => l.map((w) => w.text).join(" "))).toEqual(["just delegate work to agents,", "and have them run parts"]);
+    expect(kinetic[0].lines[0].filter((w) => w.accent).map((w) => w.text)).toEqual(["delegate"]);
+  });
+  it("errors when the phrase is missing, off camera or under a graphic", () => {
+    expect(resolveKinetic([{ text: "nobody said this" }], said, [], undefined).issues[0].message).toMatch(/not found/);
+    expect(resolveKinetic([{ text: "the goal we want" }], said, [], [[30, 40]]).issues[0].message).toMatch(/not on camera/);
+    const card = { start: 9, end: 12, layout: "side", anchor: "x" } as never;
+    expect(resolveKinetic([{ text: "the goal we want" }], said, [card], [[0, 60]]).issues[0].message).toMatch(/overlaps a side graphic/);
+  });
+});
+
+describe("musicInCut", () => {
+  it("is true when most pauses carry sound, false when they are silent", () => {
+    expect(musicInCut([-23, -31, -34, -50, -27, -38, -82, -25])).toBe(true);
+    expect(musicInCut([-85, -91, -80, -76, -33, -90])).toBe(false);
+    expect(musicInCut([-20, -20])).toBe(false);
   });
 });

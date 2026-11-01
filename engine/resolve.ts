@@ -1,6 +1,6 @@
 // Turn an edit plan plus a word-timed transcript into exact times.
 // Pure functions, so they are easy to test.
-import type { Chunk, EditPlan, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
+import type { Chunk, EditPlan, KineticLine, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}']+/gu, "");
 
@@ -245,8 +245,12 @@ export const estimateWords = (script: string, wpm = 165): Word[] => {
 // click when a highlighter sweeps, ticks while an odometer rolls, a riser into its result.
 const MOVE_S = 0.46;
 const marked = (text?: string) => !!text && /\*[^*]+\*/.test(text);
-export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
+export const sfxEvents = (shots: ResolvedShot[], transition?: "stage" | "whip"): SfxEvent[] => {
   const ev: SfxEvent[] = [];
+  // A whip: a short airy swoosh whose peak (about 0.2 s in) lands on the cut, about 12 dB under the
+  // voice's peaks (Owain, 2026-11-01: "the swooshes are a tiny bit too loud", 3 dB down from 9).
+  const whip = transition === "whip";
+  const swoosh = (t: number) => ev.push({ kind: "whoosh", t: t - 0.2, gain: 0.7, exact: true });
   const whoosh = (t: number, gain = 0.42) => ev.push({ kind: "whoosh", t, gain, exact: true });
   const click = (t: number, gain = 0.7) => ev.push({ kind: "blip", t, gain, exact: true });
   shots.forEach((s, i) => {
@@ -259,8 +263,13 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
     // The half split dissolves in and out: one soft whoosh in, none out.
     if (s.layout === "half" && shots[i - 1]?.layout !== "half") whoosh(s.start, 0.3);
     if (s.layout === "side") {
-      if (shots[i - 1]?.layout !== "side") whoosh(s.start);
-      if (shots[i + 1]?.layout !== "side") whoosh(s.end - MOVE_S, 0.36);
+      if (whip) {
+        if (shots[i - 1]?.layout !== "side") swoosh(s.start);
+        if (shots[i + 1]?.layout !== "side") swoosh(s.end);
+      } else {
+        if (shots[i - 1]?.layout !== "side") whoosh(s.start);
+        if (shots[i + 1]?.layout !== "side") whoosh(s.end - MOVE_S, 0.36);
+      }
     }
     if (!v) return;
     if (v.kind === "lift") {
@@ -294,7 +303,12 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
       return;
     }
     if (v.kind === "chapter" && v.hit) {
-      whoosh(s.start);
+      // With a whip the card arrives on a swoosh and sits on a low whoosh; out on another swoosh.
+      if (whip) {
+        swoosh(s.start);
+        ev.push({ kind: "thud", t: s.start, gain: 0.8, exact: true });
+        swoosh(s.end);
+      } else whoosh(s.start);
       if (marked(v.label)) click(s.start + 1.0);
     }
     if (v.kind === "title" && v.sync && marked(v.text) && v.words?.length) {
@@ -353,9 +367,15 @@ export const lintLeave = (shots: ResolvedShot[], leave: [number, number][]): Iss
 export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
   shots.flatMap((s, i) => {
     if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
+    // A headline is Owain's own style over his picture, b-roll included (2026-10-31).
+    if (s.visual.kind === "headline") return [];
     // A full-frame card replaces the picture for a moment rather than sitting over it, so it may cut
     // in over a screen recording (Owain, 2026-10-25: the article sections "might benefit from
     // something"). Demos are fenced off with the plan's `leave` instead (lintLeave).
+    // Except in the opening: Owain's cuts open on his own b-roll, and nothing goes over it
+    // (2026-10-31: the first quote title "hides his b-roll").
+    if (s.layout === "media" && ranges.length && s.start < ranges[0][0] - slack)
+      return [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): covers the opening b-roll before Owain is first on camera at ${ranges[0][0].toFixed(1)}s; no graphics over his b-roll` }];
     if (s.layout === "media") return [];
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
@@ -374,7 +394,7 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
     if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
-    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title")
+    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "headline")
       issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
     if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
@@ -474,3 +494,40 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
   if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });
   return issues;
 };
+
+// Kinetic captions: find each phrase, split it into even lines of at most six words (a comma or full
+// stop ends a line early), and check it sits on camera with no graphic over it.
+export const resolveKinetic = (specs: { text: string; accent?: string }[], words: Word[], shots: ResolvedShot[], ranges: [number, number][] | undefined): { kinetic: KineticLine[]; issues: Issue[] } => {
+  const issues: Issue[] = [];
+  const kinetic: KineticLine[] = [];
+  for (const k of specs) {
+    const i = findPhrase(words, k.text);
+    if (i < 0) {
+      issues.push({ level: "error", message: `kinetic caption "${k.text}": phrase not found in the transcript` });
+      continue;
+    }
+    const said = words.slice(i, i + tokens(k.text).length);
+    const accent = new Set(tokens(k.accent ?? ""));
+    const per = Math.ceil(said.length / Math.ceil(said.length / 6));
+    const lines: KineticLine["lines"] = [[]];
+    for (const w of said) {
+      const line = lines[lines.length - 1];
+      line.push({ text: w.text, start: w.start, end: w.end, accent: accent.has(norm(w.text)) });
+      if (line.length >= per || /[,.;:?!]$/.test(w.text)) lines.push([]);
+    }
+    if (!lines[lines.length - 1].length) lines.pop();
+    const start = said[0].start, end = said[said.length - 1].end + 0.6;
+    kinetic.push({ start, end, lines });
+    const where = `kinetic caption "${k.text}" (${start.toFixed(2)}s)`;
+    if (ranges && !ranges.some(([a, b]) => start >= a - 0.3 && end <= b + 0.3)) issues.push({ level: "error", message: `${where}: not on camera` });
+    const under = shots.find((s) => s.layout !== "full" && s.start < end && s.end > start);
+    if (under) issues.push({ level: "error", message: `${where}: overlaps a ${under.layout} graphic at ${under.start.toFixed(2)}s` });
+  }
+  return { kinetic, issues };
+};
+
+// Music already in the cut (Owain, 2026-11-01: our bed clashed with his own intro music). His
+// pauses between words are near silence (-70 dB or lower) when the cut has no music; a bed of his
+// own keeps them around -20 to -40. Given the level of a spread of pauses, true when most are loud.
+export const musicInCut = (levels: number[], floor = -45): boolean =>
+  levels.length >= 5 && levels.filter((db) => db > floor).length / levels.length >= 0.6;

@@ -60,6 +60,16 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     // Count-ups flash numbers that were never said; Owain accepts them, but say so.
     if ((v.kind === "stat" && !v.hit) || v.kind === "waffle" || v.kind === "ring" || v.kind === "meter")
       issues.push({ level: "warn", message: `${label(s, i)}: counts up from zero, so it briefly shows numbers that were never said` });
+    // Side panels hold one plain statement in the house card style; a subtitle or kicker line under
+    // it is noise (Owain, 2026-10-31: "the subtitles are pointless and confuse the point").
+    if (s.layout === "side" || s.layout === "half") {
+      const extra = [(v as { kicker?: string }).kicker, ((v as { props?: { sub?: string } }).props ?? {}).sub].filter(Boolean);
+      if (extra.length) issues.push({ level: "warn", message: `${label(s, i)}: a subtitle line in a side panel ("${extra[0]}"); keep one plain statement` });
+    }
+    // A side panel or card that is only a sentence: a diagram shows the idea better (Owain,
+    // 2026-11-01: "I'd favour diagrams over just text in places like this").
+    if ((s.layout === "side" || s.layout === "half") && v.kind === "title")
+      issues.push({ level: "warn", message: `${label(s, i)}: a side panel holding only text; show the idea as a diagram (structure, flow, assignment, before and after)` });
     // A comparison strikes through its left side: only right when the left is a myth.
     if (v.kind === "compare" && !v.even)
       issues.push({ level: "warn", message: `${label(s, i)}: strikes through "${v.left.text}"; set "even": true if both sides are right` });

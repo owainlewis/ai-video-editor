@@ -20,6 +20,8 @@ export const isKeyword = (text: string) => {
 export const Captions: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }> = ({ r, shot, time }) => {
   const chunk: Chunk | undefined = r.chunks.find((c) => time >= c.start && time < c.end);
   if (!chunk) return null;
+  // A headline is the words on screen; a caption over it doubles them.
+  if (shot.visual?.kind === "headline") return null;
 
   // In the 50/50 split the caption sits on the speaker's half; in the inset it sits on the canvas seam.
   const onCanvas = shot.layout === "media" || (shot.layout === "split" && r.split === "inset");

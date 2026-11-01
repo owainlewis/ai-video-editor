@@ -8,6 +8,7 @@ import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
 import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./moves";
 import { Analogy, Swarm } from "./ax";
+import { Board, Shift, Task, Thread } from "./delegation";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
 import { Points } from "./points";
@@ -35,4 +36,8 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   swap: Swap,
   commits: Commits,
   tools: Tools,
+  board: Board,
+  shift: Shift,
+  task: Task,
+  thread: Thread,
 };

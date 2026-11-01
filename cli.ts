@@ -8,7 +8,8 @@
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
 //   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
-//   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
+//   npm run studio -- render <slug> [--force] [--from s --to s]   QC, then mix the audio and render renders/final.mp4
+//                                                  (a range renders only that stretch, to renders/range-<from>-<to>.mp4; YouTube only)
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
@@ -155,7 +156,7 @@ async function main() {
         const youtube = readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube";
         let last = -1;
         const out = youtube
-          ? await exportOverOriginal(projects, slug, (stage) => setStatus(dir, stage), log)
+          ? await exportOverOriginal(projects, slug, (stage) => setStatus(dir, stage), log, flag("from") !== undefined || flag("to") !== undefined ? { from: parseFloat(flag("from") ?? "0"), to: parseFloat(flag("to") ?? "1e9") } : undefined)
           : await renderFinal(projects, slug, (done, total) => {
               const pct = Math.floor((100 * done) / total);
               if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
@@ -171,7 +172,7 @@ async function main() {
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--force]");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--force] [--from s --to s]");
   }
 }
 

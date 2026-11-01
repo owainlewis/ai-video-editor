@@ -6,6 +6,7 @@ import { easeInOut, lerp, MOVE, prog } from "./motion";
 import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
+import { Headline } from "./headline";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
 import { CutAudio, CutVideo } from "./cut";
 
@@ -41,6 +42,24 @@ const fadeK = (shots: ResolvedShot[], i: number, time: number, s: ResolvedShot =
   const enter = designed(shots[i - 1]) && shots[i - 1].layout === s.layout ? 1 : prog(time, s.start, FADE, easeInOut);
   const leave = prog(time, s.end - FADE, FADE, easeInOut);
   return enter * (1 - leave);
+};
+
+// The whip (Owain, 2026-11-01, after a reference he likes): the picture does not shrink or dissolve
+// into a side shot or a full-frame card. It cuts hard in the middle of a few frames of horizontal
+// motion blur and a small slide: out to the left, in from the right. About 7 frames at 24 fps.
+const WHIP = 0.15;
+const isWhipCut = (a: ResolvedShot, b: ResolvedShot) => (a.layout === "side") !== (b.layout === "side") || solid(a) !== solid(b);
+// How strong the whip is now (0 to 1) and which side of the cut we are on (-1 before, 1 after).
+export const whipAt = (shots: ResolvedShot[], time: number): { w: number; side: number } => {
+  for (let i = 1; i < shots.length; i++) {
+    const b = shots[i].start;
+    const dt = time - b;
+    if (Math.abs(dt) < WHIP && !shots[i].keep && isWhipCut(shots[i - 1], shots[i])) {
+      const x = 1 - Math.abs(dt) / WHIP;
+      return { w: x * x, side: dt < 0 ? -1 : 1 };
+    }
+  }
+  return { w: 0, side: 1 };
 };
 
 // The width the shared visuals are designed at (the reel's panel).
@@ -129,7 +148,7 @@ const OverTitle: React.FC<{ text: string; kicker?: string; shot: ResolvedShot; t
   return (
     <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", opacity: out }}>
       {kicker && <div style={{ fontFamily: t.sans, fontWeight: 500, fontSize: 22, letterSpacing: 8, textTransform: "uppercase", color: "rgba(236,238,241,0.7)", marginBottom: 22, opacity: a }}>{kicker}</div>}
-      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 68, letterSpacing: -2, lineHeight: 1.05, color: "#ECEEF1", textAlign: "center", maxWidth: 1300, opacity: a, filter: `blur(${(1 - a) * 10}px)` }}>
+      <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: 68, letterSpacing: -2, lineHeight: 1.05, color: "#ECEEF1", textAlign: "center", maxWidth: 1300, opacity: a, filter: `blur(${(1 - a) * 10}px)`, textShadow: "0 2px 6px rgba(0,0,0,0.35), 0 8px 40px rgba(0,0,0,0.45)" }}>
         <Accented text={text} lift={1.2} />
       </div>
     </AbsoluteFill>
@@ -142,6 +161,30 @@ const Captions: React.FC<{ chunk?: Chunk }> = ({ chunk }) =>
       {chunk.words.map((w) => w.text).join(" ")}
     </div>
   );
+
+// Kinetic captions on a few chosen lines (Owain, 2026-10-31: "subtle, in places"): the line being
+// said sits low in the frame, each word rising 10 px out of a short fade as it is spoken. White
+// Helvetica with a soft shadow, the one accent word in sage. No box, no bounce.
+const SAGE = "#B7CDBF";
+const Kinetic: React.FC<{ r: Resolved; time: number }> = ({ r, time }) => {
+  const k = r.kinetic?.find((c) => time >= c.start - 0.1 && time < c.end);
+  if (!k) return null;
+  const lead = 2 / r.fps;
+  const line = [...k.lines].reverse().find((l) => time >= l[0].start - lead) ?? k.lines[0];
+  const out = prog(time, k.end - 0.3, 0.3);
+  return (
+    <div style={{ position: "absolute", left: 240, right: 240, bottom: 120, textAlign: "center", fontFamily: t.sans, fontWeight: 700, fontSize: 54, lineHeight: 1.15, letterSpacing: -1, color: "#F5F5F2", textShadow: "0 1px 2px rgba(0,0,0,0.5), 0 4px 24px rgba(0,0,0,0.45)", opacity: 1 - out }}>
+      {line.map((w, i) => {
+        const p = prog(time, w.start - lead, 0.18);
+        return (
+          <span key={i} style={{ display: "inline-block", marginRight: "0.26em", opacity: p, transform: `translateY(${(1 - p) * 10}px)`, color: w.accent ? SAGE : undefined }}>
+            {w.text}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
 
 // The picture behind a black-theme card: as cut, blurred and dimmed while a floating card is up.
 const Backdrop: React.FC<{ r: Resolved; shots: ResolvedShot[]; index: number; time: number }> = ({ r, shots, index, time }) => {
@@ -181,15 +224,27 @@ export const Wide: React.FC<Resolved> = (r) => {
   // Paper by default: the shared visuals are drawn for it. "dark" suits the soft tech visuals.
   const tone: Tone = shot.tone ?? "light";
   const onCanvas = shot.layout === "side" || shot.layout === "media";
-  // A cinematic title dims the picture a little so the line holds. No scrim, no gradient.
+  // Owain's footage is never darkened (2026-11-01): titles over the picture hold with a soft shadow.
   const titled = shot.layout === "over" && shot.visual?.kind === "title";
-  const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : 1;
+  const whip = r.transition === "whip";
+  // With the whip, full-frame cards cut in whole instead of dissolving.
+  const fk = (i: number, s: ResolvedShot = r.shots[i]) => (whip && solid(s) ? 1 : fadeK(r.shots, i, time, s));
+  const wh = whip ? whipAt(r.shots, time) : { w: 0, side: 1 };
+  const dim = 1;
 
   return (
     <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }}>
+      {wh.w > 0 && (
+        <svg width={0} height={0} style={{ position: "absolute" }}>
+          <filter id="whip-blur" x="-10%" y="0" width="120%" height="100%">
+            <feGaussianBlur stdDeviation={`${44 * wh.w} 0`} />
+          </filter>
+        </svg>
+      )}
+      <AbsoluteFill style={wh.w > 0 ? { transform: `translateX(${wh.side * 70 * wh.w}px) scale(${1 + 0.08 * wh.w})`, filter: "url(#whip-blur)" } : undefined}>
       {black && !r.alpha && designed(shot) && <Backdrop r={r} shots={r.shots} index={index} time={time} />}
       {black && shot.layout === "media" && shot.visual && solid(shot) && (
-        <AbsoluteFill style={{ opacity: fadeK(r.shots, index, time) }}>
+        <AbsoluteFill style={{ opacity: fk(index) }}>
           <SceneCanvas tone={tone} time={time} width={WW} height={WH} />
         </AbsoluteFill>
       )}
@@ -212,7 +267,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           return (
             <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${visual.kind}`}>
               {black ? (
-                <AbsoluteFill style={{ opacity: fadeK(r.shots, i, time, s) }}>
+                <AbsoluteFill style={{ opacity: fk(i, s) }}>
                   <FrameVisual r={r} shot={s} time={time} />
                 </AbsoluteFill>
               ) : (
@@ -221,7 +276,7 @@ export const Wide: React.FC<Resolved> = (r) => {
             </Sequence>
           );
         if (black && (s.layout === "media" || s.layout === "half")) {
-          const kk = fadeK(r.shots, i, time, s);
+          const kk = fk(i, s);
           const half = s.layout === "half";
           const float = !half && !solid(s);
           const box = half ? HALF : float ? FLOAT_IN : MEDIA;
@@ -251,7 +306,7 @@ export const Wide: React.FC<Resolved> = (r) => {
         if (s.layout !== "side" && s.layout !== "media") return null;
         const area = s.layout === "side" ? SIDE : MEDIA;
         // On the stage the graphic leaves with the card's move back to full frame.
-        const leaving = s.layout === "side" && r.shots[last + 1]?.layout !== "side" ? 1 - prog(time, s.end - MOVE, 0.2) : 1;
+        const leaving = !whip && s.layout === "side" && r.shots[last + 1]?.layout !== "side" ? 1 - prog(time, s.end - MOVE, 0.2) : 1;
         // The visuals are designed for a 900 px panel (the reel's). On 16:9 they are laid out at that
         // width and scaled up to fill the panel, so type and lines grow with it instead of sitting
         // small in empty space (Owain, 2026-10-24: "a little sparse/plain").
@@ -267,10 +322,13 @@ export const Wide: React.FC<Resolved> = (r) => {
           </Sequence>
         );
       })}
-      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} k={stageK(r.shots, index, time)} dim={dim} />}
+      {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} k={whip ? (shot.layout === "side" ? 1 : 0) : stageK(r.shots, index, time)} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
+      {shot.layout === "over" && shot.visual?.kind === "headline" && <Headline text={shot.visual.text} kicker={shot.visual.kicker} start={shot.start} end={shot.end} time={time} width={WW} height={WH} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
+      {r.kinetic?.length ? <Kinetic r={r} time={time} /> : null}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
+      </AbsoluteFill>
       {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}
       {r.cut && !r.alpha && <CutAudio r={r} />}
     </AbsoluteFill>

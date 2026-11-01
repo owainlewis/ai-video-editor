@@ -91,3 +91,15 @@ export const imageSize = (file: string): [number, number] | undefined => {
   }
   return undefined;
 };
+
+// The level (mean dB) of up to `n` pauses between words, spread across the take, for telling
+// whether the cut already carries music under the voice. Each pause is measured inside its edges.
+export function pauseLevels(file: string, words: { start: number; end: number }[], n = 16): number[] {
+  const gaps = words.slice(1).map((w, i) => [words[i].end + 0.08, w.start - 0.08] as const).filter(([a, b]) => b - a >= 0.3);
+  const pick = gaps.length <= n ? gaps : Array.from({ length: n }, (_, k) => gaps[Math.floor((k * gaps.length) / n)]);
+  return pick.flatMap(([a, b]) => {
+    const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-ss", a.toFixed(2), "-t", Math.min(0.6, b - a).toFixed(2), "-i", file, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr;
+    const m = /mean_volume: (-?[\d.]+) dB/.exec(log);
+    return m ? [parseFloat(m[1])] : [];
+  });
+}

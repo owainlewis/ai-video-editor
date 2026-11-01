@@ -155,6 +155,16 @@ describe("YouTube export", () => {
     const r = { shots: [shot(0, 5, "full"), shot(5, 9, "side", { visual: { kind: "list" } }), shot(9, 12, "side", { keep: true }), shot(12, 20, "full"), shot(20, 24, "over", { visual: { kind: "title" } })] } as never;
     expect(sections(r)).toEqual([{ start: 5, end: 12, alpha: false }, { start: 20, end: 24, alpha: true }]);
   });
+  it("pads a whip's sections so the frames either side of the cut render", async () => {
+    const { sections } = await import("../media/export.ts");
+    const r = { transition: "whip", shots: [{ start: 0, end: 5, layout: "full", anchor: "a" }, { start: 5, end: 9, layout: "side", anchor: "b", visual: { kind: "title" } }, { start: 9, end: 20, layout: "full", anchor: "c" }] } as never;
+    expect(sections(r)).toEqual([{ start: 4.8, end: 9.2, alpha: false }]);
+  });
+  it("renders kinetic captions over the plain picture as overlays", async () => {
+    const { sections } = await import("../media/export.ts");
+    const r = { shots: [{ start: 0, end: 30, layout: "full", anchor: "a" }], kinetic: [{ start: 3, end: 6, lines: [] }, { start: 10, end: 12, lines: [] }] } as never;
+    expect(sections(r)).toEqual([{ start: 2.9, end: 6, alpha: true }, { start: 9.9, end: 12, alpha: true }]);
+  });
 });
 
 describe("inserting shots at a time", () => {

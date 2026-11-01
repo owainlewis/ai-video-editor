@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { chunkWords, lintLeave, lintOnCamera, lintShots, musicInCut, resolveKinetic, resolveShots, sfxEvents } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
@@ -13,7 +13,7 @@ import { BROLL, useClip } from "./broll.ts";
 import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
 import { MAIN } from "../engine/schema.ts";
-import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
+import { FPS, imageSize, pauseLevels, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
 
 export type Issue = { level: "error" | "warn"; message: string };
 
@@ -56,7 +56,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   // The scan is in the main clip's own time; added clips have none, so they count as off camera.
-  if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  const ranges = existsSync(scanned) ? (explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges) : undefined;
+  if (youtube && ranges) issues.push(...lintOnCamera(shots, ranges));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube) issues.push(...lintLeave(shots, plan.leave));
   // A removed stretch must start and end between words, and must not cut through a graphic.
@@ -124,10 +125,24 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const any = existsSync(join(LIBRARY, "music")) && readdirSync(join(LIBRARY, "music"), { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
     if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music"}; the video will have no bed` });
   }
+  // Music never stacks on music already in his cut (2026-11-01). The pause levels are measured once
+  // per transcript and kept in build/pause-levels.json.
+  if (plan.music && !explicit && existsSync(join(dir, "source/voice.wav"))) {
+    const cache = join(dir, "build/pause-levels.json");
+    const stale = !existsSync(cache) || readJson<{ words: number }>(cache).words !== words.length;
+    if (stale) writeJson(cache, { words: words.length, levels: pauseLevels(join(dir, "source/voice.wav"), words) });
+    const levels = readJson<{ levels: number[] }>(cache).levels;
+    if (musicInCut(levels)) {
+      const sorted = [...levels].sort((a, b) => a - b);
+      issues.push({ level: "error", message: `the cut already has music under the voice (pauses between words sit around ${sorted[Math.floor(sorted.length / 2)].toFixed(0)} dB, not silence); set "music": false so our bed does not stack on it` });
+    }
+  }
   if (!explicit && existsSync(join(dir, "source/voice.wav"))) {
     const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
     if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
   }
+  const kin = resolveKinetic(plan.kinetic, words, shots, youtube ? ranges : undefined);
+  issues.push(...kin.issues);
   const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
   for (const a of plan.accents) if (!spoken.includes(a.toLowerCase())) issues.push({ level: "warn", message: `accent word not spoken: "${a}"` });
 
@@ -159,7 +174,9 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       : {}),
     shots,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...(explicit ? joins(cut) : [])].sort((a, b) => a - b), FPS),
-    sfx: sfxEvents(shots),
+    kinetic: kin.kinetic,
+    transition: plan.transition,
+    sfx: sfxEvents(shots, plan.transition),
   };
   // Plan checks from QC (engine/qc.ts): pacing, reading time, cuts in the footage, numbers on screen.
   const cutsFile = join(dir, "build/cuts.json");
