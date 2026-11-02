@@ -20,7 +20,8 @@ import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
 import { clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
-import { EFFECTS, effectList } from "../media/effects.ts";
+import { effectList } from "../effects/preview.ts";
+import type { Resolved } from "../engine/schema.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -168,6 +169,20 @@ export async function startServer(port = 4747) {
     }
 
     if (parts[0] === "effects") return send(res, 200, effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube"));
+
+    // The gallery: every project's graphics, from the plan as last resolved, without captions.
+    if (parts[0] === "gallery") {
+      const list = readdirSync(projects, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith(".") && existsSync(join(projects, d.name, "build/edit.resolved.json")))
+        .map((d) => {
+          const file = join(projects, d.name, "build/edit.resolved.json");
+          const resolved = readJson<Resolved>(file);
+          return { slug: d.name, modified: statSync(file).mtimeMs, resolved: { ...resolved, chunks: [] } };
+        })
+        .filter((p) => p.resolved.shots?.some((s) => s.visual))
+        .sort((a, b) => b.modified - a.modified);
+      return send(res, 200, list);
+    }
 
     if (parts[0] === "projects" && !parts[1]) {
       const list = readdirSync(projects, { withFileTypes: true })
@@ -317,7 +332,6 @@ export async function startServer(port = 4747) {
     if (req.url?.startsWith("/api/"))
       return void api(req, res).catch((e) => send(res, typeof e.code === "number" ? e.code : 500, { error: String(e.message ?? e) }));
     if (serveFile(join(BROLL, ".clips"), req, res, "/library")) return;
-    if (serveFile(EFFECTS, req, res, "/effects")) return;
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });

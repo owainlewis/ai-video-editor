@@ -176,10 +176,33 @@ button.drop { width: 100%; font-size: 15px; }
 .clip.draft { background: rgba(44, 74, 64, 0.35); border: 1px dashed #5f8a7c; color: var(--accent); }
 
 .effects { display: flex; flex-direction: column; gap: 10px; }
-.effect { flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; border-radius: 10px; text-align: left; }
-.effect img { width: 100%; display: block; background: #f4f1ea; }
-.effect b { padding: 6px 8px 0; font-size: 12px; }
-.effect span { padding: 2px 8px 8px; font-size: 11px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Gallery: every graphic, live. Tiles are a still until hovered, then play. */
+.gallery { min-height: 100%; }
+.gallery .bar { position: sticky; top: 0; z-index: 3; }
+.gallery .bar a { color: var(--muted); }
+.gallery .search { margin-left: auto; width: 260px; font: inherit; font-size: 13px; color: var(--ink); background: #121413; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; font-size: 13px; }
+.seg button:first-child { border-radius: 8px 0 0 8px; }
+.seg button:last-child { border-radius: 0 8px 8px 0; }
+.seg button.on { background: var(--pine); border-color: #3f6157; color: var(--accent); position: relative; }
+.gallery main { padding: 20px; }
+.gallery h3 { font-size: 14px; margin: 24px 0 10px; }
+.gallery h3 a { color: var(--ink); text-decoration: none; }
+.tiles { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.tiles.reel { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.tile { flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; border-radius: 10px; text-align: left; }
+.tile .view { position: relative; display: block; background: #0d0f0e; overflow: hidden; }
+.tile b { padding: 6px 8px 0; font-size: 12px; }
+.tile span { padding: 2px 8px 8px; font-size: 11px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.broken { position: absolute; inset: 0; padding: 12px; color: var(--error); font-size: 12px; background: #1d1514; }
+.big { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.72); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.big-body { width: min(1200px, 100%); max-height: 100%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.big-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.big-head a { color: var(--accent); }
+.big-head button { margin-left: auto; }
+.big pre { margin: 0; max-height: 220px; overflow: auto; font-size: 11px; color: var(--muted); background: #121413; border-radius: 8px; padding: 10px; }
 
 /* The A-roll track: the cut's segments, trimmed by their edges and moved by dragging. */
 .clip.seg { background: #3a3f3c; border: 1px solid #555c58; cursor: grab; }

@@ -19,7 +19,6 @@ import { runQc } from "./media/qc.ts";
 import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
-import { renderEffectPreviews } from "./media/effects.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
 import { readJson, ROOT, writeJson } from "./media/tools.ts";
 import { startServer } from "./server/index.ts";
@@ -95,10 +94,6 @@ async function main() {
       const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
       console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
       for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
-      return;
-    }
-    case "effects": {
-      for (const c of ["youtube", "reel"] as const) console.log(`${c}: ${renderEffectPreviews(c, args.includes("--force"), log)} effects`);
       return;
     }
     case "suggestions": {

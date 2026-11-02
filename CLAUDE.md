@@ -96,7 +96,7 @@ When Owain asks for a change in the chat panel you get the project, the selected
 
 ## Code
 
-`engine/` (plan schema and timing, pure), `effects/` (Remotion compositions and visuals), `styles/` (Ivory and the card catalog), `media/` (import, project resolution, render), `audio/` (the mix, Python), `server/` (local API, version history, the chat bridge), `app/` (the editor UI). After changing code run `npm run typecheck` and `npm test`. After changing a visual or the style, run `npm run studio -- effects --force` so the Effects tab shows it.
+`engine/` (plan schema and timing, pure), `effects/` (Remotion compositions and visuals), `styles/` (Ivory and the card catalog), `media/` (import, project resolution, render), `audio/` (the mix, Python), `server/` (local API, version history, the chat bridge), `app/` (the editor UI). After changing code run `npm run typecheck` and `npm test`. To see a visual move, open the gallery (`#/gallery` in the editor; `#/gallery?tab=projects&q=<name>` for one graphic): every library card and every graphic in every project plays live there from the real compositions, with no rendering, and hot reloads as you change the code.
 
 ## Reels and mock-ups (`reels/`)
 

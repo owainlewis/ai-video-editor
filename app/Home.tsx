@@ -18,6 +18,7 @@ export const Home: React.FC = () => {
     <div className="home">
       <header className="bar">
         <span className="brand">Studio</span>
+        <a href="#/gallery">Gallery</a>
       </header>
       <main>
         <div className="home-head">

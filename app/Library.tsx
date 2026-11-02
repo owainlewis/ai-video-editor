@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { Word } from "../engine/schema";
+import type { Resolved, Word } from "../engine/schema";
 import { api, type Asset, type BinClip, clock, type Effect, type LibraryClip } from "./api";
 import { CLIP, SOURCE, toSentences } from "./Timeline";
+import { Tile } from "./Gallery";
+import { cardPlan, settledTime } from "../effects/preview";
 
 // The left panel: the project's clips (its media bin: drag one onto the A-roll track to cut it in),
 // its assets (drop b-roll and images in; click one to mention it in a note) and the script (click a
@@ -14,8 +16,9 @@ export const Library: React.FC<{
   onUse: (ref: string) => void;
   onSeek: (t: number) => void;
   canvas: string;
+  theme?: Resolved["theme"];
   bin: BinClip[];
-}> = ({ slug, assets, words, time, onUse, onSeek, canvas, bin }) => {
+}> = ({ slug, assets, words, time, onUse, onSeek, canvas, theme, bin }) => {
   const [tab, setTab] = useState<"clips" | "assets" | "effects" | "script">("assets");
   const [effects, setEffects] = useState<Effect[]>([]);
   useEffect(() => {
@@ -186,15 +189,15 @@ export const Library: React.FC<{
         </div>
       ) : tab === "effects" ? (
         <div className="assets">
-          <p className="muted small">Every graphic in your style. Click one to ask for it in your note.</p>
+          <p className="muted small">
+            Every graphic in your style, live. Hover to play; click one to ask for it in your note. <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
+          </p>
           <div className="effects">
-            {effects.map((e) => (
-              <button key={e.id} className="effect" onClick={() => onUse(`the ${e.kind} graphic (${e.id})`)} title={e.summary}>
-                <img src={`/${e.thumb}`} alt="" loading="lazy" />
-                <b>{e.kind}</b>
-                <span>{e.summary}</span>
-              </button>
-            ))}
+            {effects.map((e) => {
+              const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme);
+              const item = { key: e.id, title: e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
+              return <Tile key={e.id} item={item} onOpen={() => onUse(`the ${e.kind} graphic (${e.id})`)} />;
+            })}
           </div>
         </div>
       ) : (
