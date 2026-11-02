@@ -126,7 +126,8 @@ def render(events: list[dict], seconds: float, root_hz: float, library=None, syn
     counts: dict[str, int] = {}
     # YouTube: every item that lands gets its own click, loud enough to hear over Owain's music
     # (2026-10-25: "the Review effort by risk graphic lacks sfx"). Reels are denser, so taps thin out.
-    for e in (thin(events, 0.5, 0.6) if youtube else thin(events)):
+    # Clicks sit about 8 dB under the voice's peaks (2026-11-01: "effects 6 to 10 dB under the voice").
+    for e in (thin(events, 0.5, 1.0) if youtube else thin(events)):
         kind = e["kind"]
         if library is not None and library.has(kind):
             index = counts.get(kind, 0) + (e.get("step", 0) if kind == "pop" else 0)

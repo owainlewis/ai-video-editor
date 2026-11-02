@@ -12,7 +12,7 @@ import type { Resolved } from "../engine/schema.ts";
 import { mixAudio } from "./render.ts";
 import { hasCut, renderCut } from "./cutrender.ts";
 import { resolveProject } from "./project.ts";
-import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
+import { ffmpegProgress, hasHardwareH264, loudnessIssues, type Log, masterLoudness, measureLoudness, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
 export type Section = { start: number; end: number; alpha: boolean };
 
@@ -25,15 +25,27 @@ export function sections(r: Resolved): Section[] {
     if (s.keep || s.layout === "full") return;
     let last = i;
     while (r.shots[last + 1]?.keep) last++;
-    const next = { start: s.start, end: r.shots[last].end, alpha: s.layout === "over" };
-    const prev = out[out.length - 1];
-    if (prev && next.start - prev.end < 0.05 && prev.alpha === next.alpha) prev.end = next.end;
-    else out.push(next);
+    // A whip blurs a few frames either side of its cut, so those frames render too.
+    const pad = r.transition === "whip" && s.layout !== "over" ? 0.2 : 0;
+    out.push({ start: Math.max(0, s.start - pad), end: r.shots[last].end + pad, alpha: s.layout === "over" });
   });
-  return out;
+  // Kinetic captions sit over the plain picture, so they render as overlays too (2026-10-31: the
+  // first Linear export left them out because it only rendered graphic shots).
+  for (const k of r.kinetic ?? []) out.push({ start: Math.max(0, k.start - 0.1), end: k.end, alpha: true });
+  out.sort((a, b) => a.start - b.start);
+  const merged: Section[] = [];
+  for (const next of out) {
+    const prev = merged[merged.length - 1];
+    // Overlays a second apart render as one (the gap is transparent), so captions are not dozens of renders.
+    if (prev && prev.alpha === next.alpha && next.start - prev.end < (next.alpha ? 1 : 0.05)) prev.end = Math.max(prev.end, next.end);
+    else merged.push({ ...next });
+  }
+  return merged;
 }
 
-export async function exportOverOriginal(projects: string, slug: string, onStage: (stage: string) => void, log?: Log): Promise<string> {
+// `range` renders one stretch only, for trying a change without a full export (Owain, 2026-10-31:
+// "render just the intro"): the graphics inside it, the picture and the full mix, cut to the range.
+export async function exportOverOriginal(projects: string, slug: string, onStage: (stage: string) => void, log?: Log, range?: { from: number; to: number }): Promise<string> {
   const dir = join(projects, slug);
   const first = resolveProject(projects, slug);
   if (!first.resolved || first.issues.some((i) => i.level === "error")) throw new Error(first.issues.filter((i) => i.level === "error").map((i) => i.message).join("\n"));
@@ -56,7 +68,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const work = join(dir, "build/export");
   mkdirSync(work, { recursive: true });
   for (const f of readdirSync(work)) rmSync(join(work, f), { recursive: true });
-  const parts = sections(r);
+  const parts = sections(r).filter((s) => !range || (s.end > range.from && s.start < range.to));
+  if (range && r.remove?.length) throw new Error("a range render does not support removed stretches yet; render the whole video");
   const files: { file: string; s: Section }[] = [];
   for (const [k, s] of parts.entries()) {
     onStage(`Rendering graphics ${k + 1}/${parts.length}`);
@@ -65,6 +78,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const file = join(work, `${String(k).padStart(2, "0")}.mov`);
     const from = Math.round(s.start * fps), to = Math.max(from, Math.round(s.end * fps) - 1);
     run("npx", ["remotion", "render", "effects/index.ts", comp.id, file, `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
+      // Seeking deep into a long 4K working copy can take longer than Remotion's 30 s default (2026-10-30).
+      "--timeout=180000",
       ...(s.alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])], { env: { REEL_PRORES: "1" }, log });
     files.push({ file, s: { ...s, start: from / fps } });
   }
@@ -98,7 +113,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     aOut = "[acut]";
   }
   const audio = join(dir, "build/mix.wav");
-  const out = join(dir, "renders/final.mp4");
+  const span = range ? { from: Math.max(0, range.from), to: Math.min(total, range.to) } : undefined;
+  const out = join(dir, span ? `renders/range-${span.from.toFixed(0)}-${span.to.toFixed(0)}.mp4` : "renders/final.mp4");
   mkdirSync(join(dir, "renders"), { recursive: true });
   const hw = hasHardwareH264();
   let last = -1;
@@ -106,26 +122,39 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     "-i", original, ...inputs, "-i", audio,
     "-filter_complex", graphFull, "-map", vOut, "-map", aOut,
     ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
-    "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", out,
-  ], total, (f) => {
+    "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest",
+    // A range is cut from the finished picture and mix, so overlays and audio stay where they were.
+    ...(span ? ["-ss", span.from.toFixed(3), "-to", span.to.toFixed(3)] : []),
+    out,
+  ], span ? span.to - span.from : total, (f) => {
     const pct = Math.floor(f * 100);
     if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
   }, log);
+  // The master: land exactly on the target after the AAC encode (2026-11-01).
+  const target = r.loudness ?? { lufs: -14, tp: -1 };
+  const level = masterLoudness(out, target, log);
+  if (span) {
+    const got = probeDuration(out), want = span.to - span.from;
+    if (Math.abs(got - want) > 0.15) throw new Error(`the range render is ${got.toFixed(2)}s; expected ${want.toFixed(2)}s`);
+    log?.(`Rendered ${span.from}s to ${span.to}s: ${out}`);
+    writeJson(join(dir, "checks/range-check.json"), { at: new Date().toISOString(), from: span.from, to: span.to, ...level, issues: loudnessIssues(level, target) });
+    return out;
+  }
   onStage("Checking the export");
-  const check = verifyExport(original, out, files, remove);
+  const check = verifyExport(original, out, files, remove, target);
   writeJson(join(dir, "checks/export-check.json"), { at: new Date().toISOString(), ...check });
   for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
   return out;
 }
 
-// One frame as 64x36 grey pixels, for comparing pictures cheaply.
-const thumb = (file: string, t: number) =>
-  spawnSync("ffmpeg", ["-v", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], { maxBuffer: 1 << 20 }).stdout as Buffer;
+// One frame as small grey pixels (64x36 by default), for comparing pictures cheaply.
+const thumb = (file: string, t: number, w = 64) =>
+  spawnSync("ffmpeg", ["-v", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", `scale=${w}:${(w * 9) / 16},format=gray`, "-f", "rawvideo", "-"], { maxBuffer: 1 << 22 }).stdout as Buffer;
 const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.reduce((sum, x, k) => sum + Math.abs(x - b[k]), 0) / a.length : 255);
 
 // After an export: the same length as the original, every graphic where it should be, and the
 // loudness, so a bad export is caught before Owain watches it (2026-10-25).
-export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = []) {
+export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = [], target = { lufs: -14, tp: -1 }) {
   const issues: Issue[] = [];
   const cutOut = remove.reduce((sum, [x, y]) => sum + (y - x), 0);
   const [a, b] = [probeDuration(original) - cutOut, probeDuration(out)];
@@ -141,14 +170,17 @@ export function verifyExport(original: string, out: string, files: { file: strin
     if (there === null) continue;
     const final = thumb(out, there);
     if (s.alpha) {
-      // A title over the picture: the export must differ from the original there.
-      if (differ(final, thumb(original, mid)) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
+      // A title over the picture: the export must differ from the original there. A kinetic caption
+      // is a thin line of small words, so overlays compare at 256 px wide, mid-way and near the end.
+      const late = mapped(Math.max(s.start, s.end - 0.5));
+      const shows = differ(thumb(out, there, 256), thumb(original, mid, 256)) >= 0.5 || (late !== null && differ(thumb(out, late, 256), thumb(original, s.end - 0.5, 256)) >= 0.5);
+      if (!shows) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
     } else if (differ(final, thumb(file, mid - s.start)) > 10) {
       issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
     }
   }
-  const loud = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", out, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
-  const lufs = parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(loud.slice(loud.lastIndexOf("Summary")))?.[1] ?? "NaN");
-  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
-  return { issues, lufs, sections: files.length, size: `${ew}x${eh}` };
+  // Loudness as the platforms measure it: -14 LUFS (within 0.5), true peak at or under -1, range 6 LU or less.
+  const level = measureLoudness(out);
+  issues.push(...loudnessIssues(level, target));
+  return { issues, lufs: level.lufs, tp: level.tp, lra: level.lra, sections: files.length, size: `${ew}x${eh}` };
 }

@@ -7,6 +7,8 @@ import { Speaker } from "./Speaker";
 import { CutAudio } from "./cut";
 import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
+import { Headline } from "./headline";
+import { PhraseCaptions } from "./phrases";
 import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box, darkIsGraphite } from "./soft";
 import { cameraEase, TRANSITION } from "./camera";
 import { style } from "./style";
@@ -207,7 +209,8 @@ const Grow: React.FC<{ b: Box; p: number; children: React.ReactNode }> = ({ b, p
 };
 
 export const Reel: React.FC<Resolved> = (r) => {
-  darkIsGraphite(false);
+  // The black theme (2026-10-31, the three-things reel): dark panels and scenes in pure black.
+  darkIsGraphite(r.theme === "black", r.theme === "black");
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
@@ -252,12 +255,20 @@ export const Reel: React.FC<Resolved> = (r) => {
         const s = { ...head, end: r.shots[last].end };
         const from = Math.round(s.start * r.fps);
         const dur = Math.max(1, Math.round(s.end * r.fps) - from);
+        // A headline sits straight over the picture: the speaker or the b-roll under it.
+        if (visual.kind === "headline" && s.layout !== "cutaway")
+          return (
+            <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} headline`}>
+              <Headline text={visual.text} kicker={visual.kicker} start={s.start} end={s.end} time={time} width={W} height={H} />
+            </Sequence>
+          );
         if (s.layout === "cutaway")
           return (
             <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} cutaway`}>
               <AbsoluteFill>
                 <VisualView slug={r.slug} shot={s} time={time} w={W} h={H} v={visual} filter={grade} bleed />
                 <AbsoluteFill style={{ background: "linear-gradient(transparent 55%, rgba(0,0,0,0.35) 80%, rgba(0,0,0,0.5))" }} />
+                {visual.kind === "headline" && <Headline text={visual.text} kicker={visual.kicker} start={s.start} end={s.end} time={time} width={W} height={H} />}
               </AbsoluteFill>
             </Sequence>
           );
@@ -283,7 +294,7 @@ export const Reel: React.FC<Resolved> = (r) => {
       })}
 
       {onCanvas && !isFrame(shot) && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
-      <Captions r={r} shot={shot} time={time} />
+      {r.phrases?.length ? <PhraseCaptions r={r} time={time} width={W} height={H} y={shot.layout === "split" ? 0.84 : 0.78} /> : <Captions r={r} shot={shot} time={time} />}
       {r.audio && <Audio src={staticFile(r.audio)} />}
       {r.cut && <CutAudio r={r} />}
     </AbsoluteFill>

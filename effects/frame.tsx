@@ -8,7 +8,7 @@ import { REVIEW_MD } from "../engine/reviewmd";
 import { UI_KINDS, UiVisual } from "./ui";
 import type { Resolved, ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
-import { pal } from "./soft";
+import { pal, isBlack } from "./soft";
 import { CutVideo } from "./cut";
 import { t as type } from "./theme";
 
@@ -52,7 +52,10 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
         <In t={time} at={at + STAG} style={{ marginTop: 24 }}>
           <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: narrow ? 150 : 124, letterSpacing: "-0.035em", lineHeight: 1.02, color: c.ink, textWrap: "balance" }}>
             {runs(v.label).map((p, i) =>
-              p.marked ? (
+              // On black the marked phrase is set in Signifier italic instead of the highlighter.
+              p.marked && isBlack() ? (
+                <span key={i} style={{ fontFamily: type.serif, fontStyle: "italic", fontWeight: 400, fontSize: "1.1em", letterSpacing: "-0.01em" }}>{p.text}</span>
+              ) : p.marked ? (
                 <Mark key={i} t={time} at={at + 1.0} color={markColor(c.accent)}>
                   {p.text}
                 </Mark>

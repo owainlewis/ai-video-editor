@@ -16,6 +16,18 @@ Footage arrives colour graded and with finished vocals from Final Cut. Never gra
 - Real content or honest diagrams. An illustrative chart says "Illustration".
 - What we avoid: AI motion that is over the top. See `references/README.md`.
 
+## On-screen text (Owain, 2026-10-31)
+
+Owain's own text style is minimal: big words over the picture, not sentences.
+
+- **Headline** (`headline`): one to three words in huge bold Helvetica, cream, about three quarters of the frame wide, a little below the middle, straight over b-roll or A-roll with a light dim. An optional small Signifier italic line sits above it. A soft fade, no bounce, no box. Use his words, in Title Case ("Delegate Real Work", Owain 2026-11-01). It may sit over his b-roll, the opening included; cards never do. YouTube: layout `over`; reels: `full`, `punch` or `cutaway`.
+- **Hook lockup** (`lockup`, approved 2026-11-02: "I love that first text example"): the house opener over b-roll. The opening line stacked as a composition: tiny glue words, one huge bold word, the emotional phrase in Signifier italic, building word by word, left-aligned. Lockups are lower case; headlines stay Title Case.
+- **YouTube text is for key moments only:** a lockup or a headline. No running subtitles (no phrase or kinetic captions) unless he asks; `check` warns when a YouTube plan has them.
+- **Reels get full phrase captions** (`captionStyle`, "phrases" by default): one to three words at a time, hard cut on the word, small for glue words (3% of the height) and twice that for the words that carry the meaning, warm cream, no box. `"captionStyle": "keyword"` keeps Ivory's one word.
+- **Captions never sit over b-roll or a screen recording.** On YouTube the on-camera stretches are pulled in to the footage cuts; on reels captions show on the speaker's layouts only.
+- **Kinetic captions** (`kinetic`) are rare and only on purpose, on a line he asks for. Never a run of them to fill an intro.
+- The black-theme cards (lists, flows, compares) stay as they are: he liked the Linear flow diagram.
+
 ## YouTube (16:9, `"canvas": "youtube"`)
 
 Owain edits the rough cut by hand. The plan only lays graphics and text over it, sparsely, and never re-cuts the picture.
@@ -23,7 +35,7 @@ Owain edits the rough cut by hand. The plan only lays graphics and text over it,
 | Layout | What it is |
 | --- | --- |
 | `full` | the picture as cut. Most of the video. |
-| `over` | the picture with a quiet overlay: a `lower` third (serif title, sans line, no box) or a cinematic `title` (one small serif line in the centre, the picture dims a little). |
+| `over` | the picture with a quiet overlay: a `lower` third (serif title, sans line, no box), a cinematic `title` (one small serif line in the centre, the picture dims a little), or a `headline` (big words, his own style). |
 | `side` | the visual on warm near-black, the speaker in a small rounded window on the right. A hard cut in and out, no zoom. |
 | `media` | the visual alone. Keep it short; the speaker is away. |
 | `cutaway` | b-roll edge to edge. |

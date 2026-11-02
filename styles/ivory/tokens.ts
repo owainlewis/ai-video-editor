@@ -26,6 +26,21 @@ export const GRAPHITE = {
   accentText: "#F7F3EC",
   shadow: "none",
 } satisfies ToneTokens;
+// Black: the classier YouTube theme (Owain, 2026-10-30: "make our designs classier - maybe black rather
+// than off green"). Pure black cards, white type, grey for the quiet parts; the accent is white too,
+// so emphasis comes from Signifier italic, not colour.
+export const BLACK = {
+  bg: "#000000",
+  card: "#0B0B0B",
+  chip: "#1A1A1A",
+  ink: "#F5F5F2",
+  muted: "#9C9C98",
+  faint: "#2E2E2C",
+  line: "rgba(245,245,242,0.14)",
+  accent: "#F5F5F2",
+  accentText: "#F5F5F2",
+  shadow: "none",
+} satisfies ToneTokens;
 const WHITE = "#F7F3EC";
 
 export const tokens = {

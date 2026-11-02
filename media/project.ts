@@ -1,19 +1,19 @@
 // Turn a project's plan (edit.json) into what the compositions render (build/edit.resolved.json),
 // with every check the house rules need. The editor runs this on every change to the plan, so
 // the player always shows the plan as it is, and problems show next to it.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { chunkWords, lintLeave, lintOnCamera, lintShots, musicInCut, reelPhrases, resolveKinetic, resolvePhrases, resolveShots, snapRanges, sfxEvents } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { slotIssues } from "../styles/blueprint/style.ts";
-import { useClip } from "./broll.ts";
+import { BROLL, useClip } from "./broll.ts";
 import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
 import { MAIN } from "../engine/schema.ts";
-import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
+import { FPS, imageSize, pauseLevels, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
 
 export type Issue = { level: "error" | "warn"; message: string };
 
@@ -52,11 +52,12 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (plan.remove.length) issues.push({ level: "error", message: 'this project has a cut, so "remove" no longer applies; delete the stretch from the cut instead' });
   }
   // The video's theme is every graphic's tone unless a shot sets its own.
-  if (plan.theme === "dark") for (const s of shots) s.tone ??= "dark";
+  if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   // The scan is in the main clip's own time; added clips have none, so they count as off camera.
-  if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  const ranges = existsSync(scanned) ? (explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges) : undefined;
+  if (youtube && ranges) issues.push(...lintOnCamera(shots, ranges));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube) issues.push(...lintLeave(shots, plan.leave));
   // A removed stretch must start and end between words, and must not cut through a graphic.
@@ -78,6 +79,14 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       else s.visual = { ...v, src: rel };
     }
   }
+  // Library logos ("logo:<name>", library/logos/<name>.png) become data URLs wherever they appear in a
+  // visual (custom props included).
+  const logos = (x: unknown): unknown =>
+    typeof x === "string" && x.startsWith("logo:") ? useLogo(x.slice(5)) ?? (issues.push({ level: "error", message: `no logo ${x} in library/logos` }), x)
+    : Array.isArray(x) ? x.map(logos)
+    : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, logos(v)]))
+    : x;
+  for (const s of shots) if (s.visual) s.visual = logos(s.visual) as typeof s.visual;
   const seen = new Set<string>();
   for (const s of shots) {
     const v = s.visual;
@@ -116,10 +125,32 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const any = existsSync(join(LIBRARY, "music")) && readdirSync(join(LIBRARY, "music"), { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
     if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music"}; the video will have no bed` });
   }
+  // Music never stacks on music already in his cut (2026-11-01). The pause levels are measured once
+  // per transcript and kept in build/pause-levels.json.
+  if (plan.music && !explicit && existsSync(join(dir, "source/voice.wav"))) {
+    const cache = join(dir, "build/pause-levels.json");
+    const stale = !existsSync(cache) || readJson<{ words: number }>(cache).words !== words.length;
+    if (stale) writeJson(cache, { words: words.length, levels: pauseLevels(join(dir, "source/voice.wav"), words) });
+    const levels = readJson<{ levels: number[] }>(cache).levels;
+    if (musicInCut(levels)) {
+      const sorted = [...levels].sort((a, b) => a - b);
+      issues.push({ level: "error", message: `the cut already has music under the voice (pauses between words sit around ${sorted[Math.floor(sorted.length / 2)].toFixed(0)} dB, not silence); set "music": false so our bed does not stack on it` });
+    }
+  }
   if (!explicit && existsSync(join(dir, "source/voice.wav"))) {
     const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
     if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
   }
+  // Captions never sit over b-roll (2026-11-02): the on-camera stretches are pulled in to the cuts.
+  const footageCuts = !explicit && existsSync(join(dir, "build/cuts.json")) ? readJson<{ cuts: number[] }>(join(dir, "build/cuts.json")).cuts : [];
+  const camera = youtube && ranges ? snapRanges(ranges, footageCuts) : undefined;
+  const kin = resolveKinetic(plan.kinetic, words, shots, camera);
+  issues.push(...kin.issues);
+  const phr = youtube ? resolvePhrases(plan.phrases, words, shots, camera, footageCuts) : { phrases: plan.captions !== false && plan.captionStyle !== "keyword" ? reelPhrases(words, shots) : [], issues: [] };
+  issues.push(...phr.issues);
+  // YouTube text is for key moments only, a lockup or a headline; running subtitles are for reels.
+  if (youtube && (plan.phrases.length || plan.kinetic.length))
+    issues.push({ level: "warn", message: "this YouTube plan has running captions (phrases or kinetic); YouTube gets lockups and headlines on key moments only" });
   const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
   for (const a of plan.accents) if (!spoken.includes(a.toLowerCase())) issues.push({ level: "warn", message: `accent word not spoken: "${a}"` });
 
@@ -138,6 +169,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     canvas: plan.canvas,
     style: plan.style,
     captions: plan.captions ?? !youtube,
+    theme: plan.theme,
     preview: explicit
       ? {}
       : {
@@ -150,7 +182,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       : {}),
     shots,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...(explicit ? joins(cut) : [])].sort((a, b) => a - b), FPS),
-    sfx: sfxEvents(shots),
+    kinetic: kin.kinetic,
+    phrases: phr.phrases,
+    loudness: plan.loudness,
+    transition: plan.transition,
+    sfx: sfxEvents(shots, plan.transition),
   };
   // Plan checks from QC (engine/qc.ts): pacing, reading time, cuts in the footage, numbers on screen.
   const cutsFile = join(dir, "build/cuts.json");
@@ -165,4 +201,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   writeJson(join(dir, `build/edit.${name}.json`), resolved);
   writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
   return { resolved, issues };
+}
+
+const LIBRARY_LOGOS = join(BROLL, "..", "logos");
+// A library logo as a data URL, so any visual can draw it without knowing the project's folder.
+function useLogo(name: string): string | undefined {
+  const from = join(LIBRARY_LOGOS, `${name}.png`);
+  return existsSync(from) ? `data:image/png;base64,${readFileSync(from).toString("base64")}` : undefined;
 }

@@ -49,7 +49,22 @@ export const Visual = z.discriminatedUnion("kind", [
   }),
   // A short headline. Wrap one word in *asterisks* for the Signifier italic accent.
   // `sync`: kinetic type, each word lands as Owain says its match (`words` is filled by the resolver).
-  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), words: z.array(z.number()).optional() }),
+  // `cine`: a cinematic quote title, one or two lines of Signifier on black, words fading in as said
+  // (Owain, 2026-10-30: "I love these cinematic quote titles", after Alex M H Smith).
+  // Owain's own text style (2026-10-31): one to three words, huge, straight over b-roll or A-roll,
+  // with an optional small Signifier italic `kicker` above. `//` breaks the line. YouTube: layout
+  // `over`; reels: `full`, `punch` or `cutaway`.
+  z.object({ kind: z.literal("headline"), text: z.string(), kicker: z.string().optional() }),
+  // A typographic lockup for a hook (2026-11-01, from a reel Owain sent): words stacked in lines,
+  // each arriving on its word. `big` is huge bold sans, `small` tiny glue words tucked beside it,
+  // `serif` the emotional phrase in Signifier italic. Left-aligned, straight over the picture.
+  z.object({
+    kind: z.literal("lockup"),
+    lines: z.array(z.array(z.object({ text: z.string(), style: z.enum(["big", "small", "serif"]), at: Anchor.optional() })).min(1)).min(1),
+  }),
+  // `block`: the whole line arrives at once, left-aligned and set as one block (Owain, 2026-11-01:
+  // word-by-word reveals on two ragged lines looked messy in a side panel).
+  z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), cine: z.boolean().optional(), block: z.boolean().optional(), words: z.array(z.number()).optional() }),
   // `preview` shows every item dimmed from the start, an open loop the reel then closes item by item.
   // Repeat the same list in later shots to call back to it, with `active` on the current item.
   z.object({ kind: z.literal("list"), title: z.string().optional(), items: z.array(Item).min(2), active: z.number().optional(), preview: z.boolean().default(false) }),
@@ -323,6 +338,7 @@ export const Layout = z.enum([
   "scene", // a full-frame graphic scene: big headline on top, the visual below, light or dark
   // YouTube (16:9) only:
   "side", // the visual in a card, the speaker in a small rounded window at the side, voice continues
+  "half", // a paper panel on the left half, the speaker on the right half; dissolves in and out
   "over", // the speaker's picture as cut, with a quiet overlay on it (a lower third or a cinematic title)
 ]);
 
@@ -363,7 +379,8 @@ export const Edit = z.object({
   // The house style. Ivory is the only one; the field is kept so old plans still parse.
   style: z.string().default("ivory"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
-  theme: z.enum(["light", "dark"]).default("light"),
+  // Black (Owain, 2026-10-30: "classier - maybe black"): pure black cards, white type, no sage.
+  theme: z.enum(["light", "dark", "black"]).default("light"),
   // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
   leave: z.array(z.tuple([z.number(), z.number()])).default([]),
   // YouTube: stretches of the original to cut out of the export, [start, end] in seconds (a section
@@ -371,6 +388,30 @@ export const Edit = z.object({
   remove: z.array(z.tuple([z.number(), z.number()])).default([]),
   // Word captions. Reels have them; YouTube does not unless asked.
   captions: z.boolean().optional(),
+  // Kinetic captions on a few strong lines only (Owain, 2026-10-31: "subtle, in places"): each
+  // `text` is an exact phrase from the transcript; its words rise in one by one as they are said,
+  // low on the frame, with the `accent` word in sage. On camera only, never under a graphic.
+  kinetic: z.array(z.object({ text: Anchor, accent: z.string().optional() })).default([]),
+  // YouTube: how the picture changes into and out of a side shot or a full-frame card. `stage`: the
+  // speaker shrinks into a card and cards dissolve. `whip` (Owain, 2026-11-01, after a reference he
+  // likes): a hard cut inside a few frames of horizontal motion blur and a small slide, with a swoosh.
+  transition: z.enum(["stage", "whip"]).optional(),
+  // Phrase captions (2026-11-01, from a reel Owain sent): the words as said, one to three at a time,
+  // hard cut on the word, in two sizes by weight: glue words small, words that carry the meaning
+  // big (`big` and `small` override the rule). On camera only; they step aside for any graphic.
+  // Reels use them over the whole take by default (`captionStyle`); on YouTube a stretch can be
+  // turned on here, but `check` warns: YouTube text is for key moments only (2026-11-02).
+  phrases: z.array(z.object({
+    from: Anchor,
+    to: Anchor,
+    places: z.array(z.enum(["upper", "middle", "lower"])).default(["lower"]),
+    big: z.array(z.string()).default([]),
+    small: z.array(z.string()).default([]),
+  })).default([]),
+  // Reels: "phrases" (the default) or Ivory's one-word "keyword" captions.
+  captionStyle: z.enum(["phrases", "keyword"]).optional(),
+  // The master loudness every export lands on, measured after the AAC encode.
+  loudness: z.object({ lufs: z.number().default(-14), tp: z.number().default(-1) }).default({ lufs: -14, tp: -1 }),
   // react: the default for tool drops. The speaker stays on screen in a split while the
   //   top panel walks through the source, a highlight on each claim as it is said.
   // mixed: for how-it-works and setup reels. Every layout, b-roll cutaways, faster cuts.
@@ -469,6 +510,7 @@ export type Resolved = {
   canvas: "reel" | "youtube";
   style?: string;
   captions: boolean;
+  theme?: "light" | "dark" | "black";
   // Light copies for the review board's players: 1080p H.264 video and AAC audio. Renders use the originals.
   preview?: { video?: string; audio?: string };
   // The editor only, when the project has a cut: the segments to play from the clips' preview
@@ -477,5 +519,16 @@ export type Resolved = {
   cut?: { video: string; audio?: string; start: number; end: number; in: number }[];
   shots: ResolvedShot[];
   chunks: Chunk[];
+  kinetic?: KineticLine[];
+  phrases?: PhraseCap[];
+  loudness?: { lufs: number; tp: number };
+  transition?: "stage" | "whip";
   sfx: SfxEvent[];
 };
+
+// One phrase caption: the words, when it shows, its size and where it sits ("auto": the layout's own
+// caption spot, used on reels).
+export type PhraseCap = { text: string; start: number; end: number; big: boolean; place: "upper" | "middle" | "lower" | "auto" };
+
+// One kinetic caption moment, split into lines that show one at a time.
+export type KineticLine = { start: number; end: number; lines: { text: string; start: number; end: number; accent: boolean }[][] };

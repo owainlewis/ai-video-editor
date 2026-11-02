@@ -750,6 +750,26 @@ const catalog: Card[] = [
     slots: [{ name: "title", type: "richtext", maxChars: 36 }, { name: "sub", type: "text", maxChars: 56, optional: true }],
     sample: { visual: { kind: "lower", title: "Sample *name*", sub: "Sample role or point, illustration" }, header: "", scene: "" },
   },
+  {
+    id: "blueprint.overlay.headline",
+    kind: "headline",
+    tier: "overlay",
+    purpose: "headline",
+    summary: "Owain's own text: one to three huge bold words in cream straight over b-roll or A-roll, an optional small Signifier italic line above.",
+    layouts: ["over", "cutaway"],
+    slots: [{ name: "text", type: "text", maxChars: 20 }, { name: "kicker", type: "text", maxChars: 32, optional: true }],
+    sample: { visual: { kind: "headline", text: "Code Review", kicker: "Sample line" }, header: "", scene: "" },
+  },
+  {
+    id: "blueprint.overlay.lockup",
+    kind: "lockup",
+    tier: "overlay",
+    purpose: "hook-lockup",
+    summary: "The hook as a stacked composition: huge bold words, tiny glue words beside them, one phrase in Signifier italic, building word by word.",
+    layouts: ["over"],
+    slots: [{ name: "lines", type: "list", maxItems: 4 }],
+    sample: { visual: { kind: "lockup", lines: [[{ text: "why", style: "big" }, { text: "sample", style: "small" }], [{ text: "sample line", style: "serif" }]] }, header: "", scene: "" },
+  },
 ];
 
 export const cards: Card[] = catalog.map((c) => ({ ...c, duration: c.duration ?? DURATION[c.tier] }));

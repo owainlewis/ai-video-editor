@@ -2176,6 +2176,57 @@
             "max": 6
           },
           "preview": true
+        },
+        {
+          "id": "ivory.overlay.headline",
+          "kind": "headline",
+          "tier": "overlay",
+          "purpose": "headline",
+          "summary": "Owain's own text: one to three huge bold words in cream straight over b-roll or A-roll, an optional small Signifier italic line above.",
+          "layouts": [
+            "over",
+            "cutaway"
+          ],
+          "slots": [
+            {
+              "name": "text",
+              "type": "text",
+              "maxChars": 20
+            },
+            {
+              "name": "kicker",
+              "type": "text",
+              "maxChars": 32,
+              "optional": true
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 6
+          },
+          "preview": true
+        },
+        {
+          "id": "ivory.overlay.lockup",
+          "kind": "lockup",
+          "tier": "overlay",
+          "purpose": "hook-lockup",
+          "summary": "The hook as a stacked composition: huge bold words, tiny glue words beside them, one phrase in Signifier italic, building word by word.",
+          "layouts": [
+            "over"
+          ],
+          "slots": [
+            {
+              "name": "lines",
+              "type": "list",
+              "maxItems": 4
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 6
+          },
+          "preview": true
         }
       ]
     }

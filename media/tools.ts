@@ -1,6 +1,6 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -91,3 +91,50 @@ export const imageSize = (file: string): [number, number] | undefined => {
   }
   return undefined;
 };
+
+// The level (mean dB) of up to `n` pauses between words, spread across the take, for telling
+// whether the cut already carries music under the voice. Each pause is measured inside its edges.
+export function pauseLevels(file: string, words: { start: number; end: number }[], n = 16): number[] {
+  const gaps = words.slice(1).map((w, i) => [words[i].end + 0.08, w.start - 0.08] as const).filter(([a, b]) => b - a >= 0.3);
+  const pick = gaps.length <= n ? gaps : Array.from({ length: n }, (_, k) => gaps[Math.floor((k * gaps.length) / n)]);
+  return pick.flatMap(([a, b]) => {
+    const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-ss", a.toFixed(2), "-t", Math.min(0.6, b - a).toFixed(2), "-i", file, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr;
+    const m = /mean_volume: (-?[\d.]+) dB/.exec(log);
+    return m ? [parseFloat(m[1])] : [];
+  });
+}
+
+// Loudness of a finished file, as the platforms measure it: integrated (LUFS), range (LU) and true
+// peak (dBTP), read from ffmpeg's ebur128 summary.
+export function measureLoudness(file: string): { lufs: number; lra: number; tp: number } {
+  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 }).stderr;
+  const sum = log.slice(log.lastIndexOf("Summary"));
+  const num = (re: RegExp) => parseFloat(re.exec(sum)?.[1] ?? "NaN");
+  return { lufs: num(/I:\s+(-?[\d.]+) LUFS/), lra: num(/LRA:\s+(-?[\d.]+) LU/), tp: num(/Peak:\s+(-?[\d.]+) dBFS/) };
+}
+
+// The master's last step (2026-11-01): the mix is set to the target before encoding, but the AAC
+// encode moves it a little (it read -14.4 LUFS and the peak rose 1.2 dB). Measure the encoded file
+// and, when it is off, change the audio's gain once and re-encode only the audio. The gain never
+// pushes the true peak over its ceiling.
+export function masterLoudness(file: string, target: { lufs: number; tp: number }, log?: Log): { lufs: number; lra: number; tp: number } {
+  const m = measureLoudness(file);
+  let gain = target.lufs - m.lufs;
+  if (m.tp + gain > target.tp - 0.1) gain = target.tp - 0.1 - m.tp;
+  if (Math.abs(gain) < 0.1) return m;
+  const tmp = file.replace(/\.mp4$/, ".master.mp4");
+  run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-map", "0", "-c:v", "copy", "-af", `volume=${gain.toFixed(2)}dB`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", tmp], { log });
+  renameSync(tmp, file);
+  const after = measureLoudness(file);
+  log?.(`master: ${m.lufs} LUFS, ${m.tp} dBTP -> ${after.lufs} LUFS, ${after.tp} dBTP (${gain >= 0 ? "+" : ""}${gain.toFixed(2)} dB)`);
+  return after;
+}
+
+// The limits every export must meet, else the export check fails.
+export function loudnessIssues(m: { lufs: number; lra: number; tp: number }, target: { lufs: number; tp: number }): { level: "error"; message: string }[] {
+  const out: { level: "error"; message: string }[] = [];
+  if (!(Math.abs(m.lufs - target.lufs) <= 0.5)) out.push({ level: "error", message: `loudness is ${m.lufs} LUFS; the target is ${target.lufs} (within 0.5)` });
+  if (!(m.tp <= target.tp)) out.push({ level: "error", message: `true peak is ${m.tp} dBTP; it must be at or under ${target.tp}` });
+  if (!(m.lra <= 6)) out.push({ level: "error", message: `loudness range is ${m.lra} LU; it must be 6 or less` });
+  return out;
+}
