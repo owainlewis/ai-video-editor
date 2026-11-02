@@ -144,12 +144,13 @@ const Captions: React.FC<{ chunk?: Chunk }> = ({ chunk }) =>
   );
 
 // The picture behind a black-theme card: as cut, blurred and dimmed while a floating card is up.
+// Dimmed to near black so the card reads clean; a lighter dim left grey blotches (2026-11-02, "muddy").
 const Backdrop: React.FC<{ r: Resolved; shots: ResolvedShot[]; index: number; time: number }> = ({ r, shots, index, time }) => {
   const s = shots[index];
   const enter = designed(shots[index - 1]) ? 1 : prog(time, s.start, FADE, easeInOut);
   const leave = designed(shots[index + 1]) ? 0 : prog(time, s.end - FADE, FADE, easeInOut);
   const k = s.layout === "media" ? enter * (1 - leave) : 0;
-  return <Speaker r={r} shot={{ ...s, layout: "full" }} k={0} dim={1 - 0.62 * k} blur={30 * k} />;
+  return <Speaker r={r} shot={{ ...s, layout: "full" }} k={0} dim={1 - 0.86 * k} blur={60 * k} />;
 };
 
 // The half split: a paper panel with a faint grid on the left, the speaker's right half beside it.
