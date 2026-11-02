@@ -29,9 +29,10 @@ import { fileURLToPath } from "node:url";
 import { Edit, type Resolved, type Word } from "../../engine/schema.ts";
 import { frameRect } from "../../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../../effects/theme.ts";
-import { cameraRanges, lintOnCamera, chunkWords, estimateWords, lintShots, resolveShots, sfxEvents } from "../../engine/resolve.ts";
+import { cameraRanges, lintOnCamera, chunkWords, estimateWords, lintShots, reelPhrases, resolveShots, sfxEvents } from "../../engine/resolve.ts";
 import { describeLibrary, indexLibrary, searchLibrary, useClip } from "../../media/broll.ts";
 import { compositionFor } from "../../effects/canvas.ts";
+import { masterLoudness } from "../../media/tools.ts";
 import { formatFeedback } from "../review/model.ts";
 import { loadReel } from "../review/store.ts";
 import { slotIssues } from "../../styles/blueprint/style.ts";
@@ -517,6 +518,8 @@ function cmdValidate(slug: string, quiet = false): Resolved {
     preview: makePreviews(dir, slug, meta.size ?? [1080, 1920]),
     shots,
     chunks: chunkWords(words, plan.accents, shots.map((s) => s.start).slice(1), FPS),
+    // Phrase captions are the reel caption style (2026-11-02); "keyword" keeps Ivory's one word.
+    phrases: !youtube && plan.captions !== false && plan.captionStyle !== "keyword" ? reelPhrases(words, shots) : [],
     sfx: sfxEvents(shots),
   };
   writeJson(join(dir, "build/edit.resolved.json"), resolved);
@@ -552,7 +555,9 @@ function cmdRender(slug: string) {
   const draft = has("draft");
   const out = join(dir, "renders", draft ? "draft.mp4" : "final.mp4");
   remotion(["render", ENTRY, compositionFor(resolved.canvas).id, out, `--props=${join(dir, "build/edit.resolved.json")}`, ...(draft ? ["--scale=0.5", "--crf=26"] : [])], resolved.style);
-  console.log(`\nRendered ${out} (${resolved.duration.toFixed(1)}s)`);
+  // The same master as YouTube exports: -14 LUFS, true peak at or under -1, measured after encoding.
+  const level = masterLoudness(out, resolved.loudness ?? { lufs: -14, tp: -1 });
+  console.log(`\nRendered ${out} (${resolved.duration.toFixed(1)}s, ${level.lufs} LUFS, ${level.tp} dBTP, LRA ${level.lra})`);
 }
 
 // Export the graphics as clips for Final Cut instead of rendering the whole video: Owain keeps his

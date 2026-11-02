@@ -183,3 +183,14 @@ describe("inserting shots at a time", () => {
     expect(out.map((s) => [s.at, s.layout])).toEqual([["one two", "full"], ["three four five", "cutaway"], ["six seven eight", "punch"]]);
   });
 });
+
+describe("loudness limits", () => {
+  it("passes -14 LUFS at -1 dBTP with a small range, and fails each limit", async () => {
+    const { loudnessIssues } = await import("../media/tools.ts");
+    const target = { lufs: -14, tp: -1 };
+    expect(loudnessIssues({ lufs: -14.2, tp: -1.1, lra: 2.1 }, target)).toEqual([]);
+    expect(loudnessIssues({ lufs: -14.7, tp: -1.1, lra: 2 }, target)[0].message).toMatch(/loudness/);
+    expect(loudnessIssues({ lufs: -14, tp: -0.3, lra: 2 }, target)[0].message).toMatch(/true peak/);
+    expect(loudnessIssues({ lufs: -14, tp: -1.2, lra: 7 }, target)[0].message).toMatch(/range/);
+  });
+});

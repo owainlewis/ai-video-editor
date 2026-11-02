@@ -12,7 +12,7 @@ import type { Resolved } from "../engine/schema.ts";
 import { mixAudio } from "./render.ts";
 import { hasCut, renderCut } from "./cutrender.ts";
 import { resolveProject } from "./project.ts";
-import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
+import { ffmpegProgress, hasHardwareH264, loudnessIssues, type Log, masterLoudness, measureLoudness, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
 export type Section = { start: number; end: number; alpha: boolean };
 
@@ -36,7 +36,8 @@ export function sections(r: Resolved): Section[] {
   const merged: Section[] = [];
   for (const next of out) {
     const prev = merged[merged.length - 1];
-    if (prev && next.start - prev.end < 0.05 && prev.alpha === next.alpha) prev.end = Math.max(prev.end, next.end);
+    // Overlays a second apart render as one (the gap is transparent), so captions are not dozens of renders.
+    if (prev && prev.alpha === next.alpha && next.start - prev.end < (next.alpha ? 1 : 0.05)) prev.end = Math.max(prev.end, next.end);
     else merged.push({ ...next });
   }
   return merged;
@@ -129,14 +130,18 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const pct = Math.floor(f * 100);
     if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
   }, log);
+  // The master: land exactly on the target after the AAC encode (2026-11-01).
+  const target = r.loudness ?? { lufs: -14, tp: -1 };
+  const level = masterLoudness(out, target, log);
   if (span) {
     const got = probeDuration(out), want = span.to - span.from;
     if (Math.abs(got - want) > 0.15) throw new Error(`the range render is ${got.toFixed(2)}s; expected ${want.toFixed(2)}s`);
     log?.(`Rendered ${span.from}s to ${span.to}s: ${out}`);
+    writeJson(join(dir, "checks/range-check.json"), { at: new Date().toISOString(), from: span.from, to: span.to, ...level, issues: loudnessIssues(level, target) });
     return out;
   }
   onStage("Checking the export");
-  const check = verifyExport(original, out, files, remove);
+  const check = verifyExport(original, out, files, remove, target);
   writeJson(join(dir, "checks/export-check.json"), { at: new Date().toISOString(), ...check });
   for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
   return out;
@@ -149,7 +154,7 @@ const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.
 
 // After an export: the same length as the original, every graphic where it should be, and the
 // loudness, so a bad export is caught before Owain watches it (2026-10-25).
-export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = []) {
+export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = [], target = { lufs: -14, tp: -1 }) {
   const issues: Issue[] = [];
   const cutOut = remove.reduce((sum, [x, y]) => sum + (y - x), 0);
   const [a, b] = [probeDuration(original) - cutOut, probeDuration(out)];
@@ -174,8 +179,8 @@ export function verifyExport(original: string, out: string, files: { file: strin
       issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
     }
   }
-  const loud = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", out, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
-  const lufs = parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(loud.slice(loud.lastIndexOf("Summary")))?.[1] ?? "NaN");
-  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
-  return { issues, lufs, sections: files.length, size: `${ew}x${eh}` };
+  // Loudness as the platforms measure it: -14 LUFS (within 0.5), true peak at or under -1, range 6 LU or less.
+  const level = measureLoudness(out);
+  issues.push(...loudnessIssues(level, target));
+  return { issues, lufs: level.lufs, tp: level.tp, lra: level.lra, sections: files.length, size: `${ew}x${eh}` };
 }

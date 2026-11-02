@@ -8,6 +8,7 @@ import { CutAudio } from "./cut";
 import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { Headline } from "./headline";
+import { PhraseCaptions } from "./phrases";
 import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box, darkIsGraphite } from "./soft";
 import { cameraEase, TRANSITION } from "./camera";
 import { style } from "./style";
@@ -293,7 +294,7 @@ export const Reel: React.FC<Resolved> = (r) => {
       })}
 
       {onCanvas && !isFrame(shot) && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
-      <Captions r={r} shot={shot} time={time} />
+      {r.phrases?.length ? <PhraseCaptions r={r} time={time} width={W} height={H} y={shot.layout === "split" ? 0.84 : 0.78} /> : <Captions r={r} shot={shot} time={time} />}
       {r.audio && <Audio src={staticFile(r.audio)} />}
       {r.cut && <CutAudio r={r} />}
     </AbsoluteFill>

@@ -7,6 +7,8 @@ import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { Headline } from "./headline";
+import { Lockup } from "./lockup";
+import { PhraseCaptions } from "./phrases";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
 import { CutAudio, CutVideo } from "./cut";
 
@@ -324,9 +326,11 @@ export const Wide: React.FC<Resolved> = (r) => {
       })}
       {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} k={whip ? (shot.layout === "side" ? 1 : 0) : stageK(r.shots, index, time)} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
+      {shot.layout === "over" && shot.visual?.kind === "lockup" && <Lockup lines={shot.visual.lines} times={shot.visual.times ?? []} time={time} start={shot.start} end={shot.end} width={WW} height={WH} />}
       {shot.layout === "over" && shot.visual?.kind === "headline" && <Headline text={shot.visual.text} kicker={shot.visual.kicker} start={shot.start} end={shot.end} time={time} width={WW} height={WH} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.kinetic?.length ? <Kinetic r={r} time={time} /> : null}
+      {r.phrases?.length ? <PhraseCaptions r={r} time={time} width={WW} height={WH} /> : null}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
       </AbsoluteFill>
       {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}

@@ -55,6 +55,13 @@ export const Visual = z.discriminatedUnion("kind", [
   // with an optional small Signifier italic `kicker` above. `//` breaks the line. YouTube: layout
   // `over`; reels: `full`, `punch` or `cutaway`.
   z.object({ kind: z.literal("headline"), text: z.string(), kicker: z.string().optional() }),
+  // A typographic lockup for a hook (2026-11-01, from a reel Owain sent): words stacked in lines,
+  // each arriving on its word. `big` is huge bold sans, `small` tiny glue words tucked beside it,
+  // `serif` the emotional phrase in Signifier italic. Left-aligned, straight over the picture.
+  z.object({
+    kind: z.literal("lockup"),
+    lines: z.array(z.array(z.object({ text: z.string(), style: z.enum(["big", "small", "serif"]), at: Anchor.optional() })).min(1)).min(1),
+  }),
   // `block`: the whole line arrives at once, left-aligned and set as one block (Owain, 2026-11-01:
   // word-by-word reveals on two ragged lines looked messy in a side panel).
   z.object({ kind: z.literal("title"), text: z.string(), kicker: z.string().optional(), sync: z.boolean().optional(), cine: z.boolean().optional(), block: z.boolean().optional(), words: z.array(z.number()).optional() }),
@@ -389,6 +396,22 @@ export const Edit = z.object({
   // speaker shrinks into a card and cards dissolve. `whip` (Owain, 2026-11-01, after a reference he
   // likes): a hard cut inside a few frames of horizontal motion blur and a small slide, with a swoosh.
   transition: z.enum(["stage", "whip"]).optional(),
+  // Phrase captions (2026-11-01, from a reel Owain sent): the words as said, one to three at a time,
+  // hard cut on the word, in two sizes by weight: glue words small, words that carry the meaning
+  // big (`big` and `small` override the rule). On camera only; they step aside for any graphic.
+  // Reels use them over the whole take by default (`captionStyle`); on YouTube a stretch can be
+  // turned on here, but `check` warns: YouTube text is for key moments only (2026-11-02).
+  phrases: z.array(z.object({
+    from: Anchor,
+    to: Anchor,
+    places: z.array(z.enum(["upper", "middle", "lower"])).default(["lower"]),
+    big: z.array(z.string()).default([]),
+    small: z.array(z.string()).default([]),
+  })).default([]),
+  // Reels: "phrases" (the default) or Ivory's one-word "keyword" captions.
+  captionStyle: z.enum(["phrases", "keyword"]).optional(),
+  // The master loudness every export lands on, measured after the AAC encode.
+  loudness: z.object({ lufs: z.number().default(-14), tp: z.number().default(-1) }).default({ lufs: -14, tp: -1 }),
   // react: the default for tool drops. The speaker stays on screen in a split while the
   //   top panel walks through the source, a highlight on each claim as it is said.
   // mixed: for how-it-works and setup reels. Every layout, b-roll cutaways, faster cuts.
@@ -497,9 +520,15 @@ export type Resolved = {
   shots: ResolvedShot[];
   chunks: Chunk[];
   kinetic?: KineticLine[];
+  phrases?: PhraseCap[];
+  loudness?: { lufs: number; tp: number };
   transition?: "stage" | "whip";
   sfx: SfxEvent[];
 };
+
+// One phrase caption: the words, when it shows, its size and where it sits ("auto": the layout's own
+// caption spot, used on reels).
+export type PhraseCap = { text: string; start: number; end: number; big: boolean; place: "upper" | "middle" | "lower" | "auto" };
 
 // One kinetic caption moment, split into lines that show one at a time.
 export type KineticLine = { start: number; end: number; lines: { text: string; start: number; end: number; accent: boolean }[][] };

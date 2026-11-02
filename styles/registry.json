@@ -2205,6 +2205,28 @@
             "max": 6
           },
           "preview": true
+        },
+        {
+          "id": "ivory.overlay.lockup",
+          "kind": "lockup",
+          "tier": "overlay",
+          "purpose": "hook-lockup",
+          "summary": "The hook as a stacked composition: huge bold words, tiny glue words beside them, one phrase in Signifier italic, building word by word.",
+          "layouts": [
+            "over"
+          ],
+          "slots": [
+            {
+              "name": "lines",
+              "type": "list",
+              "maxItems": 4
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 6
+          },
+          "preview": true
         }
       ]
     }

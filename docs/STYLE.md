@@ -21,6 +21,10 @@ Footage arrives colour graded and with finished vocals from Final Cut. Never gra
 Owain's own text style is minimal: big words over the picture, not sentences.
 
 - **Headline** (`headline`): one to three words in huge bold Helvetica, cream, about three quarters of the frame wide, a little below the middle, straight over b-roll or A-roll with a light dim. An optional small Signifier italic line sits above it. A soft fade, no bounce, no box. Use his words, in Title Case ("Delegate Real Work", Owain 2026-11-01). It may sit over his b-roll, the opening included; cards never do. YouTube: layout `over`; reels: `full`, `punch` or `cutaway`.
+- **Hook lockup** (`lockup`, approved 2026-11-02: "I love that first text example"): the house opener over b-roll. The opening line stacked as a composition: tiny glue words, one huge bold word, the emotional phrase in Signifier italic, building word by word, left-aligned. Lockups are lower case; headlines stay Title Case.
+- **YouTube text is for key moments only:** a lockup or a headline. No running subtitles (no phrase or kinetic captions) unless he asks; `check` warns when a YouTube plan has them.
+- **Reels get full phrase captions** (`captionStyle`, "phrases" by default): one to three words at a time, hard cut on the word, small for glue words (3% of the height) and twice that for the words that carry the meaning, warm cream, no box. `"captionStyle": "keyword"` keeps Ivory's one word.
+- **Captions never sit over b-roll or a screen recording.** On YouTube the on-camera stretches are pulled in to the footage cuts; on reels captions show on the speaker's layouts only.
 - **Kinetic captions** (`kinetic`) are rare and only on purpose, on a line he asks for. Never a run of them to fill an intro.
 - The black-theme cards (lists, flows, compares) stay as they are: he liked the Linear flow diagram.
 

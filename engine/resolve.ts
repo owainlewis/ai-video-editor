@@ -1,6 +1,6 @@
 // Turn an edit plan plus a word-timed transcript into exact times.
 // Pure functions, so they are easy to test.
-import type { Chunk, EditPlan, KineticLine, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
+import type { Chunk, EditPlan, KineticLine, PhraseCap, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}']+/gu, "");
 
@@ -58,6 +58,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "search": return [v.at, v.result?.at];
     case "tiers": return v.items.flatMap((it) => [it.at, it.markAt]);
     case "custom": return v.at;
+    case "lockup": return v.lines.flat().map((w) => w.at);
     case "compose": return [v.at, v.send];
     case "divisions": return [v.count?.at, ...v.items.map((it) => it.at)];
     case "chips": return [v.count?.at];
@@ -367,8 +368,8 @@ export const lintLeave = (shots: ResolvedShot[], leave: [number, number][]): Iss
 export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], slack = 0.3): Issue[] =>
   shots.flatMap((s, i) => {
     if (s.layout === "full" || s.layout === "punch" || !s.visual) return [];
-    // A headline is Owain's own style over his picture, b-roll included (2026-10-31).
-    if (s.visual.kind === "headline") return [];
+    // A headline or lockup is Owain's own style over his picture, b-roll included (2026-10-31).
+    if (s.visual.kind === "headline" || s.visual.kind === "lockup") return [];
     // A full-frame card replaces the picture for a moment rather than sitting over it, so it may cut
     // in over a screen recording (Owain, 2026-10-25: the article sections "might benefit from
     // something"). Demos are fenced off with the plan's `leave` instead (lintLeave).
@@ -394,7 +395,7 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
     if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
-    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "headline")
+    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "headline" && s.visual?.kind !== "lockup")
       issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
     if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
@@ -531,3 +532,93 @@ export const resolveKinetic = (specs: { text: string; accent?: string }[], words
 // own keeps them around -20 to -40. Given the level of a spread of pauses, true when most are loud.
 export const musicInCut = (levels: number[], floor = -45): boolean =>
   levels.length >= 5 && levels.filter((db) => db > floor).length / levels.length >= 0.6;
+
+// Glue words: small in phrase captions. Everything else carries meaning and is big.
+const GLUE = new Set("a an the and or but so if then than to of in on at by for from with as is are was were be been being am do does did have has had i i'm i'll i've you you're you'll you've we we're we'll he she it it's its they them their our your my me us this that these those there here what which who how when where why just like really very also can could will would should may might not no all any some about into out up get got go going let's let well yeah oh show walk through inside within end video know use using way thing things lot want need going into also much more could get because recommend".split(" "));
+
+// Group words into phrase captions: one to three at a time, a new phrase where the size changes,
+// after punctuation, at a pause or at a cut in the footage. `clear` says whether a word may carry a
+// caption at all (on camera, no graphic over it).
+export const groupPhrases = (
+  words: Word[],
+  opts: { clear: (t: number) => boolean; cuts: number[]; big?: string[]; small?: string[]; place: (t: number) => PhraseCap["place"]; stops: number[] },
+): PhraseCap[] => {
+  const big = new Set((opts.big ?? []).map(norm)), small = new Set((opts.small ?? []).map(norm));
+  const weight = (w: Word) => (big.has(norm(w.text)) ? true : small.has(norm(w.text)) ? false : !GLUE.has(norm(w.text)));
+  const shotOf = (t: number) => opts.cuts.filter((c) => c <= t).length;
+  const groups: { words: Word[]; big: boolean }[] = [];
+  let cur: { words: Word[]; big: boolean } | null = null;
+  for (const w of words) {
+    if (!opts.clear(w.start)) {
+      cur = null;
+      continue;
+    }
+    const prev = cur?.words[cur.words.length - 1];
+    const brk = !cur || cur.big !== weight(w) || cur.words.length >= 3 || /[,.;:?!]$/.test(prev!.text) || w.start - prev!.end > 0.3 || shotOf(w.start) !== shotOf(prev!.start);
+    if (brk) groups.push((cur = { words: [], big: weight(w) }));
+    cur!.words.push(w);
+  }
+  return groups.map((g, i) => {
+    const s0 = g.words[0].start, last = g.words[g.words.length - 1];
+    const next = groups[i + 1]?.words[0].start ?? Infinity;
+    const cut = opts.cuts.find((c) => c > s0) ?? Infinity;
+    const stop = opts.stops.find((c) => c > s0) ?? Infinity;
+    return { text: g.words.map((w) => w.text).join(" "), start: Math.max(0, s0 - 0.05), end: Math.min(next, last.end + 0.5, cut, stop), big: g.big, place: opts.place(s0) };
+  });
+};
+
+// An on-camera stretch from the picture scan, pulled in to the footage cuts near its edges: the scan
+// samples every half second, so its edges can spill a few frames into the b-roll either side
+// (2026-11-02: captions landed on b-roll at 0:14, where the scan said 14.0 s and the cut was 14.23 s).
+export const snapRanges = (ranges: [number, number][], cuts: number[], reach = 0.75): [number, number][] =>
+  ranges.map(([a, b]) => {
+    const ca = cuts.filter((c) => Math.abs(c - a) <= reach && c < b).sort((x, y) => y - x)[0];
+    const cb = cuts.filter((c) => Math.abs(c - b) <= reach && c > a).sort((x, y) => x - y)[0];
+    return [ca !== undefined ? Math.max(a, ca) : a, cb !== undefined ? Math.min(b, cb) : b];
+  });
+
+// Phrase captions over stretches of a plan (YouTube). Words must sit inside an on-camera stretch,
+// snapped to the cuts, and clear of graphics.
+export const resolvePhrases = (
+  specs: { from: string; to: string; places: ("upper" | "middle" | "lower")[]; big: string[]; small: string[] }[],
+  words: Word[],
+  shots: ResolvedShot[],
+  ranges: [number, number][] | undefined,
+  cuts: number[],
+): { phrases: PhraseCap[]; issues: Issue[] } => {
+  const issues: Issue[] = [];
+  const phrases: PhraseCap[] = [];
+  const cam = ranges ? snapRanges(ranges, cuts) : undefined;
+  const graphic = (s: ResolvedShot) => s.layout !== "full" && s.layout !== "punch";
+  for (const sp of specs) {
+    const a = findPhrase(words, sp.from);
+    const b = findPhrase(words, sp.to, Math.max(0, a));
+    if (a < 0 || b < 0) {
+      issues.push({ level: "error", message: `phrase captions "${sp.from}" to "${sp.to}": ${a < 0 ? sp.from : sp.to} not found in the transcript` });
+      continue;
+    }
+    const first = cuts.filter((c) => c <= words[a].start).length;
+    phrases.push(...groupPhrases(words.slice(a, b), {
+      clear: (t) => (!cam || cam.some(([x, y]) => t >= x && t <= y - 0.2)) && !shots.some((s) => graphic(s) && t >= s.start - 0.1 && t < s.end + 0.1),
+      cuts,
+      big: sp.big,
+      small: sp.small,
+      stops: shots.filter(graphic).map((s) => s.start),
+      place: (t) => sp.places[(cuts.filter((c) => c <= t).length - first) % sp.places.length],
+    }));
+  }
+  return { phrases, issues };
+};
+
+// Reels: phrase captions over the whole take (the reel caption style, 2026-11-02). Words carry a
+// caption on the speaker's layouts only, never over b-roll or a full-frame card.
+export const reelPhrases = (words: Word[], shots: ResolvedShot[]): PhraseCap[] => {
+  const speaker = (s: ResolvedShot) => s.layout === "full" || s.layout === "punch" || s.layout === "split";
+  const at = (t: number) => shots.find((s) => t >= s.start && t < s.end);
+  return groupPhrases(words, {
+    clear: (t) => { const s = at(t); return !!s && speaker(s); },
+    cuts: [],
+    stops: shots.filter((s, i) => i > 0 && speaker(shots[i - 1]) !== speaker(s)).map((s) => s.start),
+    place: () => "auto",
+  });
+};

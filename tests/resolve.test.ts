@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
 import { isKeyword } from "../effects/Captions.tsx";
-import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, musicInCut, resolveKinetic, resolveShots, syncWords } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, musicInCut, groupPhrases, reelPhrases, resolveKinetic, resolveShots, snapRanges, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -313,5 +313,40 @@ describe("musicInCut", () => {
     expect(musicInCut([-23, -31, -34, -50, -27, -38, -82, -25])).toBe(true);
     expect(musicInCut([-85, -91, -80, -76, -33, -90])).toBe(false);
     expect(musicInCut([-20, -20])).toBe(false);
+  });
+});
+
+describe("phrase captions", () => {
+  const said = "I'll walk you through the three levels of delegation and show you".split(" ").map((text, i) => ({ text, start: i * 0.25, end: i * 0.25 + 0.2 }));
+  const all = { clear: () => true, cuts: [], stops: [], place: () => "lower" as const };
+  it("keeps glue words small and the words that carry the meaning big, breaking where the size changes", () => {
+    const p = groupPhrases(said, all);
+    expect(p.map((x) => (x.big ? x.text.toUpperCase() : x.text))).toEqual(["I'll walk you", "through the", "THREE LEVELS", "of", "DELEGATION", "and show you"]);
+  });
+  it("takes overrides, and breaks at a cut", () => {
+    const p = groupPhrases(said, { ...all, small: ["levels"], cuts: [1.6] });
+    expect(p.find((x) => x.text.includes("levels"))!.big).toBe(false);
+    expect(p.some((x) => x.start < 1.6 && x.end > 1.6)).toBe(false);
+  });
+  it("leaves out words that may not carry a caption", () => {
+    const p = groupPhrases(said, { ...all, clear: (t) => t < 1 });
+    expect(p.every((x) => x.start < 1)).toBe(true);
+  });
+});
+
+describe("snapRanges", () => {
+  it("pulls an on-camera stretch in to the cuts at its edges, so captions miss the b-roll", () => {
+    expect(snapRanges([[14, 55]], [13.5, 14.23, 16.13, 55.33])).toEqual([[14.23, 55]]);
+    expect(snapRanges([[5, 10.5]], [4.33, 10.83])).toEqual([[5, 10.5]]);
+  });
+});
+
+describe("reelPhrases", () => {
+  it("captions the speaker's layouts only, never b-roll or a full-frame card", () => {
+    const words = ["Delegation", "matters", "more", "than", "prompts"].map((text, i) => ({ text, start: i, end: i + 0.8 }));
+    const shot = (start: number, end: number, layout: string) => ({ start, end, layout, anchor: "a" }) as never;
+    const p = reelPhrases(words, [shot(0, 2, "full"), shot(2, 4, "cutaway"), shot(4, 6, "split")]);
+    expect(p.map((x) => x.text)).toEqual(["Delegation matters", "prompts"]);
+    expect(p.every((x) => x.place === "auto")).toBe(true);
   });
 });

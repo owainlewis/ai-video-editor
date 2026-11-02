@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
 import { resolveProject } from "./project.ts";
 import { type FlatCut, hasCut, renderCut } from "./cutrender.ts";
-import { FPS, type Log, ROOT, run } from "./tools.ts";
+import { FPS, type Log, masterLoudness, ROOT, run } from "./tools.ts";
 
 // `flat`: mix the flattened cut's voice, with the settings its export wrote.
 export function mixAudio(projects: string, slug: string, log?: Log, flat?: FlatCut) {
@@ -57,6 +57,11 @@ export async function renderFinal(projects: string, slug: string, onProgress: (d
     };
     p.stdout.on("data", read);
     p.stderr.on("data", read);
-    p.on("close", (code) => (code === 0 ? ok(out) : fail(new Error(`render failed:\n${tail}`))));
+    // The master: -14 LUFS, true peak at or under -1, measured after the encode (2026-11-01).
+    p.on("close", (code) => {
+      if (code !== 0) return fail(new Error(`render failed:\n${tail}`));
+      masterLoudness(out, resolved.loudness ?? { lufs: -14, tp: -1 });
+      ok(out);
+    });
   });
 }

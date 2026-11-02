@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, lintLeave, lintOnCamera, lintShots, musicInCut, resolveKinetic, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { chunkWords, lintLeave, lintOnCamera, lintShots, musicInCut, reelPhrases, resolveKinetic, resolvePhrases, resolveShots, snapRanges, sfxEvents } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
@@ -141,8 +141,16 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
     if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
   }
-  const kin = resolveKinetic(plan.kinetic, words, shots, youtube ? ranges : undefined);
+  // Captions never sit over b-roll (2026-11-02): the on-camera stretches are pulled in to the cuts.
+  const footageCuts = !explicit && existsSync(join(dir, "build/cuts.json")) ? readJson<{ cuts: number[] }>(join(dir, "build/cuts.json")).cuts : [];
+  const camera = youtube && ranges ? snapRanges(ranges, footageCuts) : undefined;
+  const kin = resolveKinetic(plan.kinetic, words, shots, camera);
   issues.push(...kin.issues);
+  const phr = youtube ? resolvePhrases(plan.phrases, words, shots, camera, footageCuts) : { phrases: plan.captions !== false && plan.captionStyle !== "keyword" ? reelPhrases(words, shots) : [], issues: [] };
+  issues.push(...phr.issues);
+  // YouTube text is for key moments only, a lockup or a headline; running subtitles are for reels.
+  if (youtube && (plan.phrases.length || plan.kinetic.length))
+    issues.push({ level: "warn", message: "this YouTube plan has running captions (phrases or kinetic); YouTube gets lockups and headlines on key moments only" });
   const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
   for (const a of plan.accents) if (!spoken.includes(a.toLowerCase())) issues.push({ level: "warn", message: `accent word not spoken: "${a}"` });
 
@@ -175,6 +183,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     shots,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...(explicit ? joins(cut) : [])].sort((a, b) => a - b), FPS),
     kinetic: kin.kinetic,
+    phrases: phr.phrases,
+    loudness: plan.loudness,
     transition: plan.transition,
     sfx: sfxEvents(shots, plan.transition),
   };
