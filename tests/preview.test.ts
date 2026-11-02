@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cardPlan, effectList, settledTime, shotPlan } from "../effects/preview.ts";
 import { cards } from "../styles/blueprint/style.ts";
+import { libraryVariants } from "../media/qc.ts";
 
 describe("the gallery's plans", () => {
   it("plays every card in a layout the card allows, at sample and longest text", () => {
@@ -25,5 +26,15 @@ describe("the gallery's plans", () => {
     expect(bare.shots).toEqual([r.shots[1]]);
     expect([bare.audio, bare.video, bare.sfx.length]).toEqual([null, "", 0]);
     expect(shotPlan(r, 1, true).video).toBe("p/source/video.mp4");
+  });
+
+  it("leaves the YouTube-only lower third out of reels", () => {
+    expect(effectList("reel").some((e) => e.kind === "lower")).toBe(false);
+    expect(effectList("youtube").some((e) => e.kind === "lower")).toBe(true);
+  });
+
+  it("checks the library in every theme, at sample and longest text", () => {
+    expect(libraryVariants()).toHaveLength(12);
+    expect(libraryVariants("reel").every((v) => v.canvas === "reel")).toBe(true);
   });
 });

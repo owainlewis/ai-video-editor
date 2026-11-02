@@ -153,7 +153,9 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     // Faded items (a list's earlier rows, a preview) are faint on purpose; check what is meant to be read.
     if (bg && t.opacity >= 0.9) {
       const ratio = contrast(rgb(t.color), t.under ? rgb(t.under) : hex(bg), Math.min(1, t.opacity));
-      if (ratio < 3) warn(`"${short(t.text)}" has low contrast (${ratio.toFixed(1)}:1)`);
+      // Under 2:1 the words are a smudge, not quiet (list numbers at 1.2:1, 2026-11-02: "muddy").
+      if (ratio < 2) err(`"${short(t.text)}" is nearly invisible (${ratio.toFixed(1)}:1); text never takes the faint colour`);
+      else if (ratio < 3) warn(`"${short(t.text)}" has low contrast (${ratio.toFixed(1)}:1)`);
     }
     for (const k of m.marks.filter((q) => visible(q.opacity)))
       if (gap(t.box, k.box) < MIN_GAP) err(`"${short(t.text)}" touches a line or dot (${gap(t.box, k.box).toFixed(0)}px)`);

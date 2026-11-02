@@ -8,6 +8,7 @@
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
 //   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
+//   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -15,7 +16,7 @@ import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
-import { runQc } from "./media/qc.ts";
+import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
 import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
@@ -69,6 +70,15 @@ async function main() {
       return;
     }
     case "qc": {
+      if (target === "--library") {
+        const canvas = flag("canvas") === "reel" ? "reel" : flag("canvas") === "youtube" ? "youtube" : undefined;
+        const { issues, sheets } = await runLibraryQc({ canvas, card: flag("card") }, undefined, (stage) => process.stdout.write(`\r  ${stage.padEnd(60)}`));
+        console.log("");
+        for (const i of issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
+        console.log(`\n${issues.filter((i) => i.level === "error").length} errors, ${issues.filter((i) => i.level === "warn").length} warnings. ${sheets.length} overview sheets in ${LIBRARY_QC.replace(ROOT + "/", "")}/`);
+        if (issues.some((i) => i.level === "error")) process.exitCode = 1;
+        return;
+      }
       const slug = need(target);
       const at = flag("at")?.split(",").map(Number);
       const { issues, sheets, overview } = await runQc(projects, slug, undefined, (stage) => console.log(`  ${stage}`), at);

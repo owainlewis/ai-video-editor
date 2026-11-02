@@ -169,8 +169,10 @@ const Odometer: React.FC<{ value: string; p: number; size: number; c: Pal }> = (
         const k = digits.length - 1 - i;
         // Leading zeros stay hidden until the value reaches them.
         const shown = v >= Math.pow(10, k) || k === 0 ? 1 : 0;
+        // A column between two digits is in motion, not text to read yet; QC measures it once it lands.
+        const rolling = Math.abs(pos - Math.round(pos)) > 0.001;
         return (
-          <span key={i} style={{ display: "block", height: slot, overflow: "hidden", opacity: shown, width: size * 0.6 }}>
+          <span key={i} data-qc={rolling ? "ambient" : undefined} style={{ display: "block", height: slot, overflow: "hidden", opacity: shown, width: size * 0.6 }}>
             <span style={{ display: "block", translate: `0 ${-pos * slot}px` }}>
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((d, j) => (
                 <span key={j} style={{ height: slot, display: "block", textAlign: "center" }}>{d}</span>

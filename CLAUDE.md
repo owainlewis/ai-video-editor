@@ -30,6 +30,7 @@ Fixing a graphic after an export costs ten minutes; fixing it before costs secon
 2. `npm run studio -- qc <slug>` (or `--at 95,1320` for one or two moments) before any export: it measures every graphic in a headless browser (safe area, collisions, one-word last lines, type size, contrast, centring) and writes `checks/qc/`: a strip per graphic (before, first frame, reveals, settled, after) and `overview.jpg`. Fix every error, read every warning, and look at `overview.jpg` before exporting.
 3. `render` runs QC itself and refuses to export with QC errors (`--force` overrides, only when Owain says so). One export at a time: it holds `build/export.lock`.
 4. After an export, read `checks/export-check.json`: length, every graphic placed, loudness.
+5. After changing a visual or the style, `npm run studio -- qc --library` (`--card <kind>` for one): the same checks on every library card, in every theme, at its sample and at its longest text. Fix every error; a card that breaks there breaks in any video that uses it.
 When Owain flags a layout or pacing problem, add it to `engine/qc.ts` as a check, not only to RULES.md.
 
 ## Design per video

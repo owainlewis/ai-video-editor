@@ -9,7 +9,7 @@ export type Canvas = "reel" | "youtube";
 
 export const effectList = (canvas: Canvas) =>
   cards
-    .filter((c) => c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : true))
+    .filter((c) => c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : c.tier !== "overlay"))
     .map((c) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary }));
 
 const blank = (canvas: Canvas): Omit<Resolved, "title" | "duration" | "shots"> => ({

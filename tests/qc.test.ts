@@ -33,6 +33,15 @@ describe("qcLayout", () => {
   it("warns when a full-frame card sits off centre, counting everything drawn", () => {
     expect(msgs(qcLayout(m([text("Mistakes become evals", [538, 148, 844, 35])], { paint: [[208, 395, 152, 152]] }), size, "s", undefined, true))).toMatch(/above centre/);
   });
+  it("errors on nearly invisible text, warns on low contrast, leaves faded items alone", () => {
+    const on = (color: string, opacity = 1) => qcLayout(m([text("01", [860, 500, 60, 40], { color, opacity })]), size, "s", "#0B0B0B");
+    expect(on("rgb(46, 46, 44)").map((i) => i.level)).toEqual(["error"]);
+    expect(msgs(on("rgb(46, 46, 44)"))).toMatch(/nearly invisible \(1\.\d:1\)/);
+    expect(on("rgb(80, 80, 78)").map((i) => i.level)).toEqual(["warn"]);
+    expect(on("rgb(156, 156, 152)")).toEqual([]);
+    // A list's earlier rows fade on purpose; only what is meant to be read is judged.
+    expect(on("rgb(46, 46, 44)", 0.5)).toEqual([]);
+  });
   it("measures contrast", () => {
     expect(contrast([247, 243, 236], [27, 27, 26])).toBeGreaterThan(10);
     expect(contrast([40, 40, 40], [27, 27, 26])).toBeLessThan(1.5);

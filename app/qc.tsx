@@ -16,6 +16,8 @@ declare global {
     qcMeasure?: () => unknown;
     // The message of a graphic that threw while rendering the current frame (cleared on each seek).
     qcError?: string | null;
+    // The library check (`studio qc --library`): show this plan instead of a project's.
+    qcLoad?: (r: Resolved) => Promise<void>;
   }
 }
 
@@ -138,6 +140,10 @@ function measure() {
       }
     }
     if (!isFinite(ink.l)) continue;
+    // Cut with an ellipsis on purpose (a long URL path in a browser bar): what shows is its own box
+    // ending in "…", not the whole text running on behind it.
+    const ellipsis = cs.textOverflow === "ellipsis" && cs.overflowX !== "visible";
+    if (ellipsis) (ink.l = Math.max(ink.l, b.left)), (ink.r = Math.min(ink.r, b.right));
     // Clipped: an ancestor that hides overflow cuts into the letters. Text it hides completely (a
     // rolling digit strip's other digits) is simply not shown, so it is skipped.
     let clipped = false, hidden = false;
@@ -147,7 +153,7 @@ function measure() {
       const c = e.getBoundingClientRect();
       const ix = Math.min(ink.r, c.right) - Math.max(ink.l, c.left), iy = Math.min(ink.b, c.bottom) - Math.max(ink.t, c.top);
       if (ix <= 0 || iy <= 0) { hidden = true; break; }
-      const cutX = ov.overflowX !== "visible" && (ink.l < c.left - 1 || ink.r > c.right + 1);
+      const cutX = !ellipsis && ov.overflowX !== "visible" && (ink.l < c.left - 1 || ink.r > c.right + 1);
       const cutY = ov.overflowY !== "visible" && (ink.t < c.top - 1 || ink.b > c.bottom + 1);
       if (cutX || cutY) clipped = true;
     }
@@ -156,9 +162,14 @@ function measure() {
     if (!blocks.has(block)) blocks.set(block, blocks.size);
     const id = blocks.get(block)!;
     // What the text sits on: the nearest drawn background (a filled dot, a card), else the canvas.
+    // A background as big as the frame is the composition's own (Wide's near-black root), not what
+    // the text sits on: the canvas drawn over it is a sibling, so `bg` from the plan stands for it.
+    // Judging every word against the root made dark type on Ivory read 1.2:1 (2026-11-02).
     let under = "";
     for (let e: Element | null = el; e && !under; e = e.parentElement) {
       const c = getComputedStyle(e).backgroundColor;
+      const r = e.getBoundingClientRect();
+      if (r.width > W * 0.85 && r.height > H * 0.85) continue;
       if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)" && !e.closest('[data-qc="canvas"]')) under = c;
     }
     texts.push({ text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: getComputedStyle(el).color, block: id, under, clipped });
@@ -179,10 +190,23 @@ function measure() {
   return { texts, marks, words, paint };
 }
 
-fetch(`/${slug}/build/edit.resolved.json`, { cache: "no-store" })
-  .then((r) => r.json())
-  .then((r: Resolved) => {
-    // The light preview copy, as the editor plays it.
-    const playable = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
-    createRoot(document.getElementById("root")!).render(<App r={playable} />);
-  });
+const root = createRoot(document.getElementById("root")!);
+if (slug)
+  fetch(`/${slug}/build/edit.resolved.json`, { cache: "no-store" })
+    .then((r) => r.json())
+    .then((r: Resolved) => {
+      // The light preview copy, as the editor plays it.
+      const playable = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
+      root.render(<App r={playable} />);
+    });
+else {
+  // One plan after another, each mounted fresh; ready again once the new one has mounted.
+  let n = 0;
+  window.qcLoad = async (r) => {
+    window.qcReady = false;
+    window.qcError = null;
+    root.render(<App key={++n} r={r} />);
+    while (!window.qcReady) await new Promise((ok) => setTimeout(ok, 20));
+  };
+  window.qcReady = true;
+}

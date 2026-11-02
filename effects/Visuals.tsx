@@ -419,7 +419,7 @@ const ListVisual: React.FC<Props & { v: V<"list"> }> = ({ shot, time, w, h, v })
               translate: `${(1 - p) * 80}px 0`,
             }}
           >
-            <div style={{ fontFamily: t.serif, fontStyle: "italic", fontSize: rowH * 0.5, color: on ? c.accent : c.faint, width: rowH * 0.4 }}>{i + 1}</div>
+            <div style={{ fontFamily: t.serif, fontStyle: "italic", fontSize: rowH * 0.5, color: on ? c.accent : c.muted, width: rowH * 0.4 }}>{i + 1}</div>
             <div style={{ fontFamily: t.sans, fontWeight: 700, fontSize: Math.min(68, rowH * 0.36), letterSpacing: -1.5, color: c.ink }}>
               <Accented text={it.text} />
             </div>
@@ -577,11 +577,11 @@ const PromptVisual: React.FC<Props & { v: V<"prompt"> }> = ({ shot, time, w, h, 
       <div style={{ fontFamily: t.serif, fontSize: 64, color: c.ink, textAlign: "center" }}>{v.app}</div>
       <div style={{ borderRadius: 32, background: c.card, border: `1.5px solid ${c.line}`, boxShadow: c.shadow, padding: "36px 40px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
         <div style={{ minHeight: 120, fontFamily: t.sans, fontSize: 46, lineHeight: 1.3, color: c.ink, whiteSpace: "pre-wrap" }}>
-          {shown || <span style={{ color: c.faint }}>Reply to {v.app}...</span>}
+          {shown || <span style={{ color: c.muted }}>Reply to {v.app}...</span>}
           {!done && Math.floor(time * 2.5) % 2 === 0 && <span style={{ borderLeft: `3px solid ${c.ink}`, marginLeft: 2 }} />}
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ width: 64, height: 64, borderRadius: 18, background: done ? c.accent : c.faint, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.sans, fontWeight: 700, fontSize: 36 }}>↑</div>
+          <div style={{ width: 64, height: 64, borderRadius: 18, background: done ? c.accent : c.faint, color: done ? c.bg : c.ink, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.sans, fontWeight: 700, fontSize: 36 }}>↑</div>
         </div>
       </div>
     </div>
@@ -717,6 +717,7 @@ const ChapterStack: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h,
   return (
     <div style={{ position: "relative", width: w, height: h }}>
       <div
+        data-qc="ambient"
         style={{
           position: "absolute",
           right: -w * 0.12,

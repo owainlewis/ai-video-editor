@@ -201,7 +201,7 @@ export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, t
                 fontFamily: t.label,
                 fontWeight: 600,
                 fontSize: dot * 0.36,
-                color: done ? c.card : c.faint,
+                color: on || done ? c.card : c.muted,
                 scale: String(on ? 1 + 0.12 * (1 - Math.abs(q - 0.5) * 2) + 0.06 : 1),
               }}
             >
@@ -258,7 +258,7 @@ const PipelineColumn: React.FC<Props & { v: V<"pipeline">; times: number[]; reac
         const q = prog(time, times[i], 0.45);
         return (
           <React.Fragment key={i}>
-            <div style={{ position: "absolute", left: x - dot / 2, top: y - dot / 2, width: dot, height: dot, borderRadius: dot, background: on ? c.accent : done ? c.ink : c.card, border: `2px solid ${on ? c.accent : done ? c.ink : c.faint}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.label, fontWeight: 600, fontSize: dot * 0.36, color: done ? c.card : c.faint }}>
+            <div style={{ position: "absolute", left: x - dot / 2, top: y - dot / 2, width: dot, height: dot, borderRadius: dot, background: on ? c.accent : done ? c.ink : c.card, border: `2px solid ${on ? c.accent : done ? c.ink : c.faint}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.label, fontWeight: 600, fontSize: dot * 0.36, color: on || done ? c.card : c.muted }}>
               {String(i + 1).padStart(2, "0")}
             </div>
             {st.label && (

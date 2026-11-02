@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { openBrowser } from "@remotion/renderer";
 import { createServer as createVite } from "vite";
 import { compositionFor } from "../effects/canvas.ts";
+import { type Canvas, cardPlan, effectList } from "../effects/preview.ts";
 import { type Measure, qcLayout } from "../engine/qc.ts";
 import type { Issue } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
@@ -37,7 +38,9 @@ export function footageCuts(dir: string, log?: Log): number[] {
 // The frames worth looking at for one graphic.
 const framesFor = (s: ResolvedShot, duration: number) => {
   const reveals = (s.visual?.times ?? []).filter((t) => t > s.start && t < s.end).map((t) => Math.min(s.end - 0.05, t + 0.7));
-  const settled = +Math.max(s.start + 0.05, s.end - 0.15).toFixed(3);
+  // Settled is before any exit: side cards fade out over the last 0.46 s as he grows back, black
+  // cards dissolve over 0.4 s. At end - 0.15 a side card was already gone, so QC measured nothing.
+  const settled = +Math.max(s.start + 0.05, s.end - 0.55).toFixed(3);
   const all = [s.start - 0.1, s.start + 0.04, ...reveals, settled, s.end + 0.1].filter((t) => t >= 0 && t < duration);
   // Layout is checked on every frame where something has just landed, not only the last one: a
   // graphic that changes (an odometer becoming "12x") hides its earlier states from a last-frame check.
@@ -79,6 +82,76 @@ async function qcServer(projects: string) {
 
 export type QcResult = { issues: Issue[]; sheets: string[]; overview: string | null };
 
+type Page = Awaited<ReturnType<Awaited<ReturnType<typeof openBrowser>>["newPage"]>>;
+
+// The QC page in a headless browser at the composition's size, ready for a project (`slug`) or for
+// plans handed to it one at a time (the library check).
+async function qcPage(srv: { url: string }, size: { width: number; height: number }, query: string, log?: Log) {
+  const browser = await openBrowser("chrome", { forceDeviceScaleFactor: 1, logLevel: "error" });
+  const page = await browser.newPage({ context: () => null, logLevel: "error", indent: false, pageIndex: 0, onBrowserLog: (l: { type: string; text: string }) => l.type === "error" && !/vite|websocket/i.test(l.text) && log?.(`page: ${l.text}`), onLog: () => {} } as never);
+  await page.setViewport({ ...size, deviceScaleFactor: 1 });
+  await page.goto({ url: `${srv.url}/qc.html?${query}`, timeout: 120000 } as never);
+  for (let k = 0; k < 600 && !(await page.evaluate(() => window.qcReady)); k++) await new Promise((ok) => setTimeout(ok, 100));
+  return { browser, page };
+}
+
+const shoot = async (page: Page, r: Resolved, t: number, file: string) => {
+  await page.evaluate((f: number) => window.qcSeek!(f), Math.round(t * r.fps));
+  const shot = (await (page as unknown as { _client(): { send(m: string, p: object): Promise<{ value?: { data: string }; data?: string }> } })._client().send("Page.captureScreenshot", { format: "jpeg", quality: 82 })) as { value?: { data: string }; data?: string };
+  writeFileSync(file, Buffer.from((shot.value ?? shot).data!, "base64"));
+};
+
+// One graphic: shoot its frames into `frames` (named `${name}-<k>.jpg`), measure the ones where
+// something has landed, and add what is wrong to `issues`. Returns the frames and the settled one.
+async function checkGraphic(page: Page, r: Resolved, s: ResolvedShot, where: string, frames: string, name: string, issues: Issue[]) {
+  const comp = compositionFor(r.canvas);
+  const { all, settled, checks } = framesFor(s, r.duration);
+  const seen = new Set<string>();
+  const files: string[] = [];
+  let measured: string | null = null;
+  let crashed = false;
+  for (const [k, t] of all.entries()) {
+    const file = join(frames, `${name}-${k}.jpg`);
+    await shoot(page, r, t, file);
+    files.push(file);
+    // A graphic that throws is the worst failure there is: say so plainly, once, and skip measuring it.
+    const crash = (await page.evaluate(() => window.qcError ?? null)) as string | null;
+    // The frame just before a shot belongs to the shot before it; its crash is reported there.
+    if (crash && t < s.start) continue;
+    if (crash) {
+      if (!crashed) issues.push({ level: "error", message: `${where}: the graphic crashed at ${t.toFixed(1)}s: ${crash}` });
+      crashed = true;
+      continue;
+    }
+    if (checks.has(t)) {
+      const m = (await page.evaluate(() => window.qcMeasure!())) as Measure;
+      if (t === settled) {
+        measured = file;
+        writeJson(join(frames, `${name}-measure.json`), m);
+        if (!m.texts.length) issues.push({ level: "warn", message: `${where}: no text on screen when it should have settled (${t.toFixed(1)}s); check it is not already gone` });
+      }
+      // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full
+      // frame is centred. Centring is judged once everything has landed.
+      const centred = t === settled && (s.layout === "media" || s.layout === "scene") && s.visual!.kind !== "chapter";
+      for (const issue of qcLayout(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s`, bgFor(r, s), centred)) {
+        const key = issue.message.replace(/ at [\d.]+s:/, ":");
+        if (!seen.has(key)) seen.add(key), issues.push(issue);
+      }
+    }
+  }
+  // Every graphic must be measured; a silent skip is how a bad layout gets through.
+  if (!measured && !crashed) issues.push({ level: "error", message: `${where}: QC could not measure its settled frame` });
+  return { files, settled: measured };
+}
+
+// Settled frames, on one page.
+function overviewSheet(settled: string[], file: string, log?: Log) {
+  const cols = 5;
+  const lay = settled.map((_, k) => `${(k % cols) * 384}_${Math.floor(k / cols) * 216}`).join("|");
+  if (settled.length === 1) run("ffmpeg", ["-v", "error", "-y", "-i", settled[0], "-vf", "scale=384:216", file], { log });
+  else run("ffmpeg", ["-v", "error", "-y", ...settled.flatMap((f) => ["-i", f]), "-filter_complex", `${settled.map((_, k) => `[${k}]scale=384:216[v${k}]`).join(";")};${settled.map((_, k) => `[v${k}]`).join("")}xstack=inputs=${settled.length}:layout=${lay}:fill=black`, "-frames:v", "1", file], { log });
+}
+
 export async function runQc(projects: string, slug: string, log?: Log, onStage?: (s: string) => void, at?: number[]): Promise<QcResult> {
   const dir = join(projects, slug);
   onStage?.("Finding cuts in the footage");
@@ -96,55 +169,15 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   // `at`: only the graphics on screen at these seconds (a quick look at one or two).
   const graphics = r.shots.map((s, i) => ({ s, i })).filter(({ s }) => s.visual && !s.keep && s.layout !== "full" && (!at || at.some((t) => t >= s.start && t < s.end)));
   const srv = await qcServer(projects);
-  const browser = await openBrowser("chrome", { forceDeviceScaleFactor: 1, logLevel: "error" });
+  const { browser, page } = await qcPage(srv, comp, `slug=${encodeURIComponent(slug)}`, log);
   const sheets: string[] = [];
   const settledShots: string[] = [];
   try {
-    const page = await browser.newPage({ context: () => null, logLevel: "error", indent: false, pageIndex: 0, onBrowserLog: (l: { type: string; text: string }) => l.type === "error" && !/vite|websocket/i.test(l.text) && log?.(`page: ${l.text}`), onLog: () => {} } as never);
-    await page.setViewport({ width: comp.width, height: comp.height, deviceScaleFactor: 1 });
-    await page.goto({ url: `${srv.url}/qc.html?slug=${encodeURIComponent(slug)}`, timeout: 120000 } as never);
-    for (let k = 0; k < 600 && !(await page.evaluate(() => window.qcReady)); k++) await new Promise((ok) => setTimeout(ok, 100));
-    const shoot = async (t: number, file: string) => {
-      await page.evaluate((f: number) => window.qcSeek!(f), Math.round(t * r.fps));
-      const shot = (await (page as unknown as { _client(): { send(m: string, p: object): Promise<{ value?: { data: string }; data?: string }> } })._client().send("Page.captureScreenshot", { format: "jpeg", quality: 82 })) as { value?: { data: string }; data?: string };
-      writeFileSync(file, Buffer.from((shot.value ?? shot).data!, "base64"));
-    };
     for (const [n, { s, i }] of graphics.entries()) {
       onStage?.(`Checking graphic ${n + 1}/${graphics.length}`);
-      const { all, settled, checks } = framesFor(s, r.duration);
-      const seen = new Set<string>();
       const where = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
-      const files: string[] = [];
-      let measured = false;
-      let crashed = false;
-      for (const [k, t] of all.entries()) {
-        const file = join(out, "frames", `${String(i + 1).padStart(3, "0")}-${k}.jpg`);
-        await shoot(t, file);
-        files.push(file);
-        // A graphic that throws is the worst failure there is: say so plainly, once, and skip measuring it.
-        const crash = (await page.evaluate(() => window.qcError ?? null)) as string | null;
-        // The frame just before a shot belongs to the shot before it; its crash is reported there.
-        if (crash && t < s.start) continue;
-        if (crash) {
-          if (!crashed) issues.push({ level: "error", message: `${where}: the graphic crashed at ${t.toFixed(1)}s: ${crash}` });
-          crashed = true;
-          continue;
-        }
-        if (checks.has(t)) {
-          if (t === settled) (measured = true), settledShots.push(file);
-          const m = (await page.evaluate(() => window.qcMeasure!())) as Measure;
-          if (t === settled) writeJson(join(out, "frames", `${String(i + 1).padStart(3, "0")}-measure.json`), m);
-          // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full
-          // frame is centred. Centring is judged once everything has landed.
-          const centred = t === settled && (s.layout === "media" || s.layout === "scene") && s.visual!.kind !== "chapter";
-          for (const issue of qcLayout(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s`, bgFor(r, s), centred)) {
-            const key = issue.message.replace(/ at [\d.]+s:/, ":");
-            if (!seen.has(key)) seen.add(key), issues.push(issue);
-          }
-        }
-      }
-      // Every graphic must be measured; a silent skip is how a bad layout gets through.
-      if (!measured && !crashed) issues.push({ level: "error", message: `${where}: QC could not measure its settled frame` });
+      const { files, settled } = await checkGraphic(page, r, s, where, join(out, "frames"), String(i + 1).padStart(3, "0"), issues);
+      if (settled) settledShots.push(settled);
       // One strip per graphic: before, first frame, reveals, settled, after.
       const sheet = join(out, `${String(i + 1).padStart(3, "0")}-${s.visual!.kind}.jpg`);
       run("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, sheet], { log });
@@ -156,13 +189,56 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   }
   // Every graphic settled, on one page: the quick look before an export.
   let overview: string | null = null;
-  if (settledShots.length) {
-    overview = join(out, "overview.jpg");
-    const cols = 5;
-    const lay = settledShots.map((_, k) => `${(k % cols) * 384}_${Math.floor(k / cols) * 216}`).join("|");
-    if (settledShots.length === 1) run("ffmpeg", ["-v", "error", "-y", "-i", settledShots[0], "-vf", "scale=384:216", overview], { log });
-    else run("ffmpeg", ["-v", "error", "-y", ...settledShots.flatMap((f) => ["-i", f]), "-filter_complex", `${settledShots.map((_, k) => `[${k}]scale=384:216[v${k}]`).join(";")};${settledShots.map((_, k) => `[v${k}]`).join("")}xstack=inputs=${settledShots.length}:layout=${lay}:fill=black`, "-frames:v", "1", overview], { log });
-  }
+  if (settledShots.length) overviewSheet(settledShots, (overview = join(out, "overview.jpg")), log);
   writeJson(join(out, "report.json"), { at: new Date().toISOString(), issues, sheets, overview });
   return { issues, sheets, overview };
+}
+
+// `studio qc --library`: the same checks on every card in the style, from its sample and with every
+// text slot at its limit, in each theme a video can use. A card that breaks here breaks in any video
+// that uses it, so this runs after a change to a visual or the style (Owain, 2026-11-02: the quote
+// card stacked one word a line beside him, and list numbers sat at 1.2:1, both found by eye first).
+export const LIBRARY_QC = join(ROOT, "library", "qc");
+export const libraryVariants = (canvas?: Canvas) =>
+  (["youtube", "reel"] as const)
+    .filter((c) => !canvas || c === canvas)
+    .flatMap((c) => (["light", "dark", "black"] as const).flatMap((theme) => [false, true].map((longest) => ({ canvas: c, theme, longest }))));
+
+export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log?: Log, onStage?: (s: string) => void): Promise<QcResult> {
+  const issues: Issue[] = [];
+  mkdirSync(LIBRARY_QC, { recursive: true });
+  for (const f of readdirSync(LIBRARY_QC)) rmSync(join(LIBRARY_QC, f), { recursive: true });
+  const srv = await qcServer(join(ROOT, "projects"));
+  const sheets: string[] = [];
+  try {
+    for (const canvas of ["youtube", "reel"] as const) {
+      const variants = libraryVariants(opts.canvas).filter((v) => v.canvas === canvas);
+      const cards = effectList(canvas).filter((e) => !opts.card || e.id.includes(opts.card) || e.kind === opts.card);
+      if (!variants.length || !cards.length) continue;
+      const { browser, page } = await qcPage(srv, compositionFor(canvas), "library=1", log);
+      try {
+        for (const v of variants) {
+          const name = `${canvas}-${v.theme}${v.longest ? "-longest" : ""}`;
+          const frames = join(LIBRARY_QC, name);
+          mkdirSync(frames, { recursive: true });
+          const settled: string[] = [];
+          for (const [n, e] of cards.entries()) {
+            onStage?.(`${name}: ${n + 1}/${cards.length} ${e.kind}`);
+            const r = cardPlan(e.id, canvas, v.theme, v.longest);
+            await page.evaluate((plan: Resolved) => window.qcLoad!(plan), r as never);
+            const where = `${e.id} (${canvas}, ${v.theme}${v.longest ? ", longest text" : ""})`;
+            const got = await checkGraphic(page, r, r.shots[0], where, frames, e.id.replace(/^blueprint\./, ""), issues);
+            if (got.settled) settled.push(got.settled);
+          }
+          if (settled.length) overviewSheet(settled, join(LIBRARY_QC, `${name}.jpg`), log), sheets.push(join(LIBRARY_QC, `${name}.jpg`));
+        }
+      } finally {
+        await browser.close({ silent: true } as never).catch(() => {});
+      }
+    }
+  } finally {
+    srv.close();
+  }
+  writeJson(join(LIBRARY_QC, "report.json"), { at: new Date().toISOString(), issues, sheets });
+  return { issues, sheets, overview: null };
 }

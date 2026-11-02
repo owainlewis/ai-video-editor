@@ -118,7 +118,7 @@ export const AgendaCard: React.FC<Props & { v: V<"agenda"> }> = ({ shot, time, w
           const said = v.active !== undefined ? 1 : prog(time, times[i], 0.4);
           return (
             <div key={i} style={{ height: g.rowH, display: "flex", alignItems: "center", borderTop: i ? `1px solid ${c.line}` : "none" }}>
-              <div style={{ width: g.numW, flex: "none", fontFamily: F.label, fontWeight: 600, fontSize: g.num, color: on ? c.accentText : c.faint }}>{String(i + 1).padStart(2, "0")}</div>
+              <div style={{ width: g.numW, flex: "none", fontFamily: F.label, fontWeight: 600, fontSize: g.num, color: on ? c.accentText : c.muted }}>{String(i + 1).padStart(2, "0")}</div>
               <div style={{ flex: 1, minWidth: 0, fontFamily: F.sans, fontWeight: 700, fontSize: g.size, letterSpacing: -g.size * 0.02, whiteSpace: "nowrap", color: on ? c.ink : c.muted, opacity: 0.4 + 0.6 * said, filter: `blur(${(1 - said) * 2.5}px)` }}>
                 <SoftAccented text={it.text} c={c} />
               </div>
@@ -545,7 +545,7 @@ export const LevelsCard: React.FC<Props & { v: V<"levels"> }> = ({ shot, time, w
         const on = i === now;
         return (
           <div key={i} style={{ ...surface(c, b, { borderRadius: S.radiusSmall, border: `${on ? 3 : 1.5}px solid ${on && p > 0.5 ? c.accent : c.line}`, padding: `0 ${g.pad}px` }), opacity: p, filter: `blur(${(1 - p) * M.blur}px)`, translate: `0 ${(1 - p) * -50}px`, display: "flex", alignItems: "center" }}>
-            <div style={{ width: g.tagW, flex: "none", fontFamily: F.label, fontWeight: 600, fontSize: g.tag, color: on ? c.accentText : c.faint }}>L{i + 1}</div>
+            <div style={{ width: g.tagW, flex: "none", fontFamily: F.label, fontWeight: 600, fontSize: g.tag, color: on ? c.accentText : c.muted }}>L{i + 1}</div>
             <div style={{ flex: 1, minWidth: 0, fontFamily: F.sans, fontWeight: 700, fontSize: g.size, letterSpacing: -g.size * 0.02, whiteSpace: "nowrap", color: on ? c.ink : c.muted }}>
               <SoftAccented text={it.text} c={c} />
             </div>
