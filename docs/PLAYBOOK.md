@@ -142,3 +142,21 @@ Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare se
 Best to borrow, in our style (Helvetica, clean strokes, sage): spawn from the parent and fold back into it, plus things travelling along edges (context dots that arrive or fall away at a red X, a tag riding a return edge, a node pulsing when it receives). Also: a structure trace (retrace one tree in the accent, then the matching edges in another to show "same shape"), and the same nodes with clean edges swapped for tangled ones.
 
 Our MOVE (460 ms) is about 1.5x slower than their child spawn (270 to 330 ms) and our FAST (180 ms) slower than their strokes and node fades (70 to 170 ms). Their diagrams feel lively because the parts are quick and something is always flowing, not because anything is big.
+
+## Story and pacing: "If nobody watches your videos do this" (studied 2026-11-02)
+
+About 1M views, 5:17. The full breakdown, with timestamps and frames, is in `docs/studies/if-nobody-watches.md`. The editing that carries it is structure, not effects: 131 cuts (median shot 2.2 s), only about 15 text moments, and each one lands on a key line.
+
+What fits Owain, as graphics where he is on camera:
+
+- **Open on the viewer's problem as a real object.** The real number, error or search the viewer has seen, before the first claim. A `media` card or a `lift` on his own screen recording, 2 to 4 s.
+- **Parallel lines land as one card that grows.** Three or four lines of the same shape (doubts, myths, objections): one `side` card, each line on its first word, about 2 s a line. Never four cards in a row.
+- **One picture per clause in a spoken list.** Each example arrives on its own clause, drawn as the thing, not as a text row.
+- **The thesis set word by word, at most twice a video.** `title` with `sync: true`, one word marked.
+- **Receipts on the claim line.** A claim about a result gets the real screen for 2.5 to 3 s, cut on the claim.
+- **Call back the hook near the end.** The hook's graphic returns on the line that closes the loop.
+- **One question card on the turn of the video.** Words fade up as he asks, his picture blurred behind, two words in the accent. Once.
+- **Chapter cards in two beats with a dip before the hit.** "Part N", then the name on its word; the music drops for 0.3 s before the card.
+- **Dense early, sparse later.** Their cut rate falls from 33 a minute in the hook to 18 in the last part. Put more graphics in the first minute, then the usual one every 20 to 60 s.
+
+Does not fit: text behind the speaker, light leaks and film burns, a colour per chapter, script and handwriting fonts, fake camera UI, counters with numbers nobody said, other creators' clips, punch-ins on YouTube.
