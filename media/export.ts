@@ -65,6 +65,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     const file = join(work, `${String(k).padStart(2, "0")}.mov`);
     const from = Math.round(s.start * fps), to = Math.max(from, Math.round(s.end * fps) - 1);
     run("npx", ["remotion", "render", "effects/index.ts", comp.id, file, `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
+      // Seeking deep into a long 4K working copy can take longer than Remotion's 30 s default (2026-10-30).
+      "--timeout=180000",
       ...(s.alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])], { env: { REEL_PRORES: "1" }, log });
     files.push({ file, s: { ...s, start: from / fps } });
   }

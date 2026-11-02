@@ -6,7 +6,7 @@ import { cameraProgress, frameRect, TRANSITION } from "./camera";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
 import { markColor } from "./motion";
-import { FunnelVisual, GridVisual, pal, SoftAccented, TypeVisual, type Tone } from "./soft";
+import { FunnelVisual, GridVisual, isBlack, pal, SoftAccented, TypeVisual, type Tone } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
@@ -280,7 +280,34 @@ const markIndex = (words: string[], i: number) => {
   return { n: i - start, of: end - start + 1 };
 };
 
+// A cinematic quote title: Signifier on black, small and centred, each word fading up out of a soft
+// blur as it is said (Owain, 2026-10-30, after Alex M H Smith's titles). `//` breaks the line.
+const CineTitle: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
+  const words = v.text.split(/\s+/);
+  const lines = v.text.replace(/\*/g, "").split("//").map((l) => l.trim().length);
+  const size = Math.min(62, Math.floor((w - 80) / (Math.max(...lines) * 0.47)));
+  const c = pal(shot.tone);
+  let k = 0;
+  return (
+    <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: `${size * 0.18}px ${size * 0.26}px`, maxWidth: w - 80 }}>
+        {words.map((word, i) => {
+          if (word === "//") return <span key={i} style={{ flexBasis: "100%", height: 0 }} />;
+          const accent = word.startsWith("*");
+          const p = v.words ? prog(time, v.words[i] - 0.05, 0.55) : prog(time, shot.start + 0.3 + 0.09 * k++, 0.7);
+          return (
+            <span key={i} style={{ display: "inline-block", fontFamily: t.serif, fontStyle: accent ? "italic" : "normal", fontWeight: 400, fontSize: size, lineHeight: 1.15, letterSpacing: -size * 0.005, color: c.ink, opacity: p, filter: `blur(${(1 - p) * 8}px)`, translate: `0 ${(1 - p) * size * 0.12}px` }}>
+              {word.replace(/\*/g, "")}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
+  if (v.cine) return <CineTitle shot={shot} time={time} w={w} h={h} v={v} slug="" />;
   const words = v.text.split(/\s+/);
   const len = v.text.replace(/\*/g, "").length;
   // "//" in the text is a line break the plan chose; the type is then sized to the longest line.
@@ -298,8 +325,9 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
           if (word === "//") return <span key={i} style={{ flexBasis: "100%", height: 0 }} />;
           // Kinetic type is all Helvetica: no serif accent (Owain, 2026-10-25: "keep it all sans serif").
           // Its *marked* words get the highlighter instead, sweeping word by word after the line lands.
-          const accent = word.startsWith("*") && !v.words;
-          const marked = !!v.words && markedAt(words, i);
+          // On black there is no highlighter: marked words take the Signifier italic accent instead.
+          const accent = word.startsWith("*") && (!v.words || isBlack());
+          const marked = !!v.words && !isBlack() && markedAt(words, i);
           const m = marked ? markIndex(words, i) : { n: 0, of: 1 };
           // Each marked word is swept as it is said, so the beat lands even when the card cuts away
           // right after the line.

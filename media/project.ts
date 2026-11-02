@@ -52,7 +52,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (plan.remove.length) issues.push({ level: "error", message: 'this project has a cut, so "remove" no longer applies; delete the stretch from the cut instead' });
   }
   // The video's theme is every graphic's tone unless a shot sets its own.
-  if (plan.theme === "dark") for (const s of shots) s.tone ??= "dark";
+  if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
   issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
   const scanned = join(dir, "build/camera.json");
   // The scan is in the main clip's own time; added clips have none, so they count as off camera.
@@ -138,6 +138,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     canvas: plan.canvas,
     style: plan.style,
     captions: plan.captions ?? !youtube,
+    theme: plan.theme,
     preview: explicit
       ? {}
       : {

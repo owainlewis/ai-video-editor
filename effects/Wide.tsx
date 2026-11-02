@@ -24,6 +24,25 @@ const FULL: Box = { x: 0, y: 0, w: WW, h: WH, r: 0, o: 1 };
 const CARD = { x: WW - 64 - 500, y: 110, w: 500, h: 860 };
 export const SIDE = { x: 110, y: 110, w: CARD.x - 80 - 110, h: WH - 220 };
 export const MEDIA = { x: 160, y: 90, w: WW - 320, h: WH - 180 };
+// The black theme (Owain, 2026-10-30): nothing hard cuts. Full-frame cards dissolve in and out over
+// the picture, panels float as a dark rounded card over the picture blurred and dimmed behind it
+// (after his own screen-recording shots, "this sick overlay style"), and `half` dissolves to a paper
+// panel beside him (after Ross Harkness).
+const FADE = 0.4;
+const FLOAT = { x: 200, y: 110, w: WW - 400, h: WH - 220 };
+const FLOAT_IN = { x: FLOAT.x + 90, y: FLOAT.y + 70, w: FLOAT.w - 180, h: FLOAT.h - 140 };
+const HALF = { x: 150, y: 140, w: WW / 2 - 260, h: WH - 280 };
+// Cards that fill the frame in black; every other kind floats.
+const solid = (s: ResolvedShot) => s.visual?.kind === "chapter" || s.visual?.kind === "journey" || (s.visual?.kind === "title" && !!s.visual.cine);
+const designed = (s?: ResolvedShot) => s?.layout === "media" || s?.layout === "half";
+// How far in a black-theme shot is (0 the picture, 1 the graphic), fading at the edges it shares
+// with the picture.
+const fadeK = (shots: ResolvedShot[], i: number, time: number, s: ResolvedShot = shots[i]) => {
+  const enter = designed(shots[i - 1]) && shots[i - 1].layout === s.layout ? 1 : prog(time, s.start, FADE, easeInOut);
+  const leave = prog(time, s.end - FADE, FADE, easeInOut);
+  return enter * (1 - leave);
+};
+
 // The width the shared visuals are designed at (the reel's panel).
 const DESIGN_W = 900;
 
@@ -47,10 +66,10 @@ const Picture: React.FC<{ r: Resolved; style: React.CSSProperties }> = ({ r, sty
     <Video src={staticFile(r.video)} muted={!!r.audio} style={{ position: "absolute", ...style }} />
   );
 
-const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; k: number; dim: number }> = ({ r, shot, k, dim }) => {
-  const grade = `brightness(${r.grade.brightness * dim}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})`;
-  // Hidden behind a full-frame card or b-roll.
-  if (shot.layout === "media" || shot.layout === "cutaway") return null;
+const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; k: number; dim: number; blur?: number }> = ({ r, shot, k, dim, blur = 0 }) => {
+  const grade = `brightness(${r.grade.brightness * dim}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})${blur ? ` blur(${blur}px)` : ""}`;
+  // Hidden behind a full-frame card or b-roll (on black, the backdrop draws it instead).
+  if (shot.layout === "media" || shot.layout === "cutaway" || shot.layout === "half") return null;
   const box = { x: lerp(0, CARD.x, k), y: lerp(0, CARD.y, k), w: lerp(WW, CARD.w, k), h: lerp(WH, CARD.h, k) };
   // The part of the picture shown, in frame pixels: the whole frame, narrowing to a portrait slice
   // around the face.
@@ -124,8 +143,37 @@ const Captions: React.FC<{ chunk?: Chunk }> = ({ chunk }) =>
     </div>
   );
 
+// The picture behind a black-theme card: as cut, blurred and dimmed while a floating card is up.
+const Backdrop: React.FC<{ r: Resolved; shots: ResolvedShot[]; index: number; time: number }> = ({ r, shots, index, time }) => {
+  const s = shots[index];
+  const enter = designed(shots[index - 1]) ? 1 : prog(time, s.start, FADE, easeInOut);
+  const leave = designed(shots[index + 1]) ? 0 : prog(time, s.end - FADE, FADE, easeInOut);
+  const k = s.layout === "media" ? enter * (1 - leave) : 0;
+  return <Speaker r={r} shot={{ ...s, layout: "full" }} k={0} dim={1 - 0.62 * k} blur={30 * k} />;
+};
+
+// The half split: a paper panel with a faint grid on the left, the speaker's right half beside it.
+const HalfStage: React.FC<{ r: Resolved; k: number; children: React.ReactNode }> = ({ r, k, children }) => {
+  const srcX = Math.min(WW / 2, Math.max(0, r.face.x * WW - WW / 4));
+  return (
+    <AbsoluteFill style={{ opacity: k }}>
+      <div style={{ position: "absolute", left: 0, top: 0, width: WW / 2, height: WH, background: "#F6F5F2", overflow: "hidden" }}>
+        <svg width={WW / 2} height={WH} style={{ position: "absolute", inset: 0 }}>
+          {Array.from({ length: 17 }, (_, i) => <line key={`v${i}`} x1={i * 60} y1={0} x2={i * 60} y2={WH} stroke="rgba(17,17,17,0.05)" strokeWidth={1} />)}
+          {Array.from({ length: 19 }, (_, i) => <line key={`h${i}`} x1={0} y1={i * 60} x2={WW / 2} y2={i * 60} stroke="rgba(17,17,17,0.05)" strokeWidth={1} />)}
+        </svg>
+        {children}
+      </div>
+      <div style={{ position: "absolute", left: WW / 2, top: 0, width: WW / 2, height: WH, overflow: "hidden", background: "#000" }}>
+        {(r.video || r.cut) && <Picture r={r} style={{ left: -srcX, top: 0, width: WW, height: WH, filter: `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})` }} />}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const Wide: React.FC<Resolved> = (r) => {
-  darkIsGraphite(true);
+  const black = r.theme === "black";
+  darkIsGraphite(true, black);
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
@@ -139,7 +187,13 @@ export const Wide: React.FC<Resolved> = (r) => {
 
   return (
     <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }}>
-      {onCanvas && <SceneCanvas tone={tone} time={time} width={WW} height={WH} />}
+      {black && !r.alpha && designed(shot) && <Backdrop r={r} shots={r.shots} index={index} time={time} />}
+      {black && shot.layout === "media" && shot.visual && solid(shot) && (
+        <AbsoluteFill style={{ opacity: fadeK(r.shots, index, time) }}>
+          <SceneCanvas tone={tone} time={time} width={WW} height={WH} />
+        </AbsoluteFill>
+      )}
+      {!black && onCanvas && <SceneCanvas tone={tone} time={time} width={WW} height={WH} />}
       {r.shots.map((head, i) => {
         const visual = head.visual;
         if (!visual || head.keep) return null;
@@ -157,9 +211,43 @@ export const Wide: React.FC<Resolved> = (r) => {
         if (isFrame(s))
           return (
             <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${visual.kind}`}>
-              <FrameVisual r={r} shot={s} time={time} />
+              {black ? (
+                <AbsoluteFill style={{ opacity: fadeK(r.shots, i, time, s) }}>
+                  <FrameVisual r={r} shot={s} time={time} />
+                </AbsoluteFill>
+              ) : (
+                <FrameVisual r={r} shot={s} time={time} />
+              )}
             </Sequence>
           );
+        if (black && (s.layout === "media" || s.layout === "half")) {
+          const kk = fadeK(r.shots, i, time, s);
+          const half = s.layout === "half";
+          const float = !half && !solid(s);
+          const box = half ? HALF : float ? FLOAT_IN : MEDIA;
+          const sc = Math.min(box.w / DESIGN_W, box.h / 520);
+          const inner = (
+            <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, color: pal(half ? "light" : tone).ink }}>
+              <div style={{ position: "absolute", left: 0, top: 0, width: box.w / sc, height: box.h / sc, transform: `scale(${sc})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <VisualView slug={r.slug} shot={s} time={time} w={box.w / sc} h={box.h / sc} v={visual} />
+              </div>
+            </div>
+          );
+          return (
+            <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
+              {half ? (
+                <HalfStage r={r} k={kk}>{inner}</HalfStage>
+              ) : float ? (
+                <AbsoluteFill style={{ opacity: kk, translate: `0 ${(1 - kk) * 24}px` }}>
+                  <div style={{ position: "absolute", left: FLOAT.x, top: FLOAT.y, width: FLOAT.w, height: FLOAT.h, borderRadius: 28, background: "rgba(11,11,11,0.94)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 40px 120px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.4)" }} />
+                  {inner}
+                </AbsoluteFill>
+              ) : (
+                <AbsoluteFill style={{ opacity: kk }}>{inner}</AbsoluteFill>
+              )}
+            </Sequence>
+          );
+        }
         if (s.layout !== "side" && s.layout !== "media") return null;
         const area = s.layout === "side" ? SIDE : MEDIA;
         // On the stage the graphic leaves with the card's move back to full frame.

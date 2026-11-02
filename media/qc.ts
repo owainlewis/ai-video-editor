@@ -14,7 +14,7 @@ import { type Measure, qcLayout } from "../engine/qc.ts";
 import type { Issue } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 import { serveFile } from "../server/index.ts";
-import { GRAPHITE, tokens } from "../styles/ivory/tokens.ts";
+import { GRAPHITE, BLACK, tokens } from "../styles/ivory/tokens.ts";
 import { resolveProject } from "./project.ts";
 import { type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
 
@@ -47,10 +47,14 @@ const framesFor = (s: ResolvedShot, duration: number) => {
 
 // The background a graphic's text sits on, for contrast: the canvas for designed frames, nothing on footage.
 const bgFor = (r: Resolved, s: ResolvedShot) =>
-  s.layout === "side" || s.layout === "media" || s.layout === "scene" || s.layout === "split"
+  s.layout === "half"
+    ? tokens.color.light.bg
+    : s.layout === "side" || s.layout === "media" || s.layout === "scene" || s.layout === "split"
     ? s.tone === "dark"
       ? r.canvas === "youtube"
-        ? GRAPHITE.bg
+        ? r.theme === "black"
+          ? BLACK.bg
+          : GRAPHITE.bg
         : tokens.color.dark.bg
       : tokens.color.light.bg
     : undefined;
