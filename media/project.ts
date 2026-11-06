@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
@@ -53,7 +53,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   }
   // The video's theme is every graphic's tone unless a shot sets its own.
   if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
-  issues.push(...lintShots(shots, meta.duration, plan.format, plan.canvas));
+  const clean = plan.style === "clean" && !youtube;
+  issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script) : lintShots(shots, meta.duration, plan.format, plan.canvas)));
   const scanned = join(dir, "build/camera.json");
   // The scan is in the main clip's own time; added clips have none, so they count as off camera.
   if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges));
@@ -78,6 +79,19 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       else s.visual = { ...v, src: rel };
     }
   }
+  // The clean style's pictures: library shots are copied in like b-roll visuals. A split's bottom
+  // panel may show a shot again (the library is small), but it is better not to.
+  const pictures = new Map<string, number>();
+  for (const s of shots) {
+    if (!s.picture) continue;
+    if (s.picture.src.startsWith("broll:")) {
+      const rel = useClip(dir, s.picture.src.slice(6));
+      if (!rel) issues.push({ level: "error", message: `no b-roll ${s.picture.src} in the library` });
+      else s.picture = { ...s.picture, src: rel };
+    } else if (!existsSync(join(dir, s.picture.src))) issues.push({ level: "error", message: `missing picture ${s.picture.src}` });
+    pictures.set(s.picture.src, (pictures.get(s.picture.src) ?? 0) + 1);
+  }
+  for (const [src, n] of pictures) if (n > 1) issues.push({ level: "warn", message: `picture ${src} is used ${n} times; fresh b-roll reads better` });
   // Library logos ("logo:<name>", library/logos/<name>.png) become data URLs wherever they appear in a
   // visual (custom props included).
   const logos = (x: unknown): unknown =>
@@ -159,7 +173,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       : {}),
     shots,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...(explicit ? joins(cut) : [])].sort((a, b) => a - b), FPS),
-    sfx: sfxEvents(shots),
+    sfx: clean ? cleanSfx(shots) : sfxEvents(shots),
   };
   // Plan checks from QC (engine/qc.ts): pacing, reading time, cuts in the footage, numbers on screen.
   const cutsFile = join(dir, "build/cuts.json");

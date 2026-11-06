@@ -1,0 +1,48 @@
+# Whisper small.en, word times in seconds
+
+[  0.00 -   1.42] Claude just killed MCPs.
+[  1.60 -   3.94] If the app you want Claude to use has no integration,
+[  4.24 -   6.00] you can now have it built in another way.
+[  6.10 -   7.22] This is CLI anything.
+[  7.44 -   9.64] It lets Claude code turn an open source apps code
+[  9.64 -  11.74] into commands it can use to do your work.
+[ 11.88 -  13.68] So instead of finding the right buttons yourself,
+[ 13.88 -  15.28] you just tell Claude what you want done
+[ 15.28 -  16.50] and it runs the commands.
+[ 16.76 -  19.22] You give it the app source code or its GitHub link.
+[ 19.38 -  20.80] It examines how the software works
+[ 20.80 -  23.02] and builds controls for the jobs it can support.
+[ 23.16 -  24.62] The project already includes code
+[ 24.62 -  26.10] for editing videos in Shotcut,
+[ 26.28 -  27.82] building diagrams in draw.io
+[ 27.82 -  29.86] and working on documents in LibreOffice.
+[ 30.18 -  32.38] But the useful part isn't just getting one task done.
+[ 32.50 -  33.88] Once Claude's built those commands,
+[ 34.20 -  35.76] you can keep asking it to do more work
+[ 35.76 -  37.56] without having to build that connection again.
+[ 37.76 -  40.04] Just comment CLI and I'll send you the full guide
+[ 40.04 -  41.20] and the link to try it yourself.
+
+# Words
+Claude@0.00 just@0.26 killed@0.48 MCPs.@0.72
+If@1.60 the@1.68 app@1.84 you@1.98 want@2.12 Claude@2.28 to@2.52 use@2.68 has@2.96 no@3.24 integration,@3.50
+you@4.24 can@4.44 now@4.56 have@4.72 it@4.86 built@4.98 in@5.20 another@5.48 way.@5.70
+This@6.10 is@6.28 CLI@6.44 anything.@6.88
+It@7.44 lets@7.52 Claude@7.70 code@7.88 turn@8.16 an@8.34 open@8.46 source@8.74 apps@8.96 code@9.26
+into@9.64 commands@10.00 it@10.38 can@10.56 use@10.66 to@10.92 do@11.16 your@11.32 work.@11.46
+So@11.88 instead@12.00 of@12.22 finding@12.38 the@12.60 right@12.80 buttons@12.98 yourself,@13.26
+you@13.88 just@14.02 tell@14.16 Claude@14.38 what@14.62 you@14.76 want@14.84 done@15.02
+and@15.28 it@15.58 runs@15.68 the@15.96 commands.@16.14
+You@16.76 give@16.84 it@16.98 the@17.08 app@17.22 source@17.38 code@17.68 or@18.06 its@18.42 GitHub@18.72 link.@18.96
+It@19.38 examines@19.50 how@19.84 the@20.06 software@20.16 works@20.44
+and@20.80 builds@21.10 controls@21.32 for@21.76 the@22.04 jobs@22.14 it@22.46 can@22.58 support.@22.68
+The@23.16 project@23.28 already@23.62 includes@23.94 code@24.26
+for@24.62 editing@24.88 videos@25.16 in@25.48 Shotcut,@25.68
+building@26.28 diagrams@26.52 in@26.96 draw@27.20 .io@27.44
+and@27.82 working@28.20 on@28.42 documents@28.64 in@29.04 LibreOffice.@29.34
+But@30.18 the@30.26 useful@30.36 part@30.56 isn't@30.90 just@31.10 getting@31.28 one@31.46 task@31.82 done.@32.08
+Once@32.50 Claude's@32.76 built@33.06 those@33.28 commands,@33.52
+you@34.20 can@34.32 keep@34.46 asking@34.64 it@34.96 to@35.12 do@35.22 more@35.34 work@35.48
+without@35.76 having@36.08 to@36.34 build@36.54 that@36.70 connection@36.90 again.@37.26
+Just@37.76 comment@37.86 CLI@38.14 and@38.54 I'll@39.02 send@39.14 you@39.26 the@39.36 full@39.44 guide@39.74
+and@40.04 the@40.30 link@40.40 to@40.52 try@40.68 it@40.86 yourself.@40.92

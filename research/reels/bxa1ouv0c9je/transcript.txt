@@ -1,0 +1,63 @@
+# Transcript (whisper small.en, word timestamps). Times in seconds.
+
+[  0.00 -   1.26] What happens when you put Claude
+[  1.26 -   2.82] in charge of improving its own skills?
+[  3.18 -   4.78] Google tried it and these were the results.
+[  5.22 -   6.74] Claude rewrote its skills and instructions
+[  6.74 -   8.34] instead of leaving that work to a person.
+[  8.50 -   9.94] On a job cleaning survey data
+[  9.94 -  11.20] and writing a research report,
+[ 11.32 -  14.28] its grade jumped from 72 to 100 out of 100.
+[ 14.44 -  16.06] They used Google's harness squared
+[ 16.06 -  18.02] and they didn't switch to a smarter Claude.
+[ 18.26 -  19.76] They changed the skills and instructions
+[ 19.76 -  21.10] the same Claude was following.
+[ 21.34 -  22.52] Think about a skill you've downloaded
+[ 22.52 -  23.86] or spent hours creating.
+[ 24.02 -  25.56] If the work keeps disappointing you,
+[ 25.66 -  27.48] you're still the one figuring out what to rewrite.
+[ 27.60 -  29.70] That's the job you can hand over to harness squared.
+[ 29.70 -  31.40] And it doesn't just rewrite your skills,
+[ 31.82 -  33.36] it tries the job with those changes,
+[ 33.56 -  35.76] compares the results and chooses what to keep.
+[ 35.98 -  37.16] Say your skill creates ads,
+[ 37.42 -  38.92] but they all sound like chat GPT.
+[ 39.26 -  41.64] You can leave harness squared to work on fixing that skill
+[ 41.64 -  42.86] while you get on with your day.
+[ 43.00 -  45.50] Next month, when you run harness squared on a similar ad,
+[ 45.62 -  47.34] it can reuse the skill changes it saved.
+[ 47.56 -  48.70] If you wanna hand over that work,
+[ 48.82 -  51.02] just comment auto and I'll send you the link to harness squared
+[ 51.02 -  52.46] with the full guide to setting it up.
+
+# Words
+
+0.00 What  0.14 happens  0.50 when  0.76 you  0.84 put  1.00 Claude
+1.26 in  1.46 charge  1.62 of  1.80 improving  2.14 its  2.36 own  2.52 skills?
+3.18 Google  3.36 tried  3.70 it  3.90 and  4.06 these  4.22 were  4.36 the  4.44 results.
+5.22 Claude  5.22 rewrote  5.60 its  5.80 skills  6.04 and  6.20 instructions
+6.74 instead  7.18 of  7.28 leaving  7.46 that  7.64 work  7.80 to  7.96 a  8.08 person.
+8.50 On  8.60 a  8.76 job  8.92 cleaning  9.20 survey  9.56 data
+9.94 and  10.24 writing  10.46 a  10.58 research  10.84 report,
+11.32 its  11.48 grade  11.78 jumped  12.08 from  12.28 72  12.84 to  13.26 100  13.68 out  13.82 of  13.90 100.
+14.44 They  14.58 used  14.88 Google's  15.40 harness  15.68 squared
+16.06 and  16.36 they  16.48 didn't  16.80 switch  17.02 to  17.28 a  17.40 smarter  17.70 Claude.
+18.26 They  18.36 changed  18.60 the  18.82 skills  19.10 and  19.22 instructions
+19.76 the  20.02 same  20.34 Claude  20.58 was  20.76 following.
+21.34 Think  21.44 about  21.58 a  21.70 skill  21.92 you've  22.14 downloaded
+22.52 or  22.82 spent  23.04 hours  23.42 creating.
+24.02 If  24.12 the  24.28 work  24.54 keeps  24.76 disappointing  25.26 you,
+25.66 you're  25.76 still  26.04 the  26.18 one  26.36 figuring  26.64 out  26.88 what  27.04 to  27.20 rewrite.
+27.60 That's  27.86 the  27.98 job  28.22 you  28.36 can  28.46 hand  28.68 over  28.92 to  29.12 harness  29.38 squared.
+29.70 And  29.96 it  30.08 doesn't  30.32 just  30.50 rewrite  30.94 your  31.14 skills,
+31.82 it  31.90 tries  32.16 the  32.34 job  32.56 with  32.78 those  32.94 changes,
+33.56 compares  33.92 the  34.10 results  34.40 and  34.82 chooses  35.12 what  35.40 to  35.56 keep.
+35.98 Say  36.06 your  36.20 skill  36.48 creates  36.82 ads,
+37.42 but  37.62 they  37.74 all  38.02 sound  38.26 like  38.46 chat  38.60 GPT.
+39.26 You  39.32 can  39.46 leave  39.74 harness  39.92 squared  40.24 to  40.48 work  40.62 on  40.78 fixing  41.06 that  41.32 skill
+41.64 while  41.94 you  42.08 get  42.22 on  42.38 with  42.52 your  42.64 day.
+43.00 Next  43.24 month,  43.56 when  43.76 you  43.86 run  44.02 harness  44.24 squared  44.54 on  44.78 a  44.90 similar  45.18 ad,
+45.62 it  45.70 can  45.82 reuse  46.18 the  46.38 skill  46.60 changes  46.90 it  47.06 saved.
+47.56 If  47.64 you  47.76 wanna  47.94 hand  48.12 over  48.28 that  48.44 work,
+48.82 just  48.96 comment  49.22 auto  49.54 and  49.84 I'll  49.92 send  50.06 you  50.18 the  50.28 link  50.42 to  50.60 harness  50.74 squared
+51.02 with  51.32 the  51.44 full  51.72 guide  51.94 to  52.08 setting  52.24 it  52.34 up.

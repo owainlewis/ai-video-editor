@@ -1,0 +1,5 @@
+# Frame grabs, contact sheets and audio from the reel studies: about 500 MB, regenerable from the
+# reels themselves. The notes and transcripts are what is kept.
+*.jpg
+*.png
+*.wav

@@ -5,6 +5,8 @@
 // checks) and makes one contact sheet per graphic: the picture before it, its first frame, each
 // reveal landing, settled, and the picture after it. Nothing is rendered to video.
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { C } from "../effects/clean/kit.tsx";
+import { GREEN } from "../effects/clean/text.tsx";
 import { createServer as createHttp } from "node:http";
 import { join } from "node:path";
 import { openBrowser } from "@remotion/renderer";
@@ -48,9 +50,16 @@ const framesFor = (s: ResolvedShot, duration: number) => {
   return { all: [...new Set(all.map((t) => +t.toFixed(3)))].sort((a, b) => a - b), settled, checks };
 };
 
+// The clean style's backgrounds: a split's top panel and the cards are flat ink, paper or green; the
+// glass and full shots sit on footage.
+const CLEAN_BG = { ink: C.ink, paper: C.paper, green: GREEN };
+const cleanBg = (s: ResolvedShot) => (s.layout === "split" ? C.ink : s.layout === "card" ? CLEAN_BG[s.bg ?? "ink"] : s.layout === "diagram" ? GREEN : undefined);
+
 // The background a graphic's text sits on, for contrast: the canvas for designed frames, nothing on footage.
 const bgFor = (r: Resolved, s: ResolvedShot) =>
-  s.layout === "half"
+  r.style === "clean"
+    ? cleanBg(s)
+    : s.layout === "half"
     ? tokens.color.light.bg
     : s.layout === "side" || s.layout === "media" || s.layout === "scene" || s.layout === "split"
     ? s.tone === "dark"

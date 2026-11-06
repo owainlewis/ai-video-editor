@@ -11,6 +11,7 @@ import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneC
 import { cameraEase, TRANSITION } from "./camera";
 import { style } from "./style";
 import type { Resolved, ResolvedShot } from "../engine/schema";
+import { Clean } from "./clean/Clean";
 
 // The header is large on the first shot (the on-screen hook in frame 1), then docks small.
 // Docked at 60 px: at 48 it read timid beside the graphic in a 50/50 split.
@@ -206,7 +207,7 @@ const Grow: React.FC<{ b: Box; p: number; children: React.ReactNode }> = ({ b, p
   );
 };
 
-export const Reel: React.FC<Resolved> = (r) => {
+const ReelHouse: React.FC<Resolved> = (r) => {
   // The black theme (2026-10-31, the three-things reel): dark panels and scenes in pure black.
   darkIsGraphite(r.theme === "black", r.theme === "black");
   const frame = useCurrentFrame();
@@ -291,3 +292,6 @@ export const Reel: React.FC<Resolved> = (r) => {
   );
 };
 
+
+// The clean style (2026-11-06) has its own renderer; every older plan draws as before.
+export const Reel: React.FC<Resolved> = (r) => (r.style === "clean" ? <Clean {...r} /> : <ReelHouse {...r} />);

@@ -69,6 +69,17 @@ A project can hold several clips (its bin: the first clip at the project's root,
 - About one graphic every 20 to 60 seconds of on-camera time. Each holds 4 to 12 seconds and builds with reveals on its words, or `keep`.
 - No word captions unless asked (`"captions": true`).
 
+## Clean reels (`"style": "clean"`)
+
+The reel style locked on 2026-11-06 (`research/reels/STUDY.md`), drawn by `effects/clean/Clean.tsx`. Example: `projects/egm-clean/edit.json`.
+
+- **Split is the main view**: half the reel or more (`check` warns under 45%). The visual on top (y 0 to 960), Owain or b-roll below, the caption on the seam. Diagrams in the top panel stay above y 830; a chip takes y 120 to 190.
+- Layouts: `split`; `full` (cinematic: Owain, or b-roll from `picture`); `card` (`bg`: `ink`, `paper` or `green`); `diagram` (full-screen line diagram on green, now and then, a fifth of the reel at most); `over` (the diagram in a glass panel, 960 x 880, over a full-frame `picture`).
+- `picture`: `"broll:<id>"` or `{ "src", "start", "rate" }`, the footage instead of Owain. A faceless reel (a voiced script) needs one on every `full`, `split` and `over` shot. Slow motion only from 60 fps sources.
+- The text kit, one treatment at a time: the caption (automatic, sized by weight); `hit` (`text` in caps, optional `tag`, `at`, `until`); `title` (two `lines`, on a diagram); `chip` (the real skill or command name); `beats` on a card (huge, small, huge); `list` on a card with a bracketed `title` like `"[REVIEW]"`; `inside: true` puts the caption in a diagram's centre.
+- Diagrams are `custom` visuals drawn for each video in `effects/custom/` with the parts in `effects/clean/kit.tsx` (Line, Ring, Rect, Doc, Dots, Label): thin white lines that draw on their words, sage on the one thing that matters.
+- Sounds: `"sfx": "riser"` into a diagram, key taps under chips, a tick per list item. Nothing on plain cuts.
+
 ## B-roll
 
 Owain's own shots live in one library for every project: `library/broll/` (shots in `.clips/`, described in `index.json`).

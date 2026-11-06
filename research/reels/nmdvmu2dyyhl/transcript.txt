@@ -1,0 +1,74 @@
+# whisper small, local. Segments with start-end seconds, then each word with its start time.
+
+[  0.00-  3.48] Using Claude to help you manage your B-roll is an absolute game changer.
+[  3.84-  8.02] To start, comment skill, and I'm going to send you the exact setup that I used to get this going.
+[  8.26- 10.08] Completely free. I'm not even going to ask for your email.
+[ 10.34- 13.62] And then once you're set up, I want you to open up your Finder window.
+[ 13.80- 17.50] And I want you to find one of your folders that has just way too much B-roll.
+[ 17.68- 19.52] And so this is a folder that I shot yesterday.
+[ 19.78- 21.80] These are just a bunch of random clips.
+[ 21.96- 24.06] They're all shot and logged. They're uncolorated.
+[ 24.20- 25.50] Some of them are very long.
+[ 25.66- 29.00] Just point that B-roll folder directly to Claude.
+[ 29.00- 31.54] And then I'm going to turn on the microphone or whisper flow.
+[ 32.18- 35.06] And I'm just going to speak exactly what I need done here.
+[ 35.32- 36.46] So I have this clip.
+[ 36.82- 39.24] I'm going to hit space. I'm going to watch the clip.
+[ 39.38- 41.16] And then I'm going to say, OK, color grade this footage.
+[ 41.50- 47.84] And then on C1524, I want you to clip 33 to 49 seconds.
+[ 48.14- 49.18] And I'm going to do that for each one.
+[ 49.44- 52.22] And then what it's going to do is it's going to color grading using your style.
+[ 52.34- 53.76] So my color grading is super simple.
+[ 53.88- 55.56] I have one LUT that I use for everything.
+[ 55.92- 58.22] Get it dialed in the camera body, which makes this a lot easier.
+[ 58.22- 62.80] But then once I do that, I just tell it exactly what I want cut out for 1725.
+[ 63.14- 66.24] Let's do five seconds to 20 seconds for 1726.
+[ 66.52- 68.14] Let's do 10 seconds to 14 seconds.
+[ 68.14- 70.92] I had make those cuts and then color grade them and then show me a preview.
+[ 71.28- 74.70] And then what it did was it exported everything as a single preview
+[ 74.70- 78.38] with all of my color graded footage using that LUT.
+[ 78.56- 81.98] And so in the time it took me to just scroll each one of those and speaking
+[ 81.98- 86.02] as I was scrolling, I was able to get all of this footage done.
+[ 86.02- 89.12] Then I went back after I approved it, which I had zero edit.
+[ 89.28- 93.16] I just said, do all the trims and give me the files in a finder window.
+[ 93.54- 95.14] And then it went through, it trimmed up every shot.
+[ 95.38- 97.04] And now I can use these for my videos.
+[ 97.20- 98.48] I can use these for carousels.
+[ 98.84-102.10] All of this was done in a single prompt using Claude.
+
+# Words
+0.00:Using 0.32:Claude 0.74:to 0.86:help 1.00:you 1.10:manage 1.30:your 1.44:B 1.56:-roll 1.68:is 1.92:an 2.10:absolute 2.58:game 3.14:changer.
+3.84:To 3.94:start, 4.38:comment 4.56:skill, 5.12:and 5.14:I'm 5.22:going 5.30:to 5.34:send 5.52:you 5.62:the 5.74:exact 6.10:setup 6.46:that 6.68:I 6.94:used 7.30:to 7.46:get 7.60:this 7.76:going.
+8.26:Completely 8.56:free. 9.04:I'm 9.10:not 9.20:even 9.32:going 9.42:to 9.50:ask 9.64:for 9.76:your 9.84:email.
+10.34:And 10.42:then 10.54:once 10.84:you're 11.04:set 11.20:up, 11.44:I 11.50:want 11.62:you 11.76:to 11.84:open 12.08:up 12.36:your 12.68:Finder 13.40:window.
+13.80:And 13.88:I 13.96:want 14.06:you 14.20:to 14.28:find 14.64:one 15.16:of 15.28:your 15.38:folders 15.64:that 15.96:has 16.28:just 16.56:way 16.94:too 17.06:much 17.22:B 17.40:-roll.
+17.68:And 17.76:so 17.90:this 18.08:is 18.22:a 18.36:folder 18.66:that 18.84:I 18.96:shot 19.12:yesterday.
+19.78:These 19.78:are 19.90:just 20.04:a 20.22:bunch 20.48:of 20.72:random 21.32:clips.
+21.96:They're 22.08:all 22.28:shot 22.62:and 22.78:logged. 23.30:They're 23.36:uncolorated.
+24.20:Some 24.38:of 24.50:them 24.60:are 24.78:very 25.24:long.
+25.66:Just 25.78:point 26.08:that 26.32:B 26.52:-roll 26.64:folder 27.06:directly 27.76:to 28.22:Claude.
+29.00:And 29.28:then 29.42:I'm 29.60:going 29.70:to 29.76:turn 29.92:on 30.04:the 30.14:microphone 30.56:or 30.90:whisper 31.18:flow.
+32.18:And 32.20:I'm 32.38:just 32.54:going 32.70:to 32.78:speak 33.16:exactly 33.82:what 34.20:I 34.36:need 34.52:done 34.80:here.
+35.32:So 35.40:I 35.82:have 36.04:this 36.24:clip.
+36.82:I'm 36.92:going 37.04:to 37.38:hit 37.86:space. 38.36:I'm 38.44:going 38.52:to 38.58:watch 38.82:the 39.00:clip.
+39.38:And 39.42:then 39.52:I'm 39.58:going 39.64:to 39.72:say, 39.88:OK, 40.26:color 40.48:grade 40.68:this 40.86:footage.
+41.50:And 41.68:then 41.96:on 42.46:C1524, 44.60:I 44.72:want 44.86:you 45.02:to 45.14:clip 45.44:33 46.32:to 46.84:49 47.32:seconds.
+48.14:And 48.16:I'm 48.26:going 48.32:to 48.36:do 48.48:that 48.60:for 48.74:each 48.94:one.
+49.44:And 49.52:then 49.62:what 49.72:it's 49.88:going 49.96:to 50.06:do 50.20:is 50.32:it's 50.44:going 50.56:to 50.60:color 50.86:grading 51.16:using 51.52:your 51.80:style.
+52.34:So 52.44:my 52.60:color 52.82:grading 53.08:is 53.24:super 53.46:simple.
+53.88:I 53.92:have 54.06:one 54.28:LUT 54.48:that 54.64:I 54.74:use 54.90:for 55.10:everything.
+55.92:Get 56.00:it 56.12:dialed 56.48:in 56.64:the 56.72:camera 56.92:body, 57.16:which 57.30:makes 57.48:this 57.62:a 57.74:lot 57.88:easier.
+58.22:But 58.50:then 58.62:once 58.80:I 58.96:do 59.06:that, 59.22:I 59.34:just 59.52:tell 59.78:it 59.94:exactly 60.44:what 60.84:I 60.94:want 61.08:cut 61.34:out 61.56:for 61.86:1725.
+63.14:Let's 63.28:do 63.40:five 63.64:seconds 64.10:to 64.40:20 64.82:seconds 65.22:for 65.40:1726.
+66.52:Let's 66.62:do 66.74:10 66.96:seconds 67.30:to 67.46:14 67.68:seconds.
+68.14:I 68.30:had 68.48:make 68.66:those 68.84:cuts 69.08:and 69.26:then 69.36:color 69.62:grade 69.82:them 70.02:and 70.16:then 70.30:show 70.46:me 70.60:a 70.70:preview.
+71.28:And 71.38:then 71.54:what 71.70:it 71.82:did 72.00:was 72.16:it 72.40:exported 73.00:everything 73.44:as 73.84:a 73.96:single 74.28:preview
+74.70:with 75.26:all 75.62:of 75.90:my 76.08:color 76.36:graded 76.70:footage 76.98:using 77.86:that 78.12:LUT.
+78.56:And 78.66:so 78.86:in 79.28:the 79.40:time 79.64:it 79.74:took 79.88:me 80.02:to 80.18:just 80.42:scroll 80.74:each 80.96:one 81.12:of 81.20:those 81.34:and 81.52:speaking
+81.98:as 82.36:I 82.52:was 82.64:scrolling, 83.02:I 83.66:was 83.82:able 83.98:to 84.16:get 84.30:all 84.76:of 84.92:this 85.12:footage 85.46:done.
+86.02:Then 86.40:I 86.54:went 86.66:back 86.90:after 87.30:I 87.58:approved 87.88:it, 88.14:which 88.30:I 88.46:had 88.58:zero 88.86:edit.
+89.28:I 89.46:just 89.72:said, 90.22:do 90.52:all 90.68:the 90.80:trims 91.18:and 91.24:give 91.38:me 91.48:the 91.60:files 92.04:in 92.44:a 92.58:finder 92.92:window.
+93.54:And 93.62:then 93.72:it 93.82:went 93.90:through, 94.22:it 94.26:trimmed 94.48:up 94.64:every 94.82:shot.
+95.38:And 95.54:now 95.72:I 95.84:can 95.98:use 96.20:these 96.34:for 96.54:my 96.68:videos.
+97.20:I 97.28:can 97.44:use 97.60:these 97.70:for 97.86:carousels.
+98.84:All 99.08:of 99.22:this 99.38:was 99.50:done 99.70:in 99.88:a 100.00:single 100.44:prompt 100.96:using 101.54:Claude.

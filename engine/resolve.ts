@@ -70,6 +70,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "grid": return [v.at, ...v.groups.map((g) => g.at)];
     case "funnel": return [...v.items.map((it) => it.at), v.at, ...v.target.lines.map((l) => l.at)];
     case "type": return [v.at, v.settle, ...v.chips.map((c) => c.at)];
+    case "beats": return [...v.items.map((it) => it.at), ...(v.line ? [v.line.at] : [])];
     default: return [];
   }
 };
@@ -111,9 +112,38 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       issues.push({ level: "error", message: `"${s.at}" keeps the previous visual, so it needs the same layout as a previous shot with a visual and no visual of its own` });
     // A kept shot carries the tone of the scene it continues.
     const tone = s.keep && prev ? prev.tone : s.tone;
-    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, header, ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.enter ? { enter: s.enter } : {}) });
+    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, header, ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.enter ? { enter: s.enter } : {}), ...clean(s) });
   }
   for (let k = 0; k < shots.length - 1; k++) shots[k].end = shots[k + 1].start;
+
+  // The clean style's words on screen (a hit, a title, a chip) land on their own words, searched
+  // from the shot's anchor; a hit holds until its `until` words or the end of the shot.
+  shots.forEach((shot) => {
+    const s = found.find((f) => f.i === shot.index)?.s;
+    if (!s) return;
+    const at = (a: string | undefined, what: string) => {
+      if (!a) return shot.start;
+      const j = findPhrase(words, a, shot.index);
+      if (j < 0 || words[j].start >= shot.end) {
+        issues.push({ level: cut ? "warn" : "error", message: `${what} "${a}" in shot "${shot.anchor}" is not said in that shot` });
+        return shot.start;
+      }
+      return Math.max(shot.start, words[j].start - CUT_LEAD);
+    };
+    if (s.hit) {
+      const from = at(s.hit.at, "hit");
+      let until = shot.end;
+      if (s.hit.until) {
+        const j = findPhrase(words, s.hit.until, shot.index);
+        // Shot edges snap to frames, so a word on the next shot's edge can sit half a frame past it.
+        if (j < 0 || words[j].start - CUT_LEAD > shot.end + 1 / fps) issues.push({ level: cut ? "warn" : "error", message: `hit end "${s.hit.until}" in shot "${shot.anchor}" is not said in that shot` });
+        else until = Math.min(shot.end, Math.max(from + 0.3, words[j].start - CUT_LEAD));
+      }
+      shot.hit = { text: s.hit.text, ...(s.hit.tag ? { tag: s.hit.tag } : {}), at: from, until };
+    }
+    if (s.title) shot.title = { lines: s.title.lines, at: at(s.title.at, "title") };
+    if (s.chip) shot.chip = { name: s.chip.name, at: at(s.chip.at, "chip") };
+  });
 
   // Reveals inside a visual land on their own spoken words, searched from the shot's anchor.
   for (let k = 0; k < shots.length; k++) {
@@ -152,6 +182,13 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
   }
   return { shots: shots.map(({ index, ...s }) => s), issues };
 };
+
+// The clean style's shot fields that need no times.
+const clean = (s: EditPlan["shots"][number]): Partial<ResolvedShot> => ({
+  ...(s.picture ? { picture: typeof s.picture === "string" ? { src: s.picture, start: 0, rate: 1 } : s.picture } : {}),
+  ...(s.bg ? { bg: s.bg } : {}),
+  ...(s.inside ? { inside: true } : {}),
+});
 
 // When each word of a quote is said: matched in order against the words spoken in the shot. A word
 // matches if it is the same or one starts with the other ("make", "makes"). Unmatched words take the
@@ -469,6 +506,68 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
     if (split < 0.6) issues.push({ level: "warn", message: `split is ${Math.round(split * 100)}% of the reel; react reels sit around 70 to 85%` });
     const sources = shots.filter((s) => s.visual?.kind === "image").length;
     if (sources < 2) issues.push({ level: "warn", message: `only ${sources} source captures; a react reel walks through the source (repo, README, post)` });
+  }
+  const last = shots[shots.length - 1];
+  if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });
+  return issues;
+};
+
+// ---------- the clean style (style "clean", research/reels/STUDY.md) ----------
+
+export const CLEAN_LAYOUTS = ["split", "full", "card", "diagram", "over", "cutaway"] as const;
+
+// Sounds in the clean style: few, real and short. A riser into a shot that asks for one, key taps
+// under a chip as it types, and a tick as each list item lands. Nothing on plain cuts.
+export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
+  const ev: SfxEvent[] = [];
+  for (const s of shots) {
+    if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.5, exact: true });
+    else if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
+    if (s.chip) for (let n = 0; n <= s.chip.name.length; n += 2) ev.push({ kind: "key", t: s.chip.at + 0.25 + n * 0.035, gain: 0.3, exact: true });
+    const v = s.visual;
+    if (!s.keep && v?.kind === "list") (v.times ?? []).forEach((t) => ev.push({ kind: "pop", t, gain: 0.4, exact: true }));
+  }
+  return ev.sort((a, b) => a.t - b.t);
+};
+
+// The clean style's house rules, from the samples Owain chose (2026-11-06). `faceless`: a reel with
+// no footage of the speaker (a voiced script), so every picture comes from b-roll.
+export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boolean): Issue[] => {
+  const issues: Issue[] = [];
+  const total = (pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
+  shots.forEach((s, i) => {
+    const len = s.end - s.start;
+    const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+    const v = s.visual;
+    if (!(CLEAN_LAYOUTS as readonly string[]).includes(s.layout)) issues.push({ level: "error", message: `${label}: ${s.layout} is not a clean layout; use ${CLEAN_LAYOUTS.join(", ")}` });
+    if ((s.layout === "split" || s.layout === "over" || s.layout === "diagram") && !v) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
+    if (s.layout === "card" && v && v.kind !== "beats" && v.kind !== "list") issues.push({ level: "warn", message: `${label}: a card holds beats, a bracketed list or the caption alone, not a ${v.kind}` });
+    if (s.layout === "cutaway" && v?.kind !== "video") issues.push({ level: "error", message: `${label}: a cutaway needs a video visual; or use full with a picture` });
+    if (faceless && (s.layout === "full" || s.layout === "split" || s.layout === "over") && !s.picture)
+      issues.push({ level: "error", message: `${label}: there is no footage of the speaker, so a ${s.layout} shot needs a picture (b-roll)` });
+    if (len < 0.4) issues.push({ level: "warn", message: `${label} is only ${len.toFixed(2)}s` });
+    if (len > 7 && s.layout !== "split") issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; the cinematic references cut about every 3 s` });
+    if (s.hit) {
+      if (s.hit.text.length > 12) issues.push({ level: "warn", message: `${label}: hit "${s.hit.text}" is long; a hit is one to three short words (12 letters at most)` });
+      if (s.hit.tag && s.hit.tag.length > 24) issues.push({ level: "warn", message: `${label}: hit tag "${s.hit.tag}" is long; keep it under 24 letters` });
+      if (s.layout === "card" && v?.kind === "beats") issues.push({ level: "warn", message: `${label}: a hit over card beats; one text treatment at a time` });
+    }
+    if (s.title) for (const l of s.title.lines) if (l.length > 18) issues.push({ level: "warn", message: `${label}: title line "${l}" is long; keep each line under 18 letters` });
+    if (s.title && s.layout !== "diagram") issues.push({ level: "warn", message: `${label}: a title names a full-screen diagram; put it on a diagram shot` });
+    if (s.inside && s.layout !== "diagram") issues.push({ level: "warn", message: `${label}: inside puts the caption in a diagram; it only applies to diagram shots` });
+    if (v?.kind === "beats") {
+      const max = { huge: 7, mid: 10, small: 16 };
+      for (const b of v.items) if (b.text.length > max[b.size]) issues.push({ level: "warn", message: `${label}: beat "${b.text}" is long for ${b.size}; keep it under ${max[b.size]} letters` });
+    }
+    if (s.layout === "diagram" && shots[i + 1]?.layout === "diagram" && !shots[i + 1].keep) issues.push({ level: "warn", message: `${label}: two diagrams back to back; cut to a split or the picture between them` });
+  });
+  if (duration > 0) {
+    // Split is the main view (Owain, 2026-11-06: "the split screen should be the primary view").
+    const split = total((s) => s.layout === "split") / duration;
+    if (split < 0.45) issues.push({ level: "warn", message: `split is ${Math.round(split * 100)}% of the reel; it is the main view, so aim for half or more` });
+    // A full-screen diagram only now and then, where it adds value.
+    const diagram = total((s) => s.layout === "diagram") / duration;
+    if (diagram > 0.2) issues.push({ level: "warn", message: `diagrams fill ${Math.round(diagram * 100)}% of the reel; use one only now and then` });
   }
   const last = shots[shots.length - 1];
   if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });

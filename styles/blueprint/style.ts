@@ -154,6 +154,20 @@ const catalog: Card[] = [
     noSample: "Each one is drawn for its own reel.",
   },
   {
+    id: "blueprint.t1.beats",
+    kind: "beats",
+    tier: "t1",
+    purpose: "point",
+    summary: "The clean style's card beats: one huge caps word at a time on a flat card, hard swapped on its word, with size contrast.",
+    layouts: ["card"],
+    slots: [
+      { name: "items", type: "list", minItems: 1, maxItems: 6 },
+      { name: "items[].text", type: "text", maxChars: 16 },
+      { name: "line.text", type: "text", maxChars: 32, optional: true },
+      at("items[].at"),
+    ],
+    noSample: "Clean style only (style \"clean\"); drawn by effects/clean/Clean.tsx, not the library.",
+  },  {
     id: "blueprint.t1.title",
     kind: "title",
     tier: "t1",

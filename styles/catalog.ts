@@ -63,7 +63,7 @@ export const MAX_SITE = 28;
 // comments: `maxChars` is the longest value (asterisks for the accent do not count), and a list
 // slot takes `minItems` to `maxItems` entries. The card's layout is sized and tested for them.
 export type Slot = { name: string; type: SlotType; maxChars?: number; minItems?: number; maxItems?: number; optional?: boolean; note?: string };
-export type Layout = "split" | "scene" | "media" | "side" | "over" | "cutaway";
+export type Layout = "split" | "scene" | "media" | "side" | "over" | "cutaway" | "card";
 export type Card = {
   // <style>.<tier>.<purpose or kind>[.<treatment>], e.g. blueprint.t2.kpi or blueprint.t2.chart.line.
   id: string;

@@ -1,0 +1,425 @@
+# mlx_whisper large-v3-turbo, word timestamps (seconds)
+
+## Segments
+  0.00-  2.38 The CEO of Instagram just gave the entire playbook
+  2.38-  4.56 for how to hack the algorithm in 2026.
+  4.82-  6.68 If you wanna grow faster on social media this year,
+  6.82-  7.72 here's exactly what to do.
+  7.82-  9.82 It turns out there are two different algorithms
+  9.82- 11.00 running at the same time.
+ 11.10- 13.60 One for the people that already follow you, connected reach,
+ 13.74- 15.22 and one for the people that don't
+ 15.22- 17.14 and have never heard of you, unconnected reach.
+ 17.26- 18.86 These are two different games playing
+ 18.86- 20.48 with completely different rule sets
+ 20.48- 22.24 to decide which content goes to who.
+ 22.38- 23.42 Now across these two games,
+ 23.60- 25.42 the same three metrics are what they look at,
+ 25.52- 26.64 but they order them differently.
+ 26.78- 28.16 And those three metrics are watch time,
+ 28.16- 31.46 how long they watch, likes per view, and shares per view.
+ 31.58- 32.40 Now here's the interesting part.
+ 32.56- 33.88 Depending on what you're going for,
+ 34.02- 36.64 depth with existing followers or getting new followers,
+ 36.94- 38.66 you wanna prioritize different metrics
+ 38.66- 40.22 and change how you make your content.
+ 40.36- 42.40 If you're going for depth with existing followers,
+ 42.70- 45.44 watch time matters most and then likes per view.
+ 45.52- 46.52 But if you're going for new followers,
+ 46.74- 48.72 watch time matters most and then sends per view.
+ 48.84- 49.72 Now here's what this actually means
+ 49.72- 51.02 when it comes to the content you make.
+ 51.14- 53.00 Content that drives more likes is typically something
+ 53.00- 55.36 that resonates deeply with an existing follower,
+ 55.52- 56.56 something they agree with.
+ 56.56- 59.82 It's usually consensus and always aligned by topic.
+ 60.02- 61.62 On the other hand, content that drives shares
+ 61.62- 63.70 is usually something that's more surprising,
+ 63.92- 65.96 shockworthy, or drives more emotion.
+ 66.16- 69.16 It's usually contrarian and designed to compel someone
+ 69.16- 71.38 to share in a group chat or with their family.
+ 71.60- 73.58 Likes are kind of like a single player experience,
+ 73.84- 75.88 shares are more of a multiplayer experience.
+ 76.04- 77.30 Now knowing this is super helpful
+ 77.30- 79.94 because you can prioritize how to tell your stories
+ 79.94- 81.88 based on the outcome that you're going for.
+ 82.02- 83.52 Now regardless of which you're going for,
+ 83.52- 85.74 the hook is going to matter a lot for both.
+ 85.84- 89.20 So I built a database of all the top visual and spoken hooks,
+ 89.36- 91.92 over 60 different types with examples for each
+ 91.92- 93.62 to help you hone in your hooks a lot better.
+ 93.76- 95.72 If you want this whole database completely for free,
+ 96.02- 97.32 comment hooks and I'll send it to you.
+
+## Words
+   0   0.00-  0.10 The
+   1   0.10-  0.36 CEO
+   2   0.36-  0.50 of
+   3   0.50-  0.72 Instagram
+   4   0.72-  1.10 just
+   5   1.10-  1.32 gave
+   6   1.32-  1.52 the
+   7   1.52-  1.90 entire
+   8   1.90-  2.38 playbook
+   9   2.38-  2.56 for
+  10   2.56-  2.68 how
+  11   2.68-  2.80 to
+  12   2.80-  3.12 hack
+  13   3.12-  3.26 the
+  14   3.26-  3.68 algorithm
+  15   3.68-  3.92 in
+  16   3.92-  4.56 2026.
+  17   4.82-  5.00 If
+  18   5.00-  5.08 you
+  19   5.08-  5.18 wanna
+  20   5.18-  5.32 grow
+  21   5.32-  5.62 faster
+  22   5.62-  5.74 on
+  23   5.74-  5.94 social
+  24   5.94-  6.18 media
+  25   6.18-  6.44 this
+  26   6.44-  6.68 year,
+  27   6.82-  7.00 here's
+  28   7.00-  7.30 exactly
+  29   7.30-  7.46 what
+  30   7.46-  7.58 to
+  31   7.58-  7.72 do.
+  32   7.82-  8.00 It
+  33   8.00-  8.20 turns
+  34   8.20-  8.38 out
+  35   8.38-  8.56 there
+  36   8.56-  8.72 are
+  37   8.72-  8.98 two
+  38   8.98-  9.28 different
+  39   9.28-  9.82 algorithms
+  40   9.82- 10.20 running
+  41  10.20- 10.40 at
+  42  10.40- 10.48 the
+  43  10.48- 10.70 same
+  44  10.70- 11.00 time.
+  45  11.10- 11.22 One
+  46  11.22- 11.32 for
+  47  11.32- 11.40 the
+  48  11.40- 11.56 people
+  49  11.56- 11.76 that
+  50  11.76- 12.20 already
+  51  12.20- 12.56 follow
+  52  12.56- 12.80 you,
+  53  13.04- 13.32 connected
+  54  13.32- 13.60 reach,
+  55  13.74- 13.96 and
+  56  13.96- 14.16 one
+  57  14.16- 14.32 for
+  58  14.32- 14.40 the
+  59  14.40- 14.62 people
+  60  14.62- 14.84 that
+  61  14.84- 15.22 don't
+  62  15.22- 15.36 and
+  63  15.36- 15.46 have
+  64  15.46- 15.64 never
+  65  15.64- 15.84 heard
+  66  15.84- 15.96 of
+  67  15.96- 16.12 you,
+  68  16.38- 16.88 unconnected
+  69  16.88- 17.14 reach.
+  70  17.26- 17.44 These
+  71  17.44- 17.58 are
+  72  17.58- 17.82 two
+  73  17.82- 18.16 different
+  74  18.16- 18.48 games
+  75  18.48- 18.86 playing
+  76  18.86- 19.08 with
+  77  19.08- 19.68 completely
+  78  19.68- 20.02 different
+  79  20.02- 20.26 rule
+  80  20.26- 20.48 sets
+  81  20.48- 20.68 to
+  82  20.68- 20.96 decide
+  83  20.96- 21.20 which
+  84  21.20- 21.62 content
+  85  21.62- 21.92 goes
+  86  21.92- 22.08 to
+  87  22.08- 22.24 who.
+  88  22.38- 22.48 Now
+  89  22.48- 22.78 across
+  90  22.78- 22.98 these
+  91  22.98- 23.12 two
+  92  23.12- 23.42 games,
+  93  23.60- 23.78 the
+  94  23.78- 24.04 same
+  95  24.04- 24.32 three
+  96  24.32- 24.72 metrics
+  97  24.72- 24.88 are
+  98  24.88- 24.98 what
+  99  24.98- 25.12 they
+ 100  25.12- 25.32 look
+ 101  25.32- 25.42 at,
+ 102  25.52- 25.56 but
+ 103  25.56- 25.70 they
+ 104  25.70- 26.04 order
+ 105  26.04- 26.26 them
+ 106  26.26- 26.64 differently.
+ 107  26.78- 26.86 And
+ 108  26.86- 27.00 those
+ 109  27.00- 27.14 three
+ 110  27.14- 27.42 metrics
+ 111  27.42- 27.58 are
+ 112  27.58- 27.88 watch
+ 113  27.88- 28.16 time,
+ 114  28.16- 28.50 how
+ 115  28.50- 28.64 long
+ 116  28.64- 28.76 they
+ 117  28.76- 29.08 watch,
+ 118  29.34- 29.60 likes
+ 119  29.60- 29.84 per
+ 120  29.84- 30.08 view,
+ 121  30.32- 30.42 and
+ 122  30.42- 30.92 shares
+ 123  30.92- 31.22 per
+ 124  31.22- 31.46 view.
+ 125  31.58- 31.68 Now
+ 126  31.68- 31.88 here's
+ 127  31.88- 31.96 the
+ 128  31.96- 32.16 interesting
+ 129  32.16- 32.40 part.
+ 130  32.56- 32.88 Depending
+ 131  32.88- 33.10 on
+ 132  33.10- 33.26 what
+ 133  33.26- 33.40 you're
+ 134  33.40- 33.62 going
+ 135  33.62- 33.88 for,
+ 136  34.02- 34.34 depth
+ 137  34.34- 34.54 with
+ 138  34.54- 34.90 existing
+ 139  34.90- 35.38 followers
+ 140  35.38- 35.66 or
+ 141  35.66- 35.98 getting
+ 142  35.98- 36.20 new
+ 143  36.20- 36.64 followers,
+ 144  36.94- 37.06 you
+ 145  37.06- 37.22 wanna
+ 146  37.22- 37.80 prioritize
+ 147  37.80- 38.24 different
+ 148  38.24- 38.66 metrics
+ 149  38.66- 38.90 and
+ 150  38.90- 39.22 change
+ 151  39.22- 39.46 how
+ 152  39.46- 39.56 you
+ 153  39.56- 39.74 make
+ 154  39.74- 39.88 your
+ 155  39.88- 40.22 content.
+ 156  40.36- 40.48 If
+ 157  40.48- 40.56 you're
+ 158  40.56- 40.70 going
+ 159  40.70- 40.86 for
+ 160  40.86- 41.26 depth
+ 161  41.26- 41.44 with
+ 162  41.44- 41.88 existing
+ 163  41.88- 42.40 followers,
+ 164  42.70- 42.90 watch
+ 165  42.90- 43.16 time
+ 166  43.16- 43.46 matters
+ 167  43.46- 43.76 most
+ 168  43.76- 44.02 and
+ 169  44.02- 44.26 then
+ 170  44.26- 44.78 likes
+ 171  44.78- 45.08 per
+ 172  45.08- 45.44 view.
+ 173  45.52- 45.62 But
+ 174  45.62- 45.70 if
+ 175  45.70- 45.76 you're
+ 176  45.76- 45.86 going
+ 177  45.86- 45.98 for
+ 178  45.98- 46.12 new
+ 179  46.12- 46.52 followers,
+ 180  46.74- 46.94 watch
+ 181  46.94- 47.06 time
+ 182  47.06- 47.26 matters
+ 183  47.26- 47.50 most
+ 184  47.50- 47.72 and
+ 185  47.72- 47.88 then
+ 186  47.88- 48.32 sends
+ 187  48.32- 48.52 per
+ 188  48.52- 48.72 view.
+ 189  48.84- 48.92 Now
+ 190  48.92- 49.08 here's
+ 191  49.08- 49.16 what
+ 192  49.16- 49.24 this
+ 193  49.24- 49.50 actually
+ 194  49.50- 49.72 means
+ 195  49.72- 49.92 when
+ 196  49.92- 49.98 it
+ 197  49.98- 50.12 comes
+ 198  50.12- 50.24 to
+ 199  50.24- 50.34 the
+ 200  50.34- 50.62 content
+ 201  50.62- 50.82 you
+ 202  50.82- 51.02 make.
+ 203  51.14- 51.32 Content
+ 204  51.32- 51.48 that
+ 205  51.48- 51.70 drives
+ 206  51.70- 51.88 more
+ 207  51.88- 52.22 likes
+ 208  52.22- 52.42 is
+ 209  52.42- 52.72 typically
+ 210  52.72- 53.00 something
+ 211  53.00- 53.16 that
+ 212  53.16- 53.50 resonates
+ 213  53.50- 53.98 deeply
+ 214  53.98- 54.24 with
+ 215  54.24- 54.34 an
+ 216  54.34- 54.86 existing
+ 217  54.86- 55.36 follower,
+ 218  55.52- 55.72 something
+ 219  55.72- 55.94 they
+ 220  55.94- 56.28 agree
+ 221  56.28- 56.56 with.
+ 222  56.56- 56.84 It's
+ 223  56.84- 57.16 usually
+ 224  57.16- 57.92 consensus
+ 225  57.92- 58.28 and
+ 226  58.28- 58.62 always
+ 227  58.62- 59.20 aligned
+ 228  59.20- 59.40 by
+ 229  59.40- 59.82 topic.
+ 230  60.02- 60.12 On
+ 231  60.12- 60.20 the
+ 232  60.20- 60.32 other
+ 233  60.32- 60.50 hand,
+ 234  60.66- 60.90 content
+ 235  60.90- 61.00 that
+ 236  61.00- 61.24 drives
+ 237  61.24- 61.62 shares
+ 238  61.62- 61.96 is
+ 239  61.96- 62.34 usually
+ 240  62.34- 62.64 something
+ 241  62.64- 62.88 that's
+ 242  62.88- 63.04 more
+ 243  63.04- 63.70 surprising,
+ 244  63.92- 64.48 shockworthy,
+ 245  64.54- 64.82 or
+ 246  64.82- 65.22 drives
+ 247  65.22- 65.48 more
+ 248  65.48- 65.96 emotion.
+ 249  66.16- 66.40 It's
+ 250  66.40- 66.70 usually
+ 251  66.70- 67.56 contrarian
+ 252  67.56- 67.78 and
+ 253  67.78- 68.24 designed
+ 254  68.24- 68.52 to
+ 255  68.52- 68.90 compel
+ 256  68.90- 69.16 someone
+ 257  69.16- 69.38 to
+ 258  69.38- 69.68 share
+ 259  69.68- 69.92 in
+ 260  69.92- 70.00 a
+ 261  70.00- 70.22 group
+ 262  70.22- 70.52 chat
+ 263  70.52- 70.70 or
+ 264  70.70- 70.84 with
+ 265  70.84- 70.98 their
+ 266  70.98- 71.38 family.
+ 267  71.60- 71.80 Likes
+ 268  71.80- 71.92 are
+ 269  71.92- 72.04 kind
+ 270  72.04- 72.10 of
+ 271  72.10- 72.26 like
+ 272  72.26- 72.40 a
+ 273  72.40- 72.76 single
+ 274  72.76- 73.00 player
+ 275  73.00- 73.58 experience,
+ 276  73.84- 74.22 shares
+ 277  74.22- 74.40 are
+ 278  74.40- 74.54 more
+ 279  74.54- 74.68 of
+ 280  74.68- 74.76 a
+ 281  74.76- 75.22 multiplayer
+ 282  75.22- 75.88 experience.
+ 283  76.04- 76.14 Now
+ 284  76.14- 76.38 knowing
+ 285  76.38- 76.58 this
+ 286  76.58- 76.76 is
+ 287  76.76- 77.02 super
+ 288  77.02- 77.30 helpful
+ 289  77.30- 77.52 because
+ 290  77.52- 77.68 you
+ 291  77.68- 77.80 can
+ 292  77.80- 78.36 prioritize
+ 293  78.36- 78.86 how
+ 294  78.86- 79.00 to
+ 295  79.00- 79.26 tell
+ 296  79.26- 79.44 your
+ 297  79.44- 79.94 stories
+ 298  79.94- 80.46 based
+ 299  80.46- 80.66 on
+ 300  80.66- 80.78 the
+ 301  80.78- 81.14 outcome
+ 302  81.14- 81.32 that
+ 303  81.32- 81.44 you're
+ 304  81.44- 81.66 going
+ 305  81.66- 81.88 for.
+ 306  82.02- 82.10 Now
+ 307  82.10- 82.42 regardless
+ 308  82.42- 82.68 of
+ 309  82.68- 82.92 which
+ 310  82.92- 83.10 you're
+ 311  83.10- 83.28 going
+ 312  83.28- 83.52 for,
+ 313  83.52- 83.76 the
+ 314  83.76- 84.10 hook
+ 315  84.10- 84.34 is
+ 316  84.34- 84.44 going
+ 317  84.44- 84.52 to
+ 318  84.52- 84.74 matter
+ 319  84.74- 85.02 a
+ 320  85.02- 85.22 lot
+ 321  85.22- 85.46 for
+ 322  85.46- 85.74 both.
+ 323  85.84- 86.02 So
+ 324  86.02- 86.12 I
+ 325  86.12- 86.30 built
+ 326  86.30- 86.40 a
+ 327  86.40- 86.74 database
+ 328  86.74- 87.02 of
+ 329  87.02- 87.32 all
+ 330  87.32- 87.50 the
+ 331  87.50- 87.72 top
+ 332  87.72- 88.24 visual
+ 333  88.24- 88.48 and
+ 334  88.48- 88.88 spoken
+ 335  88.88- 89.20 hooks,
+ 336  89.36- 89.60 over
+ 337  89.60- 90.10 60
+ 338  90.10- 90.34 different
+ 339  90.34- 90.72 types
+ 340  90.72- 90.94 with
+ 341  90.94- 91.42 examples
+ 342  91.42- 91.66 for
+ 343  91.66- 91.92 each
+ 344  91.92- 92.16 to
+ 345  92.16- 92.32 help
+ 346  92.32- 92.50 you
+ 347  92.50- 92.78 hone
+ 348  92.78- 92.90 in
+ 349  92.90- 92.98 your
+ 350  92.98- 93.20 hooks
+ 351  93.20- 93.32 a
+ 352  93.32- 93.42 lot
+ 353  93.42- 93.62 better.
+ 354  93.76- 93.88 If
+ 355  93.88- 93.98 you
+ 356  93.98- 94.16 want
+ 357  94.16- 94.32 this
+ 358  94.32- 94.48 whole
+ 359  94.48- 94.80 database
+ 360  94.80- 95.32 completely
+ 361  95.32- 95.50 for
+ 362  95.50- 95.72 free,
+ 363  96.02- 96.24 comment
+ 364  96.24- 96.52 hooks
+ 365  96.52- 96.74 and
+ 366  96.74- 96.86 I'll
+ 367  96.86- 97.02 send
+ 368  97.02- 97.12 it
+ 369  97.12- 97.22 to
+ 370  97.22- 97.32 you.

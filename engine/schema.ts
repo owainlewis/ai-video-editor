@@ -314,6 +314,14 @@ export const Visual = z.discriminatedUnion("kind", [
     label: z.string().optional(),
     chips: z.array(Item).default([]),
   }),
+  // The clean style (style "clean"): card beats. One huge caps word on a flat card at a time, hard
+  // swapped on its word, with size contrast (huge, then small, then huge). `line` is a Signifier line
+  // under the last beat (the call to action).
+  z.object({
+    kind: z.literal("beats"),
+    items: z.array(z.object({ text: z.string(), size: z.enum(["huge", "mid", "small"]).default("huge"), typed: z.boolean().optional(), at: Anchor.optional() })).min(1).max(6),
+    line: z.object({ text: z.string(), at: Anchor.optional() }).optional(),
+  }),
 ]);
 
 export const Layout = z.enum([
@@ -327,7 +335,18 @@ export const Layout = z.enum([
   "side", // the visual in a card, the speaker in a small rounded window at the side, voice continues
   "half", // a paper panel on the left half, the speaker on the right half; dissolves in and out
   "over", // the speaker's picture as cut, with a quiet overlay on it (a lower third or a cinematic title)
+  // The clean style (style "clean") only, on reels; `over` there is the graphic b-roll overlay: the
+  // picture full frame with the visual in a dark glass panel.
+  "card", // a flat card in ink, paper or green: card beats, a bracketed list or the caption alone
+  "diagram", // a full-screen line diagram on green, now and then, where a picture of the structure helps
 ]);
+
+// The clean style's footage for a shot instead of the speaker: a b-roll shot ("broll:<id>") full
+// frame, or in the bottom panel of a split. `rate` below 1 is slow motion (60 fps sources only).
+export const Picture = z.union([z.string(), z.object({ src: z.string(), start: z.number().min(0).default(0), rate: z.number().min(0.25).max(2).default(1) })]);
+// A key word or number in bold caps, typed on letter by letter, with an optional Signifier tag under
+// it. Shows from `at` (the shot's start when left out) to `until` (the shot's end when left out).
+const Hit = z.object({ text: z.string(), tag: z.string().optional(), at: Anchor.optional(), until: Anchor.optional() });
 
 // "riser" builds into the shot: it ends on the cut instead of starting on it.
 export const SfxKind = z.enum(["whoosh", "pop", "impact", "thud", "blip", "chime", "key", "riser"]);
@@ -355,6 +374,17 @@ export const Shot = z.object({
   // A shared-element transition from the previous scene: an element of it (a grid tile, the result
   // card, the typed input, or any frame rect [x, y, w, h] in 0 to 1) grows to become this shot.
   enter: z.object({ from: z.enum(["tile", "card", "input", "rect"]), index: z.number().default(0), rect: Rect.optional() }).optional(),
+  // ---- The clean style (style "clean") ----
+  picture: Picture.optional(),
+  // A card's colour.
+  bg: z.enum(["ink", "paper", "green"]).optional(),
+  hit: Hit.optional(),
+  // A diagram's name: Signifier italic, two lines, the second tucked in to the right, typed on.
+  title: z.object({ lines: z.tuple([z.string(), z.string()]), at: Anchor.optional() }).optional(),
+  // A monospace chip naming the real command or skill this step runs (`egm-review`), typed on.
+  chip: z.object({ name: z.string(), at: Anchor.optional() }).optional(),
+  // A diagram drawn round the frame's centre: the caption sits inside it, at y 960.
+  inside: z.boolean().optional(),
   note: z.string().optional(),
 });
 
@@ -363,7 +393,9 @@ export const Edit = z.object({
   // reel: 9:16, 1080x1920. youtube: 16:9, 1920x1080, for a rough cut edited by hand: the plan only
   // lays graphics and text over it, sparsely, and never re-cuts the picture.
   canvas: z.enum(["reel", "youtube"]).default("reel"),
-  // The house style. Ivory is the only one; the field is kept so old plans still parse.
+  // The house style. "ivory" (every older plan) or "clean": the reel system locked on 2026-11-06
+  // (research/reels/STUDY.md): split first, text cards and cinematic shots, a full-screen diagram
+  // now and then, the glass overlay, and the text kit. Drawn by effects/clean/Clean.tsx.
   style: z.string().default("ivory"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
   // Black (Owain, 2026-10-30: "classier - maybe black"): pure black cards, white type, no sage.
@@ -449,6 +481,13 @@ export type ResolvedShot = {
   keep?: boolean;
   tone?: "light" | "dark";
   enter?: { from: "tile" | "card" | "input" | "rect"; index: number; rect?: [number, number, number, number] };
+  // The clean style: times are resolved from the anchors.
+  picture?: { src: string; start: number; rate: number };
+  bg?: "ink" | "paper" | "green";
+  hit?: { text: string; tag?: string; at: number; until: number };
+  title?: { lines: [string, string]; at: number };
+  chip?: { name: string; at: number };
+  inside?: boolean;
 };
 export type Chunk = { words: { text: string; start: number; end: number; accent: boolean }[]; start: number; end: number };
 // `exact`: play as given (its own gain, never thinned): whooshes, risers and highlight clicks.
