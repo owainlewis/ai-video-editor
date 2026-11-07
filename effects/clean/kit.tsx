@@ -72,8 +72,8 @@ export const Line: React.FC<{ a: [number, number]; b: [number, number]; p: numbe
   const ux = (b[0] - a[0]) / d, uy = (b[1] - a[1]) / d, h = w * 5;
   return (
     <g opacity={opacity}>
-      <line x1={a[0]} y1={a[1]} x2={x} y2={y} stroke={color} strokeWidth={w} strokeLinecap="round" strokeDasharray={dash ? `${w * 3} ${w * 4}` : undefined} />
-      {head && p > 0.9 && <path d={`M ${x - ux * h - uy * h * 0.6} ${y - uy * h + ux * h * 0.6} L ${x} ${y} L ${x - ux * h + uy * h * 0.6} ${y - uy * h - ux * h * 0.6}`} fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />}
+      <line data-qc="edge" x1={a[0]} y1={a[1]} x2={x} y2={y} stroke={color} strokeWidth={w} strokeLinecap="round" strokeDasharray={dash ? `${w * 3} ${w * 4}` : undefined} />
+      {head && p > 0.9 && <path data-qc="edge" d={`M ${x - ux * h - uy * h * 0.6} ${y - uy * h + ux * h * 0.6} L ${x} ${y} L ${x - ux * h + uy * h * 0.6} ${y - uy * h - ux * h * 0.6}`} fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />}
     </g>
   );
 };
@@ -82,14 +82,14 @@ export const Line: React.FC<{ a: [number, number]; b: [number, number]; p: numbe
 export const Ring: React.FC<{ x: number; y: number; r: number; p: number; w?: number; color?: string; fill?: string; opacity?: number }> = ({ x, y, r, p, w = 3, color = C.white, fill = "none", opacity = 1 }) => {
   if (p <= 0) return null;
   const len = 2 * Math.PI * r;
-  return <circle cx={x} cy={y} r={r} fill={fill} stroke={color} strokeWidth={w} strokeDasharray={`${len * p} ${len}`} transform={`rotate(-90 ${x} ${y})`} opacity={opacity} />;
+  return <circle data-qc="edge" cx={x} cy={y} r={r} fill={fill} stroke={color} strokeWidth={w} strokeDasharray={`${len * p} ${len}`} transform={`rotate(-90 ${x} ${y})`} opacity={opacity} />;
 };
 
 // A rectangle whose outline draws on as p goes 0 to 1.
 export const Rect: React.FC<{ x: number; y: number; w: number; h: number; p: number; sw?: number; color?: string; fill?: string; r?: number; opacity?: number }> = ({ x, y, w, h, p, sw = 3, color = C.white, fill = "none", r = 6, opacity = 1 }) => {
   if (p <= 0) return null;
   const len = 2 * (w + h);
-  return <rect x={x} y={y} width={w} height={h} rx={r} fill={fill} stroke={color} strokeWidth={sw} strokeDasharray={`${len * p} ${len}`} opacity={opacity} />;
+  return <rect data-qc="edge" x={x} y={y} width={w} height={h} rx={r} fill={fill} stroke={color} strokeWidth={sw} strokeDasharray={`${len * p} ${len}`} opacity={opacity} />;
 };
 
 // A document: a page outline with text lines that fill in as `lines` goes 0 to n.
@@ -106,7 +106,7 @@ export const Doc: React.FC<{ x: number; y: number; w: number; h: number; p: numb
         return (
           <g key={i}>
             {marked && <rect x={x + pad - 8} y={ly - gap * 0.32} width={(lw + 16) * mark} height={gap * 0.64} fill={C.sage} opacity={0.9} rx={4} />}
-            {f > 0 && <line x1={x + pad} y1={ly} x2={x + pad + lw * f} y2={ly} stroke={marked ? C.inkText : color} strokeWidth={Math.max(3, w * 0.03)} strokeLinecap="round" opacity={i === 0 ? 1 : 0.55} />}
+            {f > 0 && <line data-qc="edge" x1={x + pad} y1={ly} x2={x + pad + lw * f} y2={ly} stroke={marked ? C.inkText : color} strokeWidth={Math.max(3, w * 0.03)} strokeLinecap="round" opacity={i === 0 ? 1 : 0.55} />}
           </g>
         );
       })}
@@ -117,7 +117,7 @@ export const Doc: React.FC<{ x: number; y: number; w: number; h: number; p: numb
 // Text placed by its centre, for labels inside a diagram.
 export const Label: React.FC<{ x: number; y: number; children: React.ReactNode; size?: number; color?: string; opacity?: number; weight?: number; serif?: boolean; anchor?: "middle" | "start" | "end" }> = ({ x, y, children, size = 34, color = C.white, opacity = 1, weight = 500, serif, anchor = "middle" }) =>
   opacity <= 0.01 ? null : (
-    <text x={x} y={y} fill={color} opacity={opacity} fontFamily={serif ? SERIF : SANS} fontWeight={weight} fontSize={size} textAnchor={anchor} dominantBaseline="middle" letterSpacing={serif ? 0 : -0.3}>
+    <text data-qc="label" x={x} y={y} fill={color} opacity={opacity} fontFamily={serif ? SERIF : SANS} fontWeight={weight} fontSize={size} textAnchor={anchor} dominantBaseline="middle" letterSpacing={serif ? 0 : -0.3}>
       {children}
     </text>
   );

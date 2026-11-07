@@ -53,7 +53,8 @@ const Picture: React.FC<{ r: Resolved; s: ResolvedShot; first: boolean; time: nu
 const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number }> = ({ r, s, time }) => {
   const v = s.visual;
   if (!v || s.layout === "card") return null;
-  const b = box(s.layout);
+  // A capture sits in the panel as a window, with margins, so the page never touches the frame's edge.
+  const b = v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96 } : box(s.layout);
   const Custom = v.kind === "custom" ? CUSTOM[v.name] : undefined;
   return (
     <div style={{ position: "absolute", ...b, overflow: "visible" }}>
@@ -104,7 +105,9 @@ export const Clean: React.FC<Resolved> = (r) => {
       default: return shot.picture || faceless ? { y: 1150, size: 92 } : { y: 1250, size: 72 };
     }
   })();
-  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : shot.layout === "split" ? SEAM - 75 : 1080;
+  // On a split the hit sits on the seam like the caption, and a tag stacks it upward: nothing but the
+  // seam word crosses onto the speaker's panel.
+  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : shot.layout === "split" ? SEAM - 75 - (shot.hit?.tag ? 160 : 0) : 1080;
 
   return (
     <AbsoluteFill style={{ background: bgOf(shot) }}>

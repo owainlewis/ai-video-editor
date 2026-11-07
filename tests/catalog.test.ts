@@ -143,7 +143,7 @@ describe("tokens keep the house look", () => {
 // may not: the style-driven components take every colour from the active style's tokens.
 describe("tokens only", () => {
   it("has no literal colours in the card, element or scene components", () => {
-    for (const f of ["../effects/cards.tsx", "../effects/elements.tsx", "../effects/soft.tsx"]) {
+    for (const f of ["../effects/cards.tsx", "../effects/elements.tsx", "../effects/soft.tsx", "../effects/house.tsx"]) {
       const code = readFileSync(new URL(f, import.meta.url), "utf8")
         .split("\n")
         .filter((l) => !l.trim().startsWith("//"))

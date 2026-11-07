@@ -19,6 +19,20 @@ describe("qcLayout", () => {
     expect(msgs(qcLayout(m([text("2,500", [200, 400, 80, 30])], { marks: [{ box: [200, 432, 600, 2], opacity: 1 }] }), size, "s"))).toMatch(/touches a line/);
     expect(msgs(qcLayout(m([text("a", [500, 500, 100, 40]), text("b", [550, 510, 100, 40])]), size, "s"))).toMatch(/overlaps/);
   });
+  it("errors when a label sits on a diagram's line, not when it sits clear or inside a ring", () => {
+    const line = { points: [[100, 100], [200, 200], [300, 300]], opacity: 1 };
+    const ring = { points: [[400, 400], [600, 400], [600, 600], [400, 600]], opacity: 1 };
+    const label = text("Plan", [180, 180, 60, 30], { label: true });
+    expect(msgs(qcLayout(m([label], { edges: [line] }), size, "s"))).toMatch(/sits on a line or shape/);
+    expect(msgs(qcLayout(m([text("Plan", [700, 180, 60, 30], { label: true })], { edges: [line] }), size, "s"))).not.toMatch(/sits on/);
+    expect(msgs(qcLayout(m([text("You", [480, 490, 40, 30], { label: true })], { edges: [ring] }), size, "s"))).not.toMatch(/sits on/);
+  });
+  it("warns on a crowded diagram and on long labels", () => {
+    const six = Array.from({ length: 6 }, (_, i) => text(`L${i}`, [200 + i * 200, 300, 60, 30], { label: true }));
+    expect(msgs(qcLayout(m(six), size, "s"))).toMatch(/6 labels at once/);
+    expect(msgs(qcLayout(m(six.slice(0, 5)), size, "s"))).not.toMatch(/labels at once/);
+    expect(msgs(qcLayout(m([text("the plan is written here", [400, 300, 300, 30], { label: true })]), size, "s"))).toMatch(/over three words/);
+  });
   it("lets inline runs in one block sit inside their sentence (a `code` pill)", () => {
     expect(msgs(qcLayout(m([text("Generated files under and any file", [400, 500, 800, 80], { block: 1 }), text("src/gen/", [700, 505, 110, 30], { block: 1 })]), size, "s"))).not.toMatch(/overlaps/);
   });
@@ -92,5 +106,26 @@ describe("saidTwice", () => {
   });
   it("is quiet when one take is removed", () => {
     expect(saidTwice(words, [[9, 19]])).toEqual([]);
+  });
+});
+
+describe("parts that are never seen", () => {
+  it("errors when a part lands as its graphic ends", async () => {
+    const { qcPlan } = await import("../engine/qc.ts");
+    const shot = (start: number, end: number, times: number[]) => ({ start, end, layout: "media" as const, anchor: "x", visual: { kind: "focus", items: [{ text: "A" }, { text: "B" }], times } as never });
+    const r = { shots: [shot(0, 4, [0.5, 3.9])] } as never;
+    expect(qcPlan(r, [], []).some((i) => /never seen/.test(i.message))).toBe(true);
+    const ok = { shots: [shot(0, 4, [0.5, 2])] } as never;
+    expect(qcPlan(ok, [], []).some((i) => /never seen/.test(i.message))).toBe(false);
+  });
+  it("allows a list that carries on: a part said in a later graphic lands there", async () => {
+    const { qcPlan } = await import("../engine/qc.ts");
+    const shot = (start: number, end: number, times: number[], kind = "checklist") => ({ start, end, layout: "media" as const, anchor: "x", visual: { kind, items: [{ text: "A" }, { text: "B" }], times } as never });
+    const seen = (shots: unknown[]) => qcPlan({ shots } as never, [], []).some((i) => /never seen/.test(i.message));
+    expect(seen([shot(0, 4, [1, 11]), shot(10, 14, [10, 11])])).toBe(false);
+    // Still an error when nothing later lands it: no such part, or the later graphic has gone by then.
+    expect(seen([shot(0, 4, [1, 11]), shot(10, 14, [10, 12])])).toBe(true);
+    expect(seen([shot(0, 4, [1, 11]), shot(9, 10, [9, 11])])).toBe(true);
+    expect(seen([shot(0, 4, [1, 11]), shot(10, 14, [10, 11], "list")])).toBe(true);
   });
 });

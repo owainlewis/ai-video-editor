@@ -50,14 +50,14 @@ button.quiet { background: transparent; border-color: transparent; color: var(--
 
 /* Editor: library | player | chat on top, the timeline across the bottom. */
 .app { display: flex; flex-direction: column; height: 100%; }
-.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px 1fr 360px; grid-template-rows: minmax(0, 1fr) 300px; }
+.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: clamp(200px, 20vw, 280px) minmax(240px, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr) 300px; }
 .stage { grid-column: 2; min-height: 0; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: #0c0d0d; }
 .small { font-size: 12px; }
 button.small { padding: 3px 8px; font-size: 12px; }
 
 .library { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--panel); }
-.tabs { display: flex; gap: 4px; padding: 10px 10px 0; border-bottom: 1px solid var(--line); }
-.tabs button { border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); padding: 8px 12px; }
+.tabs { display: flex; gap: 2px; padding: 10px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs button { border: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); padding: 8px 9px; font-size: 13px; flex: none; }
 .tabs button.on { background: #232725; color: var(--ink); }
 .assets { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
 .assets.over { background: rgba(183, 205, 191, 0.06); }
@@ -115,7 +115,7 @@ button.small { padding: 3px 8px; font-size: 12px; }
 .clip span { color: rgba(236, 235, 230, 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clip.graphic { background: #2c4a40; border: 1px solid #3f6a5c; }
 .clip.text { background: #4a4430; border: 1px solid #6a6040; }
-.clip.text span { display: none; }
+.clip.text span { font-size: 10px; }
 .clip.broll { background: #2f3d55; border: 1px solid #44587a; }
 .clip.on { outline: 2px solid var(--accent); }
 .tbar { position: absolute; top: 6px; bottom: 6px; border-radius: 4px; }
@@ -175,7 +175,8 @@ button.drop { width: 100%; font-size: 15px; }
 .draft-card .row { justify-content: flex-end; gap: 6px; }
 .clip.draft { background: rgba(44, 74, 64, 0.35); border: 1px dashed #5f8a7c; color: var(--accent); }
 
-.effects { display: flex; flex-direction: column; gap: 10px; }
+.effects { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.reel .effects, .effects.reel { grid-template-columns: 1fr 1fr; }
 
 /* Gallery: every graphic, live. Tiles are a still until hovered, then play. */
 .gallery { min-height: 100%; }
@@ -214,3 +215,54 @@ button.drop { width: 100%; font-size: 15px; }
 .clip .edge:hover { background: rgba(236, 235, 230, 0.35); }
 .slot { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--accent); border-radius: 2px; pointer-events: none; z-index: 2; }
 .asset .pending { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 11px; color: var(--muted); }
+
+/* Inspector: one graphic, edited by hand. */
+.inspector .insp-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.inspector .insp-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.inspector .insp-foot { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.inspector .said { margin: 0; font-size: 12px; color: var(--muted); font-style: italic; }
+.inspector .f { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.inspector .f > span { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.inspector .f.check { flex-direction: row; align-items: center; gap: 8px; }
+.inspector .f.group { padding-left: 8px; border-left: 2px solid var(--line); }
+.inspector .fields { display: flex; flex-direction: column; gap: 10px; }
+.inspector input:not([type=checkbox]), .inspector textarea, .inspector select {
+  font: inherit; font-size: 13px; color: var(--ink); background: #121413; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; width: 100%; min-width: 0;
+}
+.inspector textarea { min-height: 60px; resize: vertical; }
+.inspector textarea.json { min-height: 280px; font: 12px/1.4 ui-monospace, Menlo, monospace; }
+.inspector input:focus, .inspector textarea:focus, .inspector select:focus { outline: none; border-color: var(--accent); }
+.inspector .items { display: flex; flex-direction: column; gap: 6px; }
+.inspector .item { display: flex; gap: 6px; align-items: flex-start; }
+.inspector .item .n { font-size: 11px; color: var(--muted); width: 14px; padding-top: 9px; text-align: right; }
+.inspector .item .grow { flex: 1; min-width: 0; }
+.inspector .item .fields { gap: 4px; }
+.inspector .row.gap { gap: 6px; }
+.inspector .row.gap button { flex: none; }
+.seg.wrap { flex-wrap: wrap; }
+.inspector .insp-error { margin: 0; padding: 8px 12px; font-size: 12px; color: #1d0f0c; background: var(--error); }
+.effects .picked .tile { outline: 2px solid var(--accent); border-radius: 10px; }
+
+/* The script: words to select and cut, and what Tighten proposes, struck through. */
+.script-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.script-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); min-height: 42px; }
+.trims-note { margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.script p { cursor: text; line-height: 1.6; }
+.script p:hover { background: transparent; }
+.script .t { cursor: pointer; }
+.script .w { border-radius: 3px; cursor: pointer; }
+.script .w:hover { background: #2a302d; }
+.script .w.here { color: var(--accent); }
+.script .w.sel { background: rgba(183, 205, 191, 0.25); }
+.script .w.drop { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--error); background: rgba(229, 138, 122, 0.12); }
+.script .w.drop.filler { color: var(--warn); background: rgba(217, 180, 108, 0.12); }
+.script .w.drop.off { text-decoration: none; color: inherit; background: transparent; outline: 1px dashed #4a524e; }
+.script .gap { font-size: 10px; padding: 0 4px; margin-left: 3px; border-radius: 4px; background: rgba(229, 138, 122, 0.18); color: var(--error); cursor: pointer; }
+.script .gap.off { background: transparent; color: var(--muted); outline: 1px dashed #4a524e; }
+
+.inspector .takes { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.inspector .take-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.inspector .take { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); }
+.inspector .take.on { border-color: var(--accent); }
+.inspector .take .tile span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.effects > div, .effects .tile { width: 100%; }

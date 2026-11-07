@@ -3,7 +3,9 @@
 // the reason is returned.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mergeShots, phraseAt, wordAt } from "../engine/insert.ts";
+import { mergeShots, phraseAt, planIndex, stripAnchors, wordAt } from "../engine/insert.ts";
+import { cards } from "../styles/blueprint/style.ts";
+import { cardPlan } from "../effects/preview.ts";
 import { findPhrase } from "../engine/resolve.ts";
 import type { Word } from "../engine/schema.ts";
 import { resolveProject } from "../media/project.ts";
@@ -56,7 +58,7 @@ export function insertAt(projects: string, slug: string, added: { start: number;
 
 // Place one shot over a stretch of plain picture, from `start` to about `end`, then bring back the
 // shot that was showing. Never cuts into a graphic. Used by drag and drop and accepted suggestions.
-export function placeOver(projects: string, slug: string, shot: Shot, start: number, length: number, stretch = 1) {
+export function placeOver(projects: string, slug: string, shot: Shot, start: number, length: number, stretch = 1): number {
   const { resolved } = resolveProject(projects, slug);
   if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
   const words = timeline(join(projects, slug)).words;
@@ -80,6 +82,7 @@ export function placeOver(projects: string, slug: string, shot: Shot, start: num
   const added: { start: number; shot: Shot }[] = [{ start: from, shot: { ...shot, at: "" } }];
   if (endWord && endWord.start < here.end - 0.3) added.push({ start: endWord.start, shot: { at: "", layout: here.layout } });
   insertAt(projects, slug, added, shown);
+  return from;
 }
 
 // Dropping a clip on the timeline: b-roll from that moment for the clip's length.
@@ -88,15 +91,6 @@ export function dropBroll(projects: string, slug: string, ref: string, at: numbe
   // Short clips may be slowed to as little as 0.65x to reach the next word.
   placeOver(projects, slug, { at: "", layout: "cutaway", visual: { kind: "video", src, start: 0 } }, at, length - 0.1, 1 / 0.65);
 }
-
-// The plan's shot behind resolved shot k: the same anchor, counted in order. -1 for none (the plain
-// picture that fills the start of a cut has no shot in the plan).
-const planIndex = (plan: Shot[], resolved: { anchor: string }[], k: number) => {
-  const anchor = resolved[k]?.anchor;
-  if (!anchor) return -1;
-  const nth = resolved.slice(0, k).filter((s) => s.anchor === anchor).length;
-  return plan.map((s, i) => ({ s, i })).filter(({ s }) => s.at === anchor)[nth]?.i ?? -1;
-};
 
 // Move the start of the shot that starts at timeline time `from` to the word at `to`: trimming the
 // edge of a b-roll clip on the timeline (its in edge is its own start, its out edge the start of
@@ -140,6 +134,86 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
   }
   const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
   writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+  const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
+  if (fresh.length) {
+    writeFileSync(join(dir, "edit.json"), before);
+    resolveProject(projects, slug);
+    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
+  }
+}
+
+// A change made in the inspector to the graphic that starts at timeline time `start`: `shot`
+// replaces its shot in the plan, `remove` takes the graphic off (and the shots that keep it), so the
+// picture plays as cut. Like any insert, a change that adds an error is put back and the reason returned.
+export function editShot(projects: string, slug: string, start: number, change: { shot?: Shot; remove?: boolean }) {
+  const dir = join(projects, slug);
+  const before = readFileSync(join(dir, "edit.json"), "utf8");
+  const plan = JSON.parse(before) as { shots: Shot[] };
+  const { resolved, issues } = resolveProject(projects, slug);
+  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  // The shot starting nearest `start`, a few frames either way (a shot leads its word slightly).
+  const k = resolved.shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(resolved.shots[best].start - start)) ? i : best), -1);
+  const target = planIndex(plan.shots, resolved.shots, k);
+  if (target < 0) throw Object.assign(new Error("no graphic starts there"), { code: 404 });
+  if (change.remove) {
+    let kept = 0;
+    while ((plan.shots[target + 1 + kept] as { keep?: boolean } | undefined)?.keep) kept++;
+    plan.shots.splice(target, 1 + kept, { at: plan.shots[target].at, layout: "full" });
+  } else if (change.shot) {
+    if (!change.shot.at || !change.shot.layout) throw Object.assign(new Error("a shot needs its words (at) and a layout"), { code: 400 });
+    plan.shots[target] = change.shot;
+  }
+  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
+  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+  const after = resolveProject(projects, slug);
+  const fresh = after.issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
+  if (fresh.length) {
+    writeFileSync(join(dir, "edit.json"), before);
+    resolveProject(projects, slug);
+    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
+  }
+}
+
+// A library card at the playhead: its sample, without the sample's own anchors, on plain picture
+// for about four seconds, in the layout the card takes on this canvas. Returns where it starts.
+export function placeCard(projects: string, slug: string, cardId: string, at: number) {
+  const card = cards.find((c) => c.id === cardId);
+  if (!card?.sample) throw Object.assign(new Error(`no library card ${cardId}`), { code: 404 });
+  const canvas = readJson<{ canvas?: string }>(join(projects, slug, "edit.json")).canvas === "youtube" ? "youtube" : "reel";
+  const layout = cardPlan(cardId, canvas).shots[0].layout;
+  const visual = stripAnchors(card.sample.visual) as Shot["visual"];
+  const from = placeOver(projects, slug, { at: "", layout, visual, ...(canvas === "reel" && card.sample.header ? { header: card.sample.header } : {}) }, at, 4, 1.6);
+  // Where the new shot really starts: a shot leads its word by a few frames.
+  const shots = resolveProject(projects, slug).resolved?.shots ?? [];
+  return shots.reduce((best, s) => (Math.abs(s.start - from) < Math.abs(best - from) ? s.start : best), shots[0]?.start ?? from);
+}
+
+// End the graphic that starts at `start` on the word at `to`: the shot after it starts there. With no
+// word left to start on (the graphic should run to the end), a plain shot after it is taken out, so
+// the graphic runs on to the shot after that.
+export function moveShotEnd(projects: string, slug: string, start: number, to: number) {
+  const { resolved, issues } = resolveProject(projects, slug);
+  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  const shots = resolved.shots;
+  const k = shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(shots[best].start - start)) ? i : best), -1);
+  if (k < 0) throw Object.assign(new Error("no graphic starts there"), { code: 404 });
+  let last = k;
+  while (shots[last + 1]?.keep) last++;
+  const next = shots[last + 1];
+  if (!next) throw Object.assign(new Error("this graphic already runs to the end"), { code: 409 });
+  const words = timeline(join(projects, slug)).words;
+  const after = shots[last + 2]?.start ?? resolved.duration;
+  const word = words[wordAt(words, to)];
+  if (word && word.start < after - 0.3) return moveShotStart(projects, slug, next.start, to);
+  if (next.visual) throw Object.assign(new Error("the shot after this one has its own graphic; end before it"), { code: 409 });
+  const dir = join(projects, slug);
+  const before = readFileSync(join(dir, "edit.json"), "utf8");
+  const plan = JSON.parse(before) as { shots: Shot[] };
+  const target = planIndex(plan.shots, shots, last + 1);
+  if (target < 0) throw Object.assign(new Error("no shot to take out after this graphic"), { code: 409 });
+  plan.shots.splice(target, 1);
+  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
   const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
   if (fresh.length) {
     writeFileSync(join(dir, "edit.json"), before);

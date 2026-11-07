@@ -56,7 +56,7 @@ export const Gallery: React.FC = () => {
     () =>
       effects.map((e) => {
         const plan = cardPlan(e.id, canvas, canvas === "youtube" ? theme : undefined, longest);
-        return { key: e.id, title: e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
+        return { key: e.id, title: e.kind === "custom" ? e.purpose : e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
       }),
     [effects, canvas, theme, longest],
   );
@@ -122,7 +122,7 @@ export const Gallery: React.FC = () => {
       <main>
         {tab === "library" ? (
           <div className={`tiles ${canvas}`}>
-            {library.filter((i) => match(i.key, i.title, i.sub)).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
+            {library.filter((i) => match(i.key, i.title, i.sub, String((i.visual as { kind?: string }).kind))).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
           </div>
         ) : (
           groups.map((g) => {

@@ -1,3 +1,4 @@
+import { FocusVisual, MapVisual, ShiftVisual, WordsVisual } from "./house";
 import React from "react";
 import { Video } from "@remotion/media";
 import { UiVisual } from "./ui";
@@ -152,13 +153,13 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
                   width: `${hl.rect[2] * 100}%`,
                   height: `${hl.rect[3] * 100}%`,
                   // On scenes the marker is a flat accent outline, so it reads on light and dark pages alike.
-                  background: scene ? "transparent" : t.highlight,
-                  outline: scene ? `4px solid ${c.accent}` : "none",
-                  outlineOffset: 8,
+                  background: v.dark ? "rgba(183,205,191,0.22)" : scene ? "transparent" : t.highlight,
+                  outline: v.dark ? "3px solid rgba(183,205,191,0.9)" : scene ? `4px solid ${c.accent}` : "none",
+                  outlineOffset: v.dark ? 0 : 8,
                   borderRadius: 8,
                   scale: `${sweep} 1`,
                   transformOrigin: "left center",
-                  mixBlendMode: scene ? "normal" : "multiply",
+                  mixBlendMode: scene || v.dark ? "normal" : "multiply",
                 }}
               />
             );
@@ -534,6 +535,8 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
 const TerminalVisual: React.FC<Props & { v: V<"terminal"> }> = ({ shot, time, w, h, v }) => {
   const times = v.times ?? v.lines.map((_, i) => shot.start + 0.2 + i * 0.6);
   const enter = prog(time, shot.start, 0.35);
+  // Commands never wrap: the type shrinks until the longest line (with its prompt) fits.
+  const fs = Math.min(46, (w - 96) / ((Math.max(...v.lines.map((l) => l.text.length)) + 2) * 0.61));
   return (
     <div style={{ width: w, minHeight: h * 0.5, borderRadius: 26, background: t.terminal, boxShadow: t.shadow, overflow: "hidden", translate: `0 ${(1 - enter) * 30}px` }}>
       <div style={{ height: 66, display: "flex", alignItems: "center", gap: 12, padding: "0 28px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
@@ -548,12 +551,14 @@ const TerminalVisual: React.FC<Props & { v: V<"terminal"> }> = ({ shot, time, w,
           const typed = Math.floor(Math.max(0, (time - at) * 38));
           if (time < at) return null;
           const out = ln.text.startsWith(">");
+          // A line after one ending in "\\" continues that command, so it has no prompt.
+          const cont = i > 0 && v.lines[i - 1].text.trimEnd().endsWith("\\");
           const text = out ? ln.text.slice(1).trim() : ln.text;
           const shown = out ? text : text.slice(0, typed);
           const cursor = !out && typed < text.length + 8 && Math.floor(time * 2.5) % 2 === 0;
           return (
-            <div key={i} style={{ fontFamily: t.mono, fontSize: 46, lineHeight: 1.28, color: out ? "rgba(255,255,255,0.55)" : "#F4F2EE", whiteSpace: "pre-wrap" }}>
-              {!out && <span style={{ color: "#8FA8E8" }}>$ </span>}
+            <div key={i} style={{ fontFamily: t.mono, fontSize: fs, lineHeight: 1.28, color: out ? "rgba(255,255,255,0.55)" : "#F4F2EE", whiteSpace: "pre", marginTop: cont ? -26 : 0 }}>
+              {!out && <span style={{ color: "#8FA8E8" }}>{cont ? "  " : "$ "}</span>}
               {shown}
               {cursor && <span style={{ background: "#F4F2EE", color: "transparent" }}>_</span>}
             </div>
@@ -1005,6 +1010,10 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
     case "grid": return <GridVisual {...p} v={v} />;
     case "funnel": return <FunnelVisual {...p} v={v} />;
     case "type": return <TypeVisual {...p} v={v} />;
+    case "words": return <WordsVisual {...p} v={v} />;
+    case "focus": return <FocusVisual {...p} v={v} />;
+    case "map": return <MapVisual {...p} v={v} />;
+    case "shift": return <ShiftVisual {...p} v={v} />;
     // Drawn over the speaker's picture by the 16:9 composition (src/Wide.tsx), not in a panel.
     case "lower": return null;
     case "chart": return <ChartVisual {...p} v={v} />;

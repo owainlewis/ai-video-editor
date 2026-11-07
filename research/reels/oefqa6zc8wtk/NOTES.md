@@ -194,6 +194,8 @@ Six moves measured frame by frame. One frame = 41.7 ms.
 - One loud low swell at 88 to 89 s (up to -10 dB under 60 Hz), during the document pan.
 - No clear whooshes, clicks or pops at cuts: high-frequency peaks near cuts all line up with speech sibilants. If there are UI clicks they sit under the voice. Confidence medium.
 
+Measured again 2026-11-07, with the voice split from the backing (demucs): voice -14.6 LUFS, backing -30.8 LUFS, so 16 LU apart. The backing's low notes repeat every 3.69 s from 33 s to 55 s, so it is a music track, mostly sub-bass, and not separate booms. Some notes land on graphic cuts (8.4, 22.5, 85.9 s), which may be luck.
+
 ## 8. What makes it work, and what is weak
 
 Works:

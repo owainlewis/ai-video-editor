@@ -1,0 +1,6 @@
+# Frame grabs, contact sheets, strips and audio from the YouTube studies: regenerable from the videos.
+# The notes and transcripts are what is kept.
+*.jpg
+*.png
+*.wav
+*.mp4

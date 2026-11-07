@@ -29,6 +29,8 @@ export const Visual = z.discriminatedUnion("kind", [
     icon: z.string().optional(),
     // A marker over a region, swept in on `at`. `label` adds a callout tag pointing at it.
     highlight: z.array(z.object({ rect: Rect, at: Anchor.optional(), label: z.string().optional() })).default([]),
+    // A dark capture: the marker is sage, because a multiplied one disappears on a dark page.
+    dark: z.boolean().optional(),
     // On a split, the card sits on a coloured `mat` (a colour from the subject's own brand), with the
     // source's real logo and name above it (`label`), so a plain capture reads as designed (Owain, 2026-10-26).
     mat: z.string().optional(),
@@ -314,6 +316,17 @@ export const Visual = z.discriminatedUnion("kind", [
     label: z.string().optional(),
     chips: z.array(Item).default([]),
   }),
+  // The house motion library (effects/house.tsx, 2026-11-02): big type, no boxes, each part on its word.
+  // Big lines of type, each landing on its word. On YouTube's `over` they sit beside the speaker on
+  // the open side of the frame (`side`: auto picks the side away from the face). One *marked* phrase.
+  z.object({ kind: z.literal("words"), lines: z.array(Item).min(1).max(4), side: z.enum(["auto", "left", "right", "center"]).default("auto") }),
+  // The old way, then the new: `from` lands big; when `to` lands, the old one moves up, dims and is
+  // struck through (`even` leaves it unstruck: two sides of one idea, neither wrong).
+  z.object({ kind: z.literal("shift"), from: z.object({ text: z.string(), label: z.string().optional(), at: Anchor.optional() }), to: z.object({ text: z.string(), label: z.string().optional(), at: Anchor.optional() }), even: z.boolean().optional() }),
+  // One item at a time, huge; as the next lands, the last moves up into a quiet numbered column.
+  z.object({ kind: z.literal("focus"), title: z.string().optional(), items: z.array(Item).min(2).max(6) }),
+  // A diagram drawn large: nodes land on their words, arrows draw between them, a dot travels the
+  // newest. `x` and `y` place a node (0 to 1 of the frame); without them the nodes sit in a row.
   // The clean style (style "clean"): card beats. One huge caps word on a flat card at a time, hard
   // swapped on its word, with size contrast (huge, then small, then huge). `line` is a Signifier line
   // under the last beat (the call to action).
@@ -321,6 +334,11 @@ export const Visual = z.discriminatedUnion("kind", [
     kind: z.literal("beats"),
     items: z.array(z.object({ text: z.string(), size: z.enum(["huge", "mid", "small"]).default("huge"), typed: z.boolean().optional(), at: Anchor.optional() })).min(1).max(6),
     line: z.object({ text: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  z.object({
+    kind: z.literal("map"),
+    nodes: z.array(z.object({ id: z.string(), label: z.string(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), at: Anchor.optional() })).min(2).max(7),
+    edges: z.array(z.object({ from: z.string(), to: z.string(), label: z.string().optional(), at: Anchor.optional() })).default([]),
   }),
 ]);
 

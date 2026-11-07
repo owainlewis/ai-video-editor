@@ -8,15 +8,19 @@ import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
 import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./moves";
 import { Analogy, Swarm } from "./ax";
+import { Egm } from "./egm";
 import { EgmAgents, EgmBrainstorm, EgmDraft, EgmDrift, EgmGaps, EgmHandoff, EgmOneAgent, EgmPick, EgmReviewers } from "./egmclean";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
 import { Points } from "./points";
 import { Skills } from "./skills";
+import { Drain, Drift, Gaps, Lens, Scale, Surge, Thread, Wall } from "./stage";
 import { Blueprint, Commits, Swap, Three } from "./threethings";
 import { Tools } from "./tools";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
+// Drawn to hold still: the frame stays put and only the parts change (measured in the study).
+export const STILL = new Set(["drain", "lens", "wall", "thread", "gaps", "drift", "surge", "scale"]);
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   orgchart: OrgChart,
   migrate: Migrate,
@@ -36,6 +40,7 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   swap: Swap,
   commits: Commits,
   tools: Tools,
+  egm: Egm,
   // The EGM reel in the clean style (projects/egm-clean).
   "egm-agents": EgmAgents,
   "egm-one-agent": EgmOneAgent,
@@ -46,4 +51,13 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   "egm-reviewers": EgmReviewers,
   "egm-pick": EgmPick,
   "egm-drift": EgmDrift,
+  // The stage moves, for YouTube (research/youtube/xxf6D9jynFw/NOTES.md).
+  drain: Drain,
+  lens: Lens,
+  wall: Wall,
+  thread: Thread,
+  gaps: Gaps,
+  drift: Drift,
+  surge: Surge,
+  scale: Scale,
 };

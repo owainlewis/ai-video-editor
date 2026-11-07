@@ -42,7 +42,9 @@ export const Timeline: React.FC<{
   onSegment: (id: string | null) => void;
   onCut: (cut: CutPlan) => Promise<unknown>;
   onShotStart: (from: number, to: number) => Promise<unknown>;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart }) => {
+  picked?: number | null;
+  onPick?: (start: number | null) => void;
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick }) => {
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   // A cut being trimmed shows live while the drag lasts, and until the server sends the new one back.
   const [live, setLive] = useState<CutPlan | null>(null);
@@ -153,6 +155,7 @@ export const Timeline: React.FC<{
   const down = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest(".clip")) return;
     onSegment(null);
+    onPick?.(null);
     const start = at(e.clientX);
     let moved = false;
     const move = (m: PointerEvent) => {
@@ -193,17 +196,19 @@ export const Timeline: React.FC<{
     return (
     <div
       key={`${c.shot.start}`}
-      className={`clip ${cls} ${selection && Math.abs(selection.start - c.shot.start) < 0.01 && Math.abs(selection.end - c.end) < 0.01 ? "on" : ""}`}
+      className={`clip ${cls} ${(picked !== null ? Math.abs(picked - c.shot.start) < 0.01 : selection && Math.abs(selection.start - c.shot.start) < 0.01 && Math.abs(selection.end - c.end) < 0.01) ? "on" : ""}`}
       style={{ left: a * pps, width: Math.max(3, (b - a) * pps - 2) }}
       title={`${clock(c.shot.start)} ${label} · "${c.shot.anchor}"`}
       onClick={() => {
         onSelect({ start: c.shot.start, end: c.end, label: `${label} "${c.shot.anchor}"` });
-        onSeek(c.shot.start + 0.05);
+        onPick?.(c.shot.start);
+        // Land where the graphic has settled, so the inspector's changes show as they are typed.
+        onSeek(Math.min(c.end - 0.1, c.shot.start + 1.5));
       }}
     >
       {edges && <i className="edge in" title="Drag to trim the start" onPointerDown={(e) => trimShot(e, c.shot.start, "in")} onClick={(e) => e.stopPropagation()} />}
       <b>{label}</b>
-      <span>{c.shot.anchor}</span>
+      <span>{gist(c.shot.visual) || c.shot.anchor}</span>
       {edges && <i className="edge out" title="Drag to trim the end" onPointerDown={(e) => trimShot(e, c.end, "out")} onClick={(e) => e.stopPropagation()} />}
     </div>
     );
@@ -226,7 +231,7 @@ export const Timeline: React.FC<{
         </>
       ),
     },
-    { id: "text", label: "Text", height: 34, render: (pps) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "title" ? "title" : "lower third")) },
+    { id: "text", label: "Text", height: 34, render: (pps) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "lower" ? "lower third" : c.shot.visual?.kind ?? "text")) },
     { id: "broll", label: "B-roll", height: 34, render: (pps) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll", true)) },
     {
       id: "aroll",
@@ -368,6 +373,16 @@ export const Timeline: React.FC<{
     </div>
   );
 };
+
+// The words a graphic shows, short: its title or text, else its first item. Labels clips on the
+// timeline and rows in the graphics list, where the kind alone ("list") says little.
+export function gist(v: unknown): string {
+  if (!v || typeof v !== "object") return "";
+  const o = v as Record<string, unknown>;
+  for (const k of ["text", "title", "label", "value", "keyword", "name", "number"]) if (typeof o[k] === "string" && o[k]) return (o[k] as string).replace(/\*/g, "");
+  for (const x of Object.values(o)) if (Array.isArray(x) && x.length) return x.map((i) => gist(i) || (typeof i === "string" ? i : "")).filter(Boolean).slice(0, 3).join(" · ");
+  return "";
+}
 
 // What is said, one block per sentence: readable at any zoom, unlike one label per word. A
 // sentence ends at . ? or !, at a pause over 0.8 s, or after 30 words.

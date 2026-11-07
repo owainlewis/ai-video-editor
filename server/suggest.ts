@@ -57,7 +57,8 @@ Then write projects/${slug}/suggestions.json as {"items": [...]}, keeping every 
 Rules for each new one:
 - Only where it adds something: a number, a list, steps, a comparison, a structure. Never decoration, never a lower third.
 - Only over plain picture: not over a stretch that already has a graphic or b-roll in edit.json.
-- YouTube: only inside an on-camera stretch from build/camera.json; layout "side" (a visual beside Owain) or "over" with a "title". Reels: "split" or "scene".
+- Reach for the house graphics first (effects/house.tsx): "words" (big lines beside Owain), "focus" (a list, one item huge at a time), "shift" (the old way struck through as the new lands) and "map" (a diagram). A card with a small label and rows is the look Owain called slop.
+- YouTube: only inside an on-camera stretch from build/camera.json; "over" with "words" (beside Owain), "media" for focus, shift and map, or "side". Reels: "split" or "scene".
 - 4 to 12 seconds. Reveals land on their words: give list items, stages and points their own "at" (a few exact words from the transcript inside the section).
 - About one per 20 to 60 seconds of on-camera time. Fewer, better ones beat many.
 - Never invent numbers or facts; show only what is said.

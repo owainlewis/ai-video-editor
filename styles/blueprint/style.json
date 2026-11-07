@@ -558,6 +558,519 @@
       }
     },
     {
+      "id": "blueprint.t2.drain",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "drain",
+      "summary": "A meter holds, falls to nothing over 1.9 s, then the number turns: memory, context or budget running out. Say the number, or set number: false.",
+      "layouts": [
+        "side",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "props.name",
+          "type": "text",
+          "maxChars": 12
+        },
+        {
+          "name": "props.label",
+          "type": "text",
+          "maxChars": 10
+        },
+        {
+          "name": "props.note",
+          "type": "text",
+          "maxChars": 34,
+          "optional": true
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "drain",
+          "at": [
+            "card",
+            "falls",
+            "note",
+            "end"
+          ],
+          "props": {
+            "name": "Reviewer",
+            "label": "Context",
+            "from": 100,
+            "to": 0,
+            "note": "It starts with nothing"
+          }
+        },
+        "header": "Starts *fresh*",
+        "scene": "Starts *fresh*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.lens",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "lens",
+      "summary": "A page, and each angle throws a beam onto the part it reads; the newest beam is in the accent. For several readers of one thing.",
+      "layouts": [
+        "side",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "props.file",
+          "type": "text",
+          "maxChars": 20
+        },
+        {
+          "name": "props.angles",
+          "type": "text",
+          "maxChars": 13
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "lens",
+          "at": [
+            "page",
+            "one",
+            "two",
+            "three",
+            "four"
+          ],
+          "props": {
+            "file": "plan.md",
+            "angles": [
+              "Security",
+              "Performance",
+              "Simplicity",
+              "Clarity"
+            ]
+          }
+        },
+        "header": "Every *angle*",
+        "scene": "Every *angle*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.wall",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "wall",
+      "summary": "A reader with its two inputs, then the chat; a wall rises and what you said stops at it. For anything kept apart on purpose.",
+      "layouts": [
+        "side",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "props.name",
+          "type": "text",
+          "maxChars": 12
+        },
+        {
+          "name": "props.inputs",
+          "type": "text",
+          "maxChars": 16
+        },
+        {
+          "name": "props.chat",
+          "type": "text",
+          "maxChars": 16
+        },
+        {
+          "name": "props.said",
+          "type": "text",
+          "maxChars": 14
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "wall",
+          "at": [
+            "reader",
+            "chat",
+            "wall",
+            "stops"
+          ],
+          "props": {
+            "name": "Reviewer",
+            "inputs": [
+              "plan.md",
+              "your code"
+            ],
+            "chat": "Your chat",
+            "said": "What you said"
+          }
+        },
+        "header": "Kept *apart*",
+        "scene": "Kept *apart*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.thread",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "thread",
+      "summary": "Rows of a plan, each wired through an agent into the part it builds, one row at a time, the part landing as the wire arrives.",
+      "layouts": [
+        "media",
+        "side"
+      ],
+      "slots": [
+        {
+          "name": "props.file",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "props.app",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "props.agent",
+          "type": "text",
+          "maxChars": 10
+        },
+        {
+          "name": "props.rows",
+          "type": "text",
+          "maxChars": 16
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "thread",
+          "at": [
+            "cards",
+            "one",
+            "two",
+            "three"
+          ],
+          "props": {
+            "file": "plan.md",
+            "app": "your app",
+            "agent": "Agent",
+            "rows": [
+              "Sign in",
+              "Search",
+              "Checkout"
+            ]
+          }
+        },
+        "header": "Plan to *code*",
+        "scene": "Plan to *code*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.gaps",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "gaps",
+      "summary": "A page with hatched holes and a falling count; a helper flies to each hole and fills it. For a plan or a doc getting complete.",
+      "layouts": [
+        "side",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "props.file",
+          "type": "text",
+          "maxChars": 16
+        },
+        {
+          "name": "props.word",
+          "type": "text",
+          "maxChars": 8
+        },
+        {
+          "name": "props.helpers",
+          "type": "text",
+          "maxChars": 8
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "gaps",
+          "at": [
+            "page",
+            "one",
+            "two",
+            "three"
+          ],
+          "props": {
+            "file": "plan.md",
+            "holes": 3,
+            "word": "gaps",
+            "helpers": [
+              "agent",
+              "skill",
+              "agent"
+            ]
+          }
+        },
+        "header": "No *gaps*",
+        "scene": "No *gaps*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.drift",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "drift",
+      "summary": "Two sources side by side; a tag walks down them row by row, each row answered with a tick or marked in the accent; then the choice. For a check or a comparison.",
+      "layouts": [
+        "media",
+        "side"
+      ],
+      "slots": [
+        {
+          "name": "props.left",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "props.right",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "props.tag",
+          "type": "text",
+          "maxChars": 8
+        },
+        {
+          "name": "props.rows[].text",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "props.rows[].then",
+          "type": "text",
+          "maxChars": 18,
+          "optional": true
+        },
+        {
+          "name": "props.choices",
+          "type": "text",
+          "maxChars": 12,
+          "optional": true
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "drift",
+          "at": [
+            "cards",
+            "one",
+            "two",
+            "three",
+            "four",
+            "choice"
+          ],
+          "props": {
+            "left": "plan.md",
+            "right": "your app",
+            "tag": "drift",
+            "rows": [
+              {
+                "text": "Sign in"
+              },
+              {
+                "text": "Payments",
+                "ok": false
+              },
+              {
+                "text": "Search"
+              },
+              {
+                "text": "Emails",
+                "ok": false
+              }
+            ],
+            "choices": [
+              "Fix plan",
+              "Fix app"
+            ]
+          }
+        },
+        "header": "What *drifted*",
+        "scene": "What *drifted*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.surge",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "surge",
+      "summary": "A flood of dots into a three-part flow, a counter climbing on an ease-in with a hard stop, and the last part gives. Set count only to a number that is said.",
+      "layouts": [
+        "media",
+        "side"
+      ],
+      "slots": [
+        {
+          "name": "props.nodes",
+          "type": "text",
+          "maxChars": 10
+        },
+        {
+          "name": "props.label",
+          "type": "text",
+          "maxChars": 14,
+          "optional": true
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "surge",
+          "at": [
+            "flow",
+            "flood"
+          ],
+          "props": {
+            "nodes": [
+              "App",
+              "Queue",
+              "Database"
+            ],
+            "count": 1000,
+            "label": "sample count"
+          }
+        },
+        "header": "Under *load*",
+        "scene": "Under *load*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
+      "id": "blueprint.t2.scale",
+      "kind": "custom",
+      "tier": "t2",
+      "purpose": "scale",
+      "summary": "A balance: the cost lands and it tips, the payoff lands and it tips back. For a trade-off with a verdict.",
+      "layouts": [
+        "side",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "props.left",
+          "type": "text",
+          "maxChars": 12
+        },
+        {
+          "name": "props.right",
+          "type": "text",
+          "maxChars": 12
+        },
+        {
+          "name": "at[]",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "custom",
+          "name": "scale",
+          "at": [
+            "balance",
+            "cost",
+            "payoff"
+          ],
+          "props": {
+            "left": "It's slower",
+            "right": "It's safer"
+          }
+        },
+        "header": "Worth *it*",
+        "scene": "Worth *it*"
+      },
+      "duration": {
+        "min": 1.5,
+        "max": 5
+      }
+    },
+    {
       "id": "blueprint.t1.beats",
       "kind": "beats",
       "tier": "t1",
@@ -592,6 +1105,271 @@
         }
       ],
       "noSample": "Clean style only (style \"clean\"); drawn by effects/clean/Clean.tsx, not the library.",
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
+      "id": "blueprint.t1.words",
+      "kind": "words",
+      "tier": "t1",
+      "purpose": "point",
+      "summary": "Big lines of type beside the speaker, over the picture, each landing on its word; one phrase marked.",
+      "layouts": [
+        "over",
+        "split",
+        "scene",
+        "media"
+      ],
+      "slots": [
+        {
+          "name": "lines",
+          "type": "list",
+          "minItems": 1,
+          "maxItems": 4
+        },
+        {
+          "name": "lines[].text",
+          "type": "richtext",
+          "maxChars": 22
+        },
+        {
+          "name": "lines[].at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "words",
+          "lines": [
+            {
+              "text": "Stop chatting."
+            },
+            {
+              "text": "Start *delegating*."
+            }
+          ],
+          "side": "auto"
+        },
+        "header": "The *shift*",
+        "scene": "The *shift*"
+      },
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
+      "id": "blueprint.t1.focus",
+      "kind": "focus",
+      "tier": "t1",
+      "purpose": "list",
+      "summary": "One item at a time, huge; as the next lands, the last moves up into a quiet numbered column.",
+      "layouts": [
+        "media",
+        "scene",
+        "split"
+      ],
+      "slots": [
+        {
+          "name": "title",
+          "type": "text",
+          "maxChars": 30,
+          "optional": true
+        },
+        {
+          "name": "items",
+          "type": "list",
+          "minItems": 2,
+          "maxItems": 6
+        },
+        {
+          "name": "items[].text",
+          "type": "richtext",
+          "maxChars": 28
+        },
+        {
+          "name": "items[].at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "focus",
+          "title": "Three things to learn",
+          "items": [
+            {
+              "text": "System design"
+            },
+            {
+              "text": "AI coding tools"
+            },
+            {
+              "text": "Git and *GitHub*"
+            }
+          ]
+        },
+        "header": "Three *things*",
+        "scene": "Three *things*"
+      },
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
+      "id": "blueprint.t1.shift",
+      "kind": "shift",
+      "tier": "t1",
+      "purpose": "compare",
+      "summary": "The old way, then the new: the old moves up, dims and is struck through as the new one lands big.",
+      "layouts": [
+        "media",
+        "scene",
+        "split"
+      ],
+      "slots": [
+        {
+          "name": "from.text",
+          "type": "text",
+          "maxChars": 24
+        },
+        {
+          "name": "from.label",
+          "type": "text",
+          "maxChars": 18,
+          "optional": true
+        },
+        {
+          "name": "to.text",
+          "type": "richtext",
+          "maxChars": 24
+        },
+        {
+          "name": "to.label",
+          "type": "text",
+          "maxChars": 18,
+          "optional": true
+        },
+        {
+          "name": "from.at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        },
+        {
+          "name": "to.at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "shift",
+          "from": {
+            "text": "Loose instructions",
+            "label": "In a chat"
+          },
+          "to": {
+            "text": "Clearly defined *jobs*",
+            "label": "Delegated"
+          }
+        },
+        "header": "The *shift*",
+        "scene": "The *shift*"
+      },
+      "duration": {
+        "min": 2.5,
+        "max": 7
+      }
+    },
+    {
+      "id": "blueprint.t1.map",
+      "kind": "map",
+      "tier": "t1",
+      "purpose": "structure",
+      "summary": "A diagram drawn large: nodes land on their words, arrows draw between them, a dot travels the newest.",
+      "layouts": [
+        "media",
+        "scene",
+        "split"
+      ],
+      "slots": [
+        {
+          "name": "nodes",
+          "type": "list",
+          "minItems": 2,
+          "maxItems": 7
+        },
+        {
+          "name": "nodes[].label",
+          "type": "text",
+          "maxChars": 18
+        },
+        {
+          "name": "edges",
+          "type": "list",
+          "maxItems": 8,
+          "optional": true
+        },
+        {
+          "name": "edges[].label",
+          "type": "text",
+          "maxChars": 16,
+          "optional": true
+        },
+        {
+          "name": "nodes[].at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        },
+        {
+          "name": "edges[].at",
+          "type": "anchor",
+          "optional": true,
+          "note": "a spoken phrase; the part lands on its first word"
+        }
+      ],
+      "sample": {
+        "visual": {
+          "kind": "map",
+          "nodes": [
+            {
+              "id": "linear",
+              "label": "Linear"
+            },
+            {
+              "id": "worker",
+              "label": "Cloudflare Worker"
+            },
+            {
+              "id": "claude",
+              "label": "Claude"
+            }
+          ],
+          "edges": [
+            {
+              "from": "linear",
+              "to": "worker",
+              "label": "webhook"
+            },
+            {
+              "from": "worker",
+              "to": "claude",
+              "label": "task"
+            }
+          ]
+        },
+        "header": "How it *connects*",
+        "scene": "How it *connects*"
+      },
       "duration": {
         "min": 2.5,
         "max": 7

@@ -38,3 +38,20 @@ export function mergeShots<S extends { at: string }>(words: Word[], existing: { 
     return { ...p.shot, at };
   });
 }
+
+// The plan's shot behind resolved shot k: the same anchor, counted in order. -1 for none (the plain
+// picture that fills the start of a cut has no shot in the plan).
+export const planIndex = (plan: { at: string }[], resolved: { anchor: string }[], k: number) => {
+  const anchor = resolved[k]?.anchor;
+  if (!anchor) return -1;
+  const nth = resolved.slice(0, k).filter((s) => s.anchor === anchor).length;
+  return plan.map((s, i) => ({ s, i })).filter(({ s }) => s.at === anchor)[nth]?.i ?? -1;
+};
+
+// A library sample made ready for a plan: its `at` anchors are the sample's own words, which this
+// video never says, so they are dropped and every part lands in turn after the shot starts.
+export function stripAnchors<T>(v: T): T {
+  if (Array.isArray(v)) return v.map(stripAnchors) as T;
+  if (!v || typeof v !== "object") return v;
+  return Object.fromEntries(Object.entries(v).filter(([k, x]) => !(k === "at" && typeof x === "string")).map(([k, x]) => [k, stripAnchors(x)])) as T;
+}

@@ -39,7 +39,7 @@ Owain (2026-10-26): "I'd ideally like you to edit per video rather than rely on 
 
 1. Read the whole transcript, then write `projects/<slug>/DESIGN.md`: the argument in three lines, and the four to eight moments that carry it. For each moment: what the viewer must understand, the picture that shows it (structure, cause, flow, before and after), and how it moves. Diagrams first: they are what Owain's tech audience values most.
 2. Draw each moment for this video: a custom graphic in `effects/custom/` (Remotion, used from the plan as `custom`) or a scene in `hyperframes/<slug>/` (HyperFrames). Use the video's own nouns and the source's real words.
-3. Library kinds and registry blocks are parts (the look, the speeds, a counter, a code window), not presets. Use one as it is only when it is exactly the right picture; never pick from the menu first and fit the words to it.
+3. Reach for the house graphics first (`effects/house.tsx`): `words` (big lines beside Owain, `over` on YouTube), `focus` (one item huge at a time), `shift` (the old way struck through as the new one lands) and `map` (a diagram drawn large). They replace the card-with-a-small-label look. Library kinds and registry blocks are parts (the look, the speeds, a counter, a code window), not presets. Use one as it is only when it is exactly the right picture; never pick from the menu first and fit the words to it.
 4. No two videos should look like the same template: vary the stage, the camera and the transitions, keep the house look (Graphite or Ivory, Helvetica and Signifier, sage accent, the two speeds).
 5. A bespoke graphic that keeps earning its place graduates into the library.
 
@@ -78,7 +78,8 @@ The reel style locked on 2026-11-06 (`research/reels/STUDY.md`), drawn by `effec
 - `picture`: `"broll:<id>"` or `{ "src", "start", "rate" }`, the footage instead of Owain. A faceless reel (a voiced script) needs one on every `full`, `split` and `over` shot. Slow motion only from 60 fps sources.
 - The text kit, one treatment at a time: the caption (automatic, sized by weight); `hit` (`text` in caps, optional `tag`, `at`, `until`); `title` (two `lines`, on a diagram); `chip` (the real skill or command name); `beats` on a card (huge, small, huge); `list` on a card with a bracketed `title` like `"[REVIEW]"`; `inside: true` puts the caption in a diagram's centre.
 - Diagrams are `custom` visuals drawn for each video in `effects/custom/` with the parts in `effects/clean/kit.tsx` (Line, Ring, Rect, Doc, Dots, Label): thin white lines that draw on their words, sage on the one thing that matters.
-- Sounds: `"sfx": "riser"` into a diagram, key taps under chips, a tick per list item. Nothing on plain cuts.
+- Show the thing: anything named gets the real thing, a diagram or its real logo. Repos and docs are real captures in a browser window (`frame: "browser"`, `dark: true`) with markers on the spoken words. A skill or command runs in a Claude Code mock-up (`claudecode`, the real command), then a diagram explains it.
+- Sounds (`cleanSfx`): only what the eye sees land: a low whoosh as a graphic takes over, a sub hit under a hit word, a ring for a logo, a tick per item, a click per marker, keys under typing, one tick for a diagram, and `"sfx": "riser"` into a diagram. Nothing on a cut back to the speaker.
 
 ## B-roll
 
@@ -88,6 +89,14 @@ Owain's own shots live in one library for every project: `library/broll/` (shots
 - Use one with `{ "kind": "video", "src": "broll:<id>" }`; it is copied into the project when the plan resolves. Each shot once per video.
 - Put b-roll on human or abstract lines, never as evidence for a claim.
 - New clips added in the editor are split into shots and described automatically. To describe any left blank: `npm run studio -- broll describe`.
+
+## Owain in the editor
+
+He edits by hand now, so expect plans to change under you; read edit.json fresh before every change.
+- **Inspector:** click a graphic on the timeline (or in the Graphics tab) to edit its words, layout, start word or card, live, or remove it (Delete). Saved through `POST /api/projects/<slug>/shot`, which puts the plan back if the change adds an error.
+- **Library tab:** click a card to put it at the playhead (`place`).
+- **Script tab:** select words and cut them; Tighten proposes retakes, fillers and long pauses (`engine/tighten.ts`) to strike in one go. Each is a cut edit.
+- **Takes:** "Ask Claude" in the inspector writes `variants.json` (see `server/variants.ts` for the prompt); `npm run studio -- variants <slug>` checks it. Owain plays each take in the player and picks one.
 
 ## Notes from Owain
 
@@ -103,7 +112,7 @@ When Owain asks for a change in the chat panel you get the project, the selected
 - Never invent facts, numbers, UI or quotes. A graphic shows what is said or what a source shows.
 - Graphics on YouTube go only where the speaker is on camera, never over b-roll or a screen recording.
 - Something on screen changes every 2 seconds at most in a reel.
-- No grading and no voice processing: Owain does both. Music and sound effects are ours.
+- No grading: Owain does it. The voice goes through Auphonic (`npm run studio -- auphonic <slug>`, key in `.env`) and no other processing. Music and sound effects are ours.
 - Fonts: Helvetica and Signifier only.
 
 ## Code

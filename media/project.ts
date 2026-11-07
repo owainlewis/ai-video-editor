@@ -8,7 +8,8 @@ import { chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, re
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
-import { slotIssues } from "../styles/blueprint/style.ts";
+import { cards, slotIssues } from "../styles/blueprint/style.ts";
+import { stripAnchors } from "../engine/insert.ts";
 import { BROLL, useClip } from "./broll.ts";
 import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
@@ -107,7 +108,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const srcs = !v ? [] : v.kind === "image" || v.kind === "video" ? [v.src] : v.kind === "logos" || v.kind === "logowall" || v.kind === "windows" ? v.items.map((i) => i.src) : v.kind === "cta" && v.src ? [v.src] : [];
     // The style's cards are sized for their slots' max lengths.
     if (v && !s.keep) for (const m of slotIssues(v)) issues.push({ level: "warn", message: `"${s.anchor}": ${m}` });
-    for (const src of srcs) if (!existsSync(join(dir, src))) issues.push({ level: "error", message: `missing asset ${src}` });
+    for (const src of srcs) if (!src.startsWith("data:") && !existsSync(join(dir, src))) issues.push({ level: "error", message: `missing asset ${src}` });
     if (v?.kind === "windows") s.visual = { ...v, items: v.items.map((it) => ({ ...it, ...(existsSync(join(dir, it.src)) ? { size: imageSize(join(dir, it.src)) } : {}) })) };
     if (v?.kind === "image" && existsSync(join(dir, v.src))) {
       const size = imageSize(join(dir, v.src));
@@ -182,6 +183,12 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const cuts = explicit ? [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b) : found;
   issues.push(...qcPlan(resolved, words, plan.shots.map((s) => s.note), cuts));
   if (youtube) issues.push(...saidTwice(words, plan.remove));
+  // A card put in from the library starts with its sample words, which this video never says.
+  plan.shots.forEach((s) => {
+    const sample = s.visual && cards.find((c) => c.kind === s.visual!.kind)?.sample?.visual;
+    if (sample && JSON.stringify(stripAnchors(s.visual)) === JSON.stringify(stripAnchors(sample)))
+      issues.push({ level: "warn", message: `"${s.at}": the ${s.visual!.kind} still shows the library's sample words; put in what is said here` });
+  });
   // An export of a cut writes its own files: the editor re-resolves the plan whenever it reloads,
   // and must not swap the flattened cut out from under a running export.
   const name = exportCut ? "export" : "resolved";

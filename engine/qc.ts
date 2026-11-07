@@ -41,6 +41,15 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     const settle = v.kind === "constraint" ? 5 : 3;
     if (s.layout !== "over" && v.kind !== "chapter" && linger > settle)
       issues.push({ level: "warn", message: `${label(s, i)}: lingers ${linger.toFixed(1)}s after its last part lands; end it about 2s after` });
+    // A part that lands as the graphic leaves is never seen: its word is said too late in the shot.
+    let chain = i;
+    while (r.shots[chain + 1]?.keep) chain++;
+    const end = r.shots[chain].end;
+    // A list that carries on in a later graphic names what is to come: a part said there lands there.
+    const landsLater = (t: number) => r.shots.some((o, k) => k > chain && o.visual?.kind === v.kind && t >= o.start && t < o.end - 0.4 && (o.visual as { times?: number[] }).times?.includes(t));
+    const late = (v.times ?? []).findIndex((t) => t > end - 0.4 && !landsLater(t));
+    if (late >= 0)
+      issues.push({ level: "error", message: `${label(s, i)}: part ${late + 1} lands at ${v.times![late].toFixed(2)}s, as the graphic ends at ${end.toFixed(2)}s, so it is never seen; end the graphic later` });
     // Two full-frame cards back to back: cut to Owain between them.
     const next = r.shots[i + 1];
     if (s.layout === "media" && next && next.layout === "media" && !next.keep)
@@ -104,8 +113,9 @@ export const saidTwice = (words: Word[], remove: [number, number][] = []): Issue
 
 export type Box = [number, number, number, number]; // left, top, width, height
 export type Measure = {
-  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string; clipped?: boolean }[];
+  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string; clipped?: boolean; label?: boolean }[];
   marks: { box: Box; opacity: number }[];
+  edges?: { points: number[][]; opacity: number }[];
   words: { block: number; top: number; h: number }[];
   paint?: Box[];
 };
@@ -114,6 +124,7 @@ export type Measure = {
 // player controls and Instagram's caption sit.
 export const SAFE = { x: 0.05, top: 0.05, bottom: 0.085 };
 const MIN_GAP = 6;
+const MAX_LABELS = 5;
 const visible = (o: number) => o >= 0.3;
 
 const gap = (a: Box, b: Box) => {
@@ -159,7 +170,13 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     }
     for (const k of m.marks.filter((q) => visible(q.opacity)))
       if (gap(t.box, k.box) < MIN_GAP) err(`"${short(t.text)}" touches a line or dot (${gap(t.box, k.box).toFixed(0)}px)`);
+    // Labels are welcome until they clutter or sit on the drawing (Owain, 2026-11-06).
+    const on = ([px, py]: number[]) => px > x - 4 && px < x + w + 4 && py > y - 4 && py < y + h + 4;
+    if ((m.edges ?? []).some((e) => visible(e.opacity) && e.points.some(on))) err(`"${short(t.text)}" sits on a line or shape in the diagram`);
+    if (t.label && t.text.split(/\s+/).length > 3) warn(`label "${short(t.text)}" is over three words`);
   }
+  const labels = texts.filter((t) => t.label).length;
+  if (labels > MAX_LABELS) warn(`${labels} labels at once; a diagram holds ${MAX_LABELS} at most`);
   for (let i = 0; i < texts.length; i++)
     for (let j = i + 1; j < texts.length; j++) {
       const [a, b] = [texts[i], texts[j]];

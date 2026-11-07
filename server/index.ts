@@ -14,10 +14,12 @@ import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { redo, redoable, snapshot, undo, versions } from "./history.ts";
 import { Cut, MAIN } from "../engine/schema.ts";
 import { mapRanges } from "../engine/cut.ts";
+import { planIndex } from "../engine/insert.ts";
 import { trashProject } from "./trash.ts";
-import { dropBroll, moveShotStart } from "./insert.ts";
+import { dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
+import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } from "./variants.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
 import { clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
 import { effectList } from "../effects/preview.ts";
@@ -108,7 +110,7 @@ export async function startServer(port = 4747) {
     if (parts.length !== 2) return;
     if (parts[1] === "edit.json" || parts[1] === "cut.json") planChanged(parts[0]);
     if (parts[1] === "status.json") broadcast({ type: "status", slug: parts[0] });
-    if (parts[1] === "suggestions.json") broadcast({ type: "plan", slug: parts[0] });
+    if (parts[1] === "suggestions.json" || parts[1] === "variants.json") broadcast({ type: "plan", slug: parts[0] });
   });
 
   // Long jobs (ingest, render) run as CLI processes so the server stays responsive. They report
@@ -235,6 +237,7 @@ export async function startServer(port = 4747) {
         working: isRunning(slug),
         assets: listAssets(dir, slug),
         suggestions: loadSuggestions(dir),
+        variants: resolveVariants(dir),
         // The scan is in the main clip's time; with a cut it is shown where those stretches play.
         camera: existsSync(join(dir, "build/camera.json")) ? (line.explicit ? mapRanges(line.cut, MAIN, readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : undefined,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
@@ -289,6 +292,39 @@ export async function startServer(port = 4747) {
     }
     if (action === "shot-start") {
       moveShotStart(projects, slug, Number(input.from), Number(input.to));
+      return send(res, 200, { ok: true });
+    }
+    // Takes on one graphic: Claude writes them to variants.json; the editor plays them side by side.
+    if (action === "variants") {
+      const start = Number(input.start);
+      const note = String(input.note ?? "").trim() || undefined;
+      const { resolved } = resolveProject(projects, slug);
+      const k = resolved?.shots.findIndex((s) => Math.abs(s.start - start) < 0.05) ?? -1;
+      if (!resolved || k < 0) return send(res, 409, { error: "no graphic starts there" });
+      const plan = JSON.parse(readFileSync(join(dir, "edit.json"), "utf8")) as { shots: { at: string }[] };
+      const current = plan.shots[planIndex(plan.shots, resolved.shots, k)];
+      let last = k;
+      while (resolved.shots[last + 1]?.keep) last++;
+      const end = resolved.shots[last].end;
+      const said = timeline(dir).words.filter((w) => w.start >= start - 0.05 && w.start < end).map((w) => w.text).join(" ");
+      saveVariants(dir, { start, note, items: [] });
+      ask(projects, slug, note ? `Variants: ${note}` : "Variants for this graphic", undefined, start, (m) => broadcast({ type: "chat", slug, message: m }), () => broadcast({ type: "plan", slug }), VARIANTS(slug, start, current, said, note));
+      return send(res, 200, { ok: true });
+    }
+    if (action === "variant-use") {
+      const v = loadVariants(dir);
+      const take = v?.items.find((x) => x.id === input.id);
+      if (!v || !take) return send(res, 404, { error: "no such take" });
+      editShot(projects, slug, v.start, { shot: take.shot });
+      clearVariants(dir);
+      broadcast({ type: "plan", slug });
+      return send(res, 200, { ok: true });
+    }
+    if (action === "variant-clear") return clearVariants(dir), broadcast({ type: "plan", slug }), send(res, 200, { ok: true });
+    if (action === "place") return send(res, 200, { start: placeCard(projects, slug, String(input.card ?? ""), Number(input.at ?? 0)) });
+    if (action === "shot-end") return moveShotEnd(projects, slug, Number(input.start), Number(input.to)), send(res, 200, { ok: true });
+    if (action === "shot") {
+      editShot(projects, slug, Number(input.start), { shot: input.shot as Parameters<typeof editShot>[3]["shot"], remove: input.remove === true });
       return send(res, 200, { ok: true });
     }
     if (action === "stop") return stop(slug), send(res, 200, { ok: true });

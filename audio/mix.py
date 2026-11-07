@@ -40,7 +40,7 @@ def library_root() -> Path:
 TARGET_LUFS = -14.0
 TRUE_PEAK = -1.5  # headroom for AAC encoding, which adds about 0.5 dB
 
-# The voice arrives finished: Owain grades and masters it in Final Cut (2026-10-22). It is never
+# The voice arrives finished, from Auphonic (media/auphonic.ts) or Final Cut. It is never
 # filtered, EQ'd or compressed here; only one linear gain reaches the platform loudness target.
 
 
@@ -56,6 +56,14 @@ def loudness(path: Path) -> dict:
     return json.loads(out[out.rindex("{") : out.rindex("}") + 1])
 
 
+def duck_graph(gain: float, music_db: float) -> str:
+    return (
+        f"[0:a]volume={gain}dB,asplit=2[v][key];"
+        f"[1:a]volume={music_db}dB[m];"
+        "[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=40:release=900:makeup=1[duck]"
+    )
+
+
 def main(project: Path, config: str = "build/audio.json") -> None:
     cfg = json.loads((project / config).read_text())
     seconds = float(cfg["duration"])
@@ -63,6 +71,7 @@ def main(project: Path, config: str = "build/audio.json") -> None:
     work = project / "build/audio"
     work.mkdir(parents=True, exist_ok=True)
     n = int(seconds * SR)
+    gain = float(cfg.get("voiceGain", 0))
 
     def fit(x: np.ndarray) -> np.ndarray:
         x = x[:n]
@@ -82,10 +91,14 @@ def main(project: Path, config: str = "build/audio.json") -> None:
         sf.write(work / "music.wav", fit(bed), SR, subtype="FLOAT")
         music_db = float(m.get("level", -20))
         if m.get("under") is not None:
-            # Set the bed relative to this take's voice, so "15 LU under" sounds the same on every recording.
+            # Set the bed relative to this take's voice, as heard: after the duck, which takes about 8 dB
+            # off a reel, where the voice hardly stops. The duck follows the voice, so one correction lands it.
             voice_i = float(loudness(work / "voice.wav")["input_i"]) + float(cfg.get("voiceGain", 0))
             music_db = voice_i - float(m["under"]) - float(loudness(work / "music.wav")["input_i"])
-            print(f"  music: {m['under']} LU under the voice ({music_db:+.1f} dB)")
+            ducked = work / "ducked.wav"
+            ffmpeg(["-i", str(work / "voice.wav"), "-i", str(work / "music.wav"), "-filter_complex", duck_graph(gain, music_db) + ";[v]anullsink", "-map", "[duck]", "-c:a", "pcm_f32le", str(ducked)])
+            music_db += voice_i - float(m["under"]) - float(loudness(ducked)["input_i"])
+            print(f"  music: {m['under']} LU under the voice as heard ({music_db:+.1f} dB)")
     else:
         # A synthesised bed always sounded cheap; no music beats bad music.
         if m:
@@ -98,11 +111,8 @@ def main(project: Path, config: str = "build/audio.json") -> None:
     effects = sfx.render(cfg.get("sfx", []), seconds, 220.0, library, youtube=cfg.get("canvas") == "youtube")
     sf.write(work / "sfx.wav", fit(effects * 0.5), SR, subtype="FLOAT")
 
-    gain = float(cfg.get("voiceGain", 0))
     graph = (
-        f"[0:a]volume={gain}dB,asplit=2[v][key];"
-        f"[1:a]volume={music_db}dB[m];"
-        "[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=40:release=900:makeup=1[duck];"
+        duck_graph(gain, music_db) + ";"
         "[2:a]volume=-7dB[fx];"
         "[v][duck][fx]amix=inputs=3:normalize=0,alimiter=limit=0.89:attack=3:release=60[mix]"
     )

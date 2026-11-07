@@ -9,6 +9,9 @@ export type LibraryClip = { id: string; duration: number; description: string; t
 export type Suggestion = { id: string; start: number; end: number; layout: string; visual: { kind: string }; reason: string; status: "pending" | "accepted" | "rejected"; note?: string };
 export type Effect = { id: string; kind: string; purpose: string; summary: string };
 export type Version = { n: number; at: string; by: string };
+// Claude's takes on one graphic (server/variants.ts), each resolved against the real words.
+export type Take = { id: string; label: string; reason?: string; shot: Record<string, unknown> & { at: string; layout: string }; resolved?: import("../engine/schema").ResolvedShot; problems: string[] };
+export type Variants = { start: number; note?: string; items: Take[] };
 // A clip in the project's bin. "main" is the one the project was made from.
 export type BinClip = { id: string; name: string; duration: number; status: Status; ready: boolean };
 export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status };
@@ -25,6 +28,7 @@ export type Project = {
   camera?: [number, number][];
   assets?: Asset[];
   suggestions?: Suggestion[];
+  variants?: Variants | null;
   render?: { file: string; at: number } | null;
   redo?: number;
   bin?: BinClip[];

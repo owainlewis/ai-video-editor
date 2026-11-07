@@ -70,6 +70,10 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "grid": return [v.at, ...v.groups.map((g) => g.at)];
     case "funnel": return [...v.items.map((it) => it.at), v.at, ...v.target.lines.map((l) => l.at)];
     case "type": return [v.at, v.settle, ...v.chips.map((c) => c.at)];
+    case "words": return v.lines.map((l) => l.at);
+    case "focus": return v.items.map((it) => it.at);
+    case "shift": return [v.from.at, v.to.at];
+    case "map": return [...v.nodes.map((n) => n.at), ...v.edges.map((e) => e.at)];
     case "beats": return [...v.items.map((it) => it.at), ...(v.line ? [v.line.at] : [])];
     default: return [];
   }
@@ -163,11 +167,18 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     if (!anchors.length) continue;
     let from = shot.index;
     // A flow's edges are searched from the shot's start again, so they can interleave with its nodes.
-    const edgesFrom = v.kind === "flow" ? v.nodes.length : -1;
+    const edgesFrom = v.kind === "flow" || v.kind === "map" ? v.nodes.length : -1;
+    // The house graphics show one part at a time, so parts without a word of their own are spread
+    // over the shot instead of cascading in together.
+    const spread = v.kind === "words" || v.kind === "focus" || v.kind === "map" || v.kind === "shift";
+    let last = k;
+    while (shots[last + 1]?.keep) last++;
+    const span = shots[last].end - shot.start;
+    const gap = Math.min(1.1, Math.max(0.35, (span - 1.5) / Math.max(1, anchors.length - 1)));
     const times = anchors.map((a, n) => {
       if (n === edgesFrom) from = shot.index;
       // Unanchored items cascade in quickly so a group reads as one arrival.
-      if (!a) return shot.start + n * 0.12;
+      if (!a) return spread ? shot.start + 0.3 + n * gap : shot.start + n * 0.12;
       const j = findPhrase(words, a, from);
       if (j < 0) {
         issues.push(cut
@@ -411,8 +422,8 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
     if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
-    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title")
-      issues.push({ level: "error", message: `${label}: over takes a lower third or a title` });
+    if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "words")
+      issues.push({ level: "error", message: `${label}: over takes words, a title or a lower third` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
     if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
     // A punch-in re-renders the whole picture from the working copy, which shifts its colour and
@@ -516,18 +527,35 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
 
 export const CLEAN_LAYOUTS = ["split", "full", "card", "diagram", "over", "cutaway"] as const;
 
-// Sounds in the clean style: few, real and short. A riser into a shot that asks for one, key taps
-// under a chip as it types, and a tick as each list item lands. Nothing on plain cuts.
+// Sounds in the clean style: each marks something the eye can see land (Owain, 2026-11-07: "we kept
+// reusing the same sound effect... in random places"). A low whoosh as a graphic takes over, a sub hit
+// under a hit word, a ring for a logo, a tick per item and per diagram, a click per marker, keys under
+// typing. A diagram draws on many small beats, so only its first beat sounds, and only in the clear.
+// A kind has several files that take turns (audio/library.py). Nothing on a cut back to the speaker.
+const CLEAR = 1;
 export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
   const ev: SfxEvent[] = [];
-  for (const s of shots) {
+  const diagram: SfxEvent[] = [];
+  const takesOver = (s?: ResolvedShot) => !!s && (s.layout === "diagram" || s.layout === "over" || s.layout === "card");
+  const typing = (at: number, chars: number, cps: number) => {
+    for (let n = 0; n <= chars; n += 3) ev.push({ kind: "key", t: at + n / cps, gain: 0.5, exact: true });
+  };
+  shots.forEach((s, i) => {
     if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.5, exact: true });
     else if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
-    if (s.chip) for (let n = 0; n <= s.chip.name.length; n += 2) ev.push({ kind: "key", t: s.chip.at + 0.25 + n * 0.035, gain: 0.3, exact: true });
+    else if (takesOver(s) && !takesOver(shots[i - 1])) ev.push({ kind: "thud", t: s.start, gain: 0.7, exact: true });
+    if (s.hit) ev.push({ kind: "impact", t: s.hit.at, gain: 0.6, exact: true });
+    if (s.chip) typing(s.chip.at + 0.25, s.chip.name.length, 1 / 0.035);
     const v = s.visual;
-    if (!s.keep && v?.kind === "list") (v.times ?? []).forEach((t) => ev.push({ kind: "pop", t, gain: 0.4, exact: true }));
-  }
-  return ev.sort((a, b) => a.t - b.t);
+    if (!v || s.keep) return;
+    const times = v.times ?? [];
+    if (v.kind === "claudecode") v.lines.forEach((l, n) => { if (l.style === "prompt") typing(times[n] ?? s.start + 0.35, l.text.length, 26); });
+    if (v.kind === "custom" && times.length) diagram.push({ kind: "pop", t: times[0], gain: 0.6, exact: true });
+    const each = v.kind === "image" ? "blip" : v.kind === "logos" ? "chime" : v.kind === "list" || v.kind === "beats" ? "pop" : null;
+    if (each) times.forEach((t) => ev.push({ kind: each, t, gain: 0.6, exact: true }));
+  });
+  const loud = ev.filter((e) => e.kind !== "key");
+  return [...ev, ...diagram.filter((d) => loud.every((e) => Math.abs(e.t - d.t) >= CLEAR))].sort((a, b) => a.t - b.t);
 };
 
 // The clean style's house rules, from the samples Owain chose (2026-11-06). `faceless`: a reel with

@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { Resolved, Word } from "../engine/schema";
+import type { CutPlan, Resolved, Word } from "../engine/schema";
+import { deleteRange } from "../engine/cut";
+import { tighten, type Trim, wordsRange } from "../engine/tighten";
 import { api, type Asset, type BinClip, clock, type Effect, type LibraryClip } from "./api";
-import { CLIP, SOURCE, toSentences } from "./Timeline";
+import { CLIP, gist, SOURCE, toSentences } from "./Timeline";
 import { Tile } from "./Gallery";
-import { cardPlan, settledTime } from "../effects/preview";
+import { cardPlan, settledTime, shotPlan } from "../effects/preview";
 
 // The left panel: the project's clips (its media bin: drag one onto the A-roll track to cut it in),
 // its assets (drop b-roll and images in; click one to mention it in a note) and the script (click a
@@ -18,8 +20,26 @@ export const Library: React.FC<{
   canvas: string;
   theme?: Resolved["theme"];
   bin: BinClip[];
-}> = ({ slug, assets, words, time, onUse, onSeek, canvas, theme, bin }) => {
-  const [tab, setTab] = useState<"clips" | "assets" | "effects" | "script">("assets");
+  r: Resolved;
+  picked: number | null;
+  onPick: (start: number) => void;
+  cut: CutPlan;
+  onCut: (cut: CutPlan) => Promise<unknown>;
+  onSelect: (range: { start: number; end: number; label?: string } | null) => void;
+}> = ({ slug, assets, words, time, onUse, onSeek, canvas, theme, bin, r, picked, onPick, cut, onCut, onSelect }) => {
+  const [tab, setTab] = useState<"clips" | "assets" | "graphics" | "effects" | "script">("graphics");
+  // A library card goes in at the playhead and opens in the inspector.
+  const place = (card: string) =>
+    api.post(slug, "place", { card, at: time }).then((d) => onPick((d as { start: number }).start)).catch((e) => setError(String(e.message)));
+  const graphics = useMemo(
+    () =>
+      r.shots.flatMap((s, i) => {
+        if (!s.visual || s.keep) return [];
+        const plan = shotPlan(r, i, false);
+        return [{ key: `${s.start}`, start: s.start, title: s.visual.kind === "custom" ? `custom: ${(s.visual as { name?: string }).name}` : s.visual.kind, sub: `${clock(s.start)} · ${gist(s.visual) || s.anchor}`, plan, from: Math.max(0, s.start - 0.3), to: Math.min(r.duration, s.end + 0.3), settled: settledTime(s), visual: s.visual }];
+      }),
+    [r],
+  );
   const [effects, setEffects] = useState<Effect[]>([]);
   useEffect(() => {
     api.effects(canvas).then(setEffects).catch(() => {});
@@ -83,7 +103,7 @@ export const Library: React.FC<{
   };
 
   return (
-    <aside className="library">
+    <aside className={`library ${canvas === "reel" ? "reel" : ""}`}>
       <div className="tabs">
         <button className={tab === "clips" ? "on" : ""} onClick={() => setTab("clips")}>
           Clips
@@ -91,8 +111,11 @@ export const Library: React.FC<{
         <button className={tab === "assets" ? "on" : ""} onClick={() => setTab("assets")}>
           Assets
         </button>
+        <button className={tab === "graphics" ? "on" : ""} onClick={() => setTab("graphics")}>
+          Graphics
+        </button>
         <button className={tab === "effects" ? "on" : ""} onClick={() => setTab("effects")}>
-          Effects
+          Library
         </button>
         <button className={tab === "script" ? "on" : ""} onClick={() => setTab("script")}>
           Script
@@ -187,28 +210,151 @@ export const Library: React.FC<{
           </div>
           {clips.length > 0 && shown.length === 0 && <p className="muted small">No b-roll matches "{query}".</p>}
         </div>
+      ) : tab === "graphics" ? (
+        <div className="assets">
+          <p className="muted small">Every graphic in this video. Click one to edit it.</p>
+          {error && <p className="error small">{error}</p>}
+          <div className="effects">
+            {graphics.map((g) => (
+              <div key={g.key} className={picked !== null && Math.abs(picked - g.start) < 0.02 ? "picked" : ""}>
+                <Tile item={g} onOpen={() => (onPick(g.start), onSeek(Math.min(g.to - 0.4, g.start + 1.5)))} />
+              </div>
+            ))}
+          </div>
+          {graphics.length === 0 && <p className="muted small">No graphics yet. Add one from the Library tab, or ask Claude.</p>}
+        </div>
       ) : tab === "effects" ? (
         <div className="assets">
           <p className="muted small">
-            Every graphic in your style, live. Hover to play; click one to ask for it in your note. <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
+            Every graphic in your style, live. Hover to play; click one to add it at the playhead ({clock(time)}). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
           </p>
+          {error && <p className="error small">{error}</p>}
           <div className="effects">
             {effects.map((e) => {
               const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme);
               const item = { key: e.id, title: e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
-              return <Tile key={e.id} item={item} onOpen={() => onUse(`the ${e.kind} graphic (${e.id})`)} />;
+              return <Tile key={e.id} item={item} onOpen={() => place(e.id)} />;
             })}
           </div>
         </div>
       ) : (
-        <div className="script">
-          {sentences.map((s, i) => (
-            <p key={i} className={time >= s.start && time < s.end ? "now" : ""} onClick={() => onSeek(s.start)}>
-              <span className="t">{clock(s.start)}</span> {s.text}
-            </p>
-          ))}
-        </div>
+        <Script words={words} sentences={sentences} time={time} cut={cut} onCut={onCut} onSeek={onSeek} onSelect={onSelect} />
       )}
     </aside>
+  );
+};
+
+// The script, word by word: select words and cut them (the button, or Delete), as in a text editor.
+// Tighten proposes what to lose (retakes, fillers, long pauses) struck through in the script; click
+// one to keep it, then cut the rest in one go. Every cut is one version, so undo brings it back.
+const Script: React.FC<{
+  words: Word[];
+  sentences: { start: number; end: number; text: string }[];
+  time: number;
+  cut: CutPlan;
+  onCut: (cut: CutPlan) => Promise<unknown>;
+  onSeek: (t: number) => void;
+  onSelect: (range: { start: number; end: number; label?: string } | null) => void;
+}> = ({ words, time, cut, onCut, onSeek, onSelect }) => {
+  const [picked, setPicked] = useState<[number, number] | null>(null);
+  const [trims, setTrims] = useState<(Trim & { on: boolean })[] | null>(null);
+  const [error, setError] = useState("");
+  // A new cut moves every word, so old proposals and selections no longer point at the right ones.
+  useEffect(() => (setTrims(null), setPicked(null)), [words]);
+  const struck = useMemo(() => {
+    const m = new Map<number, Trim & { on: boolean }>();
+    for (const t of trims ?? []) if (t.words) for (let i = t.words[0]; i <= t.words[1]; i++) m.set(i, t);
+    return m;
+  }, [trims]);
+  const pauses = useMemo(() => new Map((trims ?? []).filter((t) => t.kind === "pause").map((t) => [words.findIndex((w) => w.end > t.from - 0.2), t])), [trims, words]);
+
+  const select = () => {
+    const sel = window.getSelection();
+    const at = (n: Node | null) => Number((n instanceof Element ? n : n?.parentElement)?.closest("[data-i]")?.getAttribute("data-i") ?? NaN);
+    const a = at(sel?.anchorNode ?? null);
+    const b = at(sel?.focusNode ?? null);
+    if (!sel || sel.isCollapsed || Number.isNaN(a) || Number.isNaN(b)) return;
+    const range: [number, number] = [Math.min(a, b), Math.max(a, b)];
+    setPicked(range);
+    const [start, end] = wordsRange(words, range[0], range[1]);
+    onSelect({ start, end, label: `${range[1] - range[0] + 1} words` });
+  };
+  const apply = (ranges: [number, number][]) => {
+    let next = cut;
+    for (const [a, b] of [...ranges].sort((x, y) => y[0] - x[0])) next = deleteRange(next, a, b);
+    setError("");
+    return onCut(next).then(() => onSelect(null)).catch((e) => setError(String(e.message)));
+  };
+  const kept = (trims ?? []).filter((t) => t.on);
+  const saves = kept.reduce((s, t) => s + t.to - t.from, 0);
+
+  // Sentences rebuilt over word indices, so each word keeps its place for selecting and striking.
+  const lines = useMemo(() => {
+    const out: number[][] = [];
+    let cur: number[] = [];
+    words.forEach((w, i) => {
+      cur.push(i);
+      const next = words[i + 1];
+      if (/[.?!]$/.test(w.text) || !next || next.start - w.end > 0.8 || cur.length >= 30) (out.push(cur), (cur = []));
+    });
+    return out;
+  }, [words]);
+
+  return (
+    <div className="script-panel">
+      <div className="script-bar">
+        {picked ? (
+          <>
+            <button className="small primary" onClick={() => apply([wordsRange(words, picked[0], picked[1])]).then(() => setPicked(null))}>Cut {picked[1] - picked[0] + 1} word{picked[0] === picked[1] ? "" : "s"}</button>
+            <button className="small quiet" onClick={() => (setPicked(null), onSelect(null), window.getSelection()?.removeAllRanges())}>Cancel</button>
+          </>
+        ) : trims ? (
+          <>
+            <button className="small primary" disabled={!kept.length} onClick={() => apply(kept.map((t) => [t.from, t.to]))}>Cut {kept.length} ({saves.toFixed(1)}s)</button>
+            <button className="small quiet" onClick={() => setTrims(null)}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <button className="small" onClick={() => setTrims(tighten(words).map((t) => ({ ...t, on: true })))} title="Find retakes, filler words and long pauses">Tighten</button>
+            <span className="muted small">Select words to cut them.</span>
+          </>
+        )}
+      </div>
+      {trims && (
+        <p className="muted small trims-note">
+          {trims.length ? `${trims.filter((t) => t.kind === "retake").length} retakes, ${trims.filter((t) => t.kind === "filler").length} fillers, ${trims.filter((t) => t.kind === "pause").length} long pauses. Struck words go; click one to keep it.` : "Nothing to tighten: no retakes, fillers or long pauses."}
+        </p>
+      )}
+      {error && <p className="error small">{error}</p>}
+      <div className="script" onMouseUp={select}>
+        {lines.map((line, n) => {
+          const s = words[line[0]];
+          const e = words[line[line.length - 1]];
+          return (
+            <p key={n} className={time >= s.start && time < e.end ? "now" : ""}>
+              <span className="t" onClick={() => onSeek(s.start)}>{clock(s.start)}</span>{" "}
+              {line.map((i) => {
+                const t = struck.get(i);
+                const p = pauses.get(i);
+                const toggle = (x: Trim & { on: boolean }) => setTrims((all) => all!.map((y) => (y === x ? { ...y, on: !y.on } : y)));
+                return (
+                  <React.Fragment key={i}>
+                    <span
+                      data-i={i}
+                      className={`w ${t ? `drop ${t.kind} ${t.on ? "" : "off"}` : ""} ${picked && i >= picked[0] && i <= picked[1] ? "sel" : ""} ${time >= words[i].start && time < (words[i + 1]?.start ?? words[i].end) ? "here" : ""}`}
+                      title={t ? `${t.kind}: click to ${t.on ? "keep" : "cut"}` : clock(words[i].start)}
+                      onClick={() => (t ? toggle(t) : window.getSelection()?.isCollapsed && onSeek(words[i].start + 0.01))}
+                    >
+                      {words[i].text}
+                    </span>
+                    {p && <span className={`gap ${p.on ? "" : "off"}`} onClick={() => toggle(p)} title="Long pause: click to keep it">{p.text.replace(" pause", "")}</span>}{" "}
+                  </React.Fragment>
+                );
+              })}
+            </p>
+          );
+        })}
+      </div>
+    </div>
   );
 };

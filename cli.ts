@@ -9,10 +9,12 @@
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
 //   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
 //   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
+//   npm run studio -- auphonic <slug>              clean the voice with Auphonic (timing unchanged; key in .env)
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
+import { cleanProject } from "./media/auphonic.ts";
 import { resolveProject } from "./media/project.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
@@ -55,6 +57,12 @@ async function main() {
       const id = flag("id") ?? slugFor(file);
       await addClip(projects, slug, resolve(file), id, log, flag("name"));
       console.log(`Added ${id} to projects/${slug}/clips. Drag it onto the A-roll track in the editor.`);
+      return;
+    }
+    case "auphonic": {
+      if (!target) throw new Error("auphonic needs a project");
+      await cleanProject(projects, target, log);
+      console.log(`Voice cleaned in projects/${target}. The original is source/voice.original.wav.`);
       return;
     }
     case "check": {
@@ -104,6 +112,19 @@ async function main() {
       const total = ranges.reduce((t, [a, b]) => t + b - a, 0);
       console.log(`On camera ${total.toFixed(0)}s, in ${ranges.length} stretches:`);
       for (const [a, b] of ranges) console.log(`  ${a.toFixed(1)}s to ${b.toFixed(1)}s (${(b - a).toFixed(1)}s)`);
+      return;
+    }
+    case "variants": {
+      const { resolveVariants } = await import("./server/variants.ts");
+      const v = resolveVariants(join(projects, need(target)));
+      if (!v?.items.length) {
+        console.log("  ERROR  no takes in variants.json");
+        process.exitCode = 1;
+        return;
+      }
+      for (const it of v.items) for (const p of it.problems) console.log(`  ERROR  ${it.id} (${it.label}): ${p}`);
+      if (v.items.some((it) => it.problems.length)) process.exitCode = 1;
+      else console.log(`${v.items.length} takes, all valid.`);
       return;
     }
     case "suggestions": {

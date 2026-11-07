@@ -1,0 +1,346 @@
+   0.00  There's a new way to vibe code by Google called the elephant goldfish model
+   4.02  and it's built to catch problems before your agent builds anything.
+   7.58  Usually when you ask your agent to build something it just builds it and
+  11.06  you only find the problems after.
+  12.86  But with this one your agent's work gets torn apart first.
+  16.08  The elephant and the goldfish in the name are two different kinds of agents
+  19.52  and the names tell you exactly how each one works.
+  22.68  And the way Google keeps those two apart is what makes it different.
+  25.86  Out of all the other workflows we looked at only one does anything like
+  29.60  it.
+  29.80  We tried it on our own app with a new feature and it caught
+  32.60  a real bug that the usual review missed.
+  35.18  If this is your first time we're a software company and this is our
+  38.34  channel AI Labs.
+  39.70  And in this video we're going to show you what the elephant goldfish model
+  42.66  is, how it works and how to use it on your own app.
+  45.64  Now the elephant goldfish model is Google's way of thoroughly planning what you want
+  49.92  to build before you actually build it.
+  52.06  It's Google's take on spec driven development where you write down the complete plan
+  56.20  for your app first and then the agent builds the app by following that
+  59.76  plan.
+  60.18  It was developed by engineers at Google and it's based on an article written
+  63.84  by Dave Rensen called Elephants Goldfish and the New Golden Age of Software Engineering.
+  68.86  And it's free for anyone to use on Google's GitHub.
+  72.00  It uses multiple agents and skills to basically plan your app in a way
+  75.98  that leaves no angle untouched and leaves your plan complete without any gaps in
+  80.50  it.
+  80.70  So that when your agent is implementing the plan it doesn't have anything to
+  84.68  guess while building because everything is documented which makes it easier to build on
+  89.00  top of.
+  89.54  And you don't just get a plan, you also get a checklist of what
+  92.42  needs to be built and how to test it to make sure everything works
+  95.76  the way you want it.
+  96.80  That way you know the feature is complete.
+  98.84  But before we go install the tool let's understand the core philosophy of this
+ 102.96  model.
+ 103.40  This model works around two roles, the elephant and the goldfish just like their
+ 107.32  name suggests.
+ 108.26  The elephant represents the part of the workflow that remembers everything about the project.
+ 112.64  It knows the whole history of your project, how your app is actually put
+ 116.08  together and what people use it for.
+ 118.18  This is the part of the workflow that's responsible for actually talking through the
+ 121.94  idea with you in depth, thinking about it from different angles, seeing where it
+ 125.92  might fail and writing the detailed planning files that form the base of the
+ 129.86  plan.
+ 130.26  The second part is the goldfish which is the part of the workflow that
+ 133.96  doesn't remember anything.
+ 135.26  These are sub -agents that have zero context.
+ 137.78  They only see the plan and your app's code and they never see what
+ 140.86  you and the main agent talked about.
+ 142.88  So nothing you said earlier can influence them in any way.
+ 145.80  The goldfish look at the plan differently from the other agents.
+ 148.90  There are multiple angles they look at the plan through.
+ 151.60  One checks if there's an easier way to do it than the plan says
+ 154.64  or if your app already has something that does the job.
+ 157.66  Another reads it like someone who knows nothing about your app and checks if
+ 161.24  it still makes sense.
+ 162.36  One looks for issues that come up when the app reaches a lot of
+ 165.42  people and they all use it at once.
+ 167.44  And another checks if the plan is clear enough that a model could build
+ 170.56  it without having to guess anything.
+ 172.20  A couple more check how the plan itself is written and set up.
+ 175.22  The elephant and the goldfish work together to create a final plan they both
+ 179.48  agree on and the other agents use that plan as their starting point.
+ 183.36  Now you might think that most agents already have a plan mode.
+ 186.48  So why would you need to go through this whole process at all?
+ 189.70  When you plan something with your model, it usually goes like this.
+ 192.92  You explain your idea, it asks you a few questions about the major details
+ 196.72  it can't decide without your input and then it writes the plan.
+ 199.82  That plan misses details and issues that come up later on and you then
+ 203.26  have to revise it again to deal with those issues.
+ 205.86  This model lets you have a complete plan that's been analyzed from every angle
+ 210.02  and doesn't leave any gaps so that when you're working, those issues don't come
+ 214.02  up no matter how many people are using the app.
+ 216.52  The other benefit comes from the goldfish.
+ 218.60  When you use the plan mode, most of the work happens in the same
+ 221.82  chat.
+ 222.34  This matters because the agent already knows what you discussed about the plan.
+ 226.18  So when it checks the plan, it basically just agrees with itself.
+ 229.88  Google says the main problem with models is that they stick to their own
+ 233.26  wrong ideas and agree with what you want instead of catching mistakes.
+ 237.08  That's why the goldfish is not allowed to see your chat.
+ 239.98  But all of these sub -agents give you a lot of notes and that's
+ 243.32  where the third role comes in, which is you.
+ 245.40  The model comes up with ideas and checks the plan, but you're the one
+ 248.78  who makes the final calls.
+ 250.28  Google says the review gives you a lot of notes on purpose, so you
+ 253.62  keep what's useful and ignore the rest.
+ 255.56  The sub -agents grade the plan using a set of written rules that act
+ 258.86  as checklists of what a good plan should have.
+ 261.12  And this review uses one sub -agent that starts a set of other sub
+ 264.80  -agents.
+ 265.34  This keeps the main agent's context from getting bloated by all the reports the
+ 269.50  other agents write and that one agent then combines them into a single report,
+ 273.90  which is the only one you review.
+ 275.62  And even after the feature is built, the plan helps a lot.
+ 278.44  Later on, a check called Drift compares the plan with your app and points
+ 282.08  out every place where they no longer match.
+ 284.46  Then you decide which one to fix.
+ 286.24  But before we install it, it would be great if you subscribe to the
+ 289.32  channel and hit the hype button.
+ 290.98  This small gesture of support goes a long way for us.
+ 293.98  Now this tool is available for whichever agent you use, whether that's Claude Code,
+ 298.14  Codex or any other.
+ 299.48  The repo has a separate install command for each one and you can copy
+ 303.04  whichever one you need.
+ 304.24  Or you can just copy the install prompt from their website, which is just
+ 307.58  the word install followed by the link to the repo and paste it into
+ 310.90  your agent.
+ 311.62  When you send that prompt, it runs all the steps to download the repo
+ 315.28  and set it up in your project.
+ 316.94  Since we were using Claude Code, it also wrote a Claude .md file so
+ 321.08  it could put the instructions for this tool in there.
+ 323.68  And there's one line in that file you'll want to check, which we'll get
+ 326.48  to in a second.
+ 327.36  When it's installed, you'll find three new folders inside your .clawed folder.
+ 331.52  One of them is called Agents and it holds all the agents that the
+ 334.66  method uses.
+ 335.64  These are the goldfish in the method that we talked about earlier.
+ 338.70  The second folder is EGM, which is just a full copy of the repo.
+ 342.80  And there's a Skills folder too, which holds all the skills that run each
+ 346.40  step of the method.
+ 347.52  These are the elephant part of the workflow.
+ 349.68  The main one is the Brainstorm skill, which basically takes your idea and turns
+ 353.90  it into a clear plan of attack.
+ 355.70  It asks you lots of questions and keeps going until the problem is clear.
+ 359.46  There's also a review skill that starts the goldfish review.
+ 362.60  It has all the steps for reviewing your plan and calling in the sub
+ 365.74  -agents.
+ 366.18  But like we said, the install also writes some instructions into the Claude .md
+ 370.38  file.
+ 370.86  So the line you'll need to check is near the end of this file
+ 373.86  and it says that Claude Code's sub -agents can't start sub -agents of their
+ 377.90  own.
+ 378.14  That's because older versions of Claude Code couldn't do that, so it wrote that
+ 382.34  from memory.
+ 383.14  But the new version of Claude Code actually lets a sub -agent start other
+ 386.68  sub -agents, unlike what the line says.
+ 388.70  So when we asked about this, Claude said it had written the Claude .md
+ 392.66  file on its own and that no step in the repo had told it
+ 396.00  to write it.
+ 396.62  We told it that line was wrong and that the review sub -agents can
+ 399.80  start their own sub -agents.
+ 401.22  So it tested it and when it saw that it does work in Claude
+ 404.36  Code, it changed that line so the method could run the way Google meant
+ 407.88  it to.
+ 408.36  You might not run into this because they're updating the repo pretty often, but
+ 412.10  that's what happened when we were recording, so it's worth checking that file.
+ 415.68  If you see a line like this in your Claude .md, ask Claude to
+ 419.22  fix it too.
+ 419.92  Or you can just copy the install command for the specific agent you're using
+ 423.62  and it will install it directly for that agent without any conflicts like this.
+ 427.66  Now we tried this on a demo fashion app that we had already built.
+ 431.02  Most of the app was done and we were just adding new features to
+ 434.08  it.
+ 434.34  The one we wanted to add was a page that shows each seller which
+ 437.62  sizes are selling, which ones have sold out, and when they should restock.
+ 441.44  The workflow actually starts with brainstorm, but before we move on to that, we
+ 445.30  need to run another command.
+ 446.88  We need to run the EGM bootstrap command.
+ 449.38  This command tells the elephant everything it needs to know about the app and
+ 452.92  how it works before it can plan anything new on top of it.
+ 456.04  This command goes through your app one folder at a time and writes a
+ 459.46  readme file for each folder that explains what the code in that folder does
+ 463.68  and all the rules it has to follow.
+ 465.74  But before it starts, if your app has more than 15 folders, it will
+ 469.60  check whether you still want to write the full mapping or not.
+ 472.78  It does that because writing readme files for that many folders takes a lot
+ 476.66  of sub -agents, so it checks with you first whether you want to do
+ 479.68  it or not.
+ 480.28  So we told it to keep going and it got to work.
+ 482.92  It started sub -agents and each one worked on a different part of the
+ 486.14  app.
+ 486.48  When they were done, they wrote the readme files.
+ 488.74  In our case, it wrote 28 new readme files and also updated the main
+ 492.96  readme file we already had.
+ 494.54  So in your main readme file, there'll be a new section that wasn't there
+ 498.18  before.
+ 498.74  It lists what each part of the app does, the rules that always have
+ 502.06  to stay true, and what changes when it runs.
+ 504.50  Every folder that has code in it gets its own readme file.
+ 507.68  It tells you what the folder is for, what's inside it, what each part
+ 511.08  does, and how the parts connect.
+ 512.78  The folders with no code in them don't get a readme file.
+ 515.56  For example, we had a specs folder with the plans we used to build
+ 518.56  the app, so it didn't get one.
+ 520.14  But there's a problem with it writing the files as readmes.
+ 522.96  These files are written for people to read, not for other agents.
+ 526.50  So agents don't normally read them unless you tell them to.
+ 529.38  That means if this command only writes readme files, Claude code won't read them
+ 533.50  on its own.
+ 534.02  There are three ways to fix this.
+ 535.96  First, you can add a Claude .md file next to each readme file and
+ 539.98  tell it to check the readme file too.
+ 541.90  If you're using codecs, you can use an agents .md file instead.
+ 545.90  Second, you can run the bootstrap command again and add a setting that tells
+ 549.56  it to create Claude .md files from the start.
+ 552.62  Or third, you can add a line to your main Claude .md file telling
+ 556.28  it to read the readme file in every folder it works in.
+ 559.36  We added a Claude .md file next to each readme to make sure Claude
+ 563.36  follows them correctly.
+ 564.54  Now, once the readme files are done, you can move on to the next
+ 567.52  step.
+ 567.94  But first, let's have a word by our sponsor, Hedra.
+ 570.62  Now, if you want to make a video for your app but don't know
+ 573.18  what to say or show in it, you can ask Hedra to help you
+ 575.84  figure that out.
+ 576.66  We gave it our app's details and asked it to research who the promo
+ 579.80  should be for.
+ 580.62  It found sources and suggested what to focus on, then asked questions about the
+ 584.42  video.
+ 584.84  The agent updated our brief and storyboard, which lay out the message and what
+ 588.80  happens in each shot.
+ 590.00  They're on the canvas next to our chat, inside a space, which keeps the
+ 593.50  project's work together.
+ 594.78  We read the brief, then asked Hedra to make the promo.
+ 597.66  It asked for approval before generating a logo and a reference image of an
+ 601.52  office worker to guide how the video looks.
+ 603.88  Then it used those images to make the video.
+ 606.12  We played the promo inside Hedra, ending with our logo.
+ 608.96  So, if you need help figuring out what your app's promo should say, try
+ 612.54  Hedra free through the link in the description and use this code for 50
+ 616.24  % off your first month.
+ 617.78  And once Bootstrap is done, the next step is to actually start building.
+ 621.70  All the steps are listed in the GitHub repo, and you can run them
+ 625.10  one at a time.
+ 626.00  The first step is to run the EGM brainstorm command and tell it the
+ 629.80  feature you want to add.
+ 631.00  When we did this, it found that we already had a written plan for
+ 634.14  this feature.
+ 634.82  It pointed out everything wrong with that plan and then asked us a bunch
+ 638.12  of questions.
+ 638.98  If you don't already have a plan like we did, it'll ask you even
+ 642.06  more questions.
+ 642.88  You just need to keep answering them, and when they're all answered, it gives
+ 646.28  you its best guess for how to build your feature.
+ 648.80  Then it gives you two choices.
+ 650.32  The first is to review it with the goldfish, which runs six goldfish that
+ 654.16  each look at it in a different way and then writes up the idea
+ 657.32  in a file called the concept brief.
+ 659.64  Or if you don't think its approach is right, you can explain more in
+ 662.76  the chat.
+ 663.24  We thought it was good enough, so we chose to review it with the
+ 666.12  goldfish.
+ 666.80  It starts one sub -agent, which starts six more in the background.
+ 670.30  Each one starts fresh and knows nothing about your chat.
+ 673.34  When they're done, it writes the concept brief file.
+ 675.96  This file is in the main folder of your project.
+ 678.44  It explains the feature, what it found when it looked into it, what's standing
+ 681.92  in the way, and everything that needs to be done.
+ 684.32  You can read it to see if it matches what you want.
+ 686.68  You can ask for as many changes as you like, but if you're happy
+ 689.74  with it, the next step is to run the EGM draft command.
+ 693.10  This command takes the concept brief file and writes the first version of the
+ 696.88  plan, called the design draft.
+ 698.64  It explains the feature, the problem it solves, and what it will and won't
+ 702.26  do, so nothing gets lost.
+ 703.86  It also lists the main paths a person takes through the feature, which are
+ 707.50  called critical user journeys, so we can write tests against them.
+ 711.16  So you'll need to approve this file and when you do, it makes changes
+ 714.52  to it.
+ 715.00  It writes the plan one part at a time and waits for your approval
+ 718.24  after each one, so you can steer it before the next part gets built
+ 721.66  on top of it.
+ 722.46  Next, it adds the technical plan, which is how the feature will actually be
+ 726.30  built.
+ 726.74  When you approve it, it adds a section called alternatives considered.
+ 730.64  That lists the other ways the feature could have been built, with the good
+ 733.84  and bad sides of each, and why they weren't picked.
+ 736.70  When you've read the alternatives, it moves on to the step -by -step building
+ 740.22  plan.
+ 740.74  It keeps updating all these sections in the design draft file, and when it's
+ 744.52  done, it saves a file named after the feature in the designs folder inside
+ 748.82  the docs folder.
+ 749.96  That designs folder is where every feature you build this way gets saved, and
+ 754.02  it's what you'll be asking your agent to build from.
+ 756.54  But this whole plan was written by the same agent that's been agreeing with
+ 759.86  you this entire time, so before anything gets built, it goes to the goldfish.
+ 763.80  To do that, you need to run the EGM review command, and it starts
+ 767.22  with a sub -agent called zoomout.
+ 769.12  It checks if there's an easier way to build the feature, or if the
+ 772.36  app already has something that does the job, and it knows nothing about your
+ 776.06  chat.
+ 776.54  When this sub -agent is done, it writes a report with a list of
+ 779.80  all the big problems.
+ 781.00  The review happens in rounds, and in each round, the plan gets checked in
+ 784.66  one way, and the sub -agent reports what it found.
+ 787.36  After each round, you can move on to the next one, or ask for
+ 790.42  changes.
+ 791.00  There are five rounds of review in total, and the tool numbers them from
+ 794.42  five to nine.
+ 795.44  After each one, it writes a report for that round, and updates the plan
+ 799.14  in the designs folder based on what it found.
+ 801.68  You can ask for fixes wherever you need them, and when all the rounds
+ 804.98  are done, you end the review.
+ 806.46  It then changes the plan's status from in review to proposed, and marks the
+ 810.48  review as finished.
+ 811.66  So basically, what you end up with is one file in your docs designs
+ 815.30  folder that you use when you ask for the feature to be built.
+ 818.46  You can open a new chat and ask your agent to build the feature
+ 821.70  in this file, and it gets to work.
+ 823.58  This way, the tricky cases get worked out before anything is built, and the
+ 827.34  result is much better because Claude has clear rules to follow.
+ 830.66  But once the feature is built, your app keeps changing, and the files don't.
+ 834.34  So it also has a command that checks if any part of your app
+ 837.56  goes against the readme files.
+ 839.26  To use it, you just run the EGM drift report command, and it asks
+ 843.00  you how much of the app you want it to check.
+ 845.22  We asked it to check against all the readme files, and it started two
+ 848.64  sub -agents to look at different parts of the app.
+ 851.06  When both of them came back, it made a full report showing what had
+ 854.54  changed, and where the app and the readme files no longer matched.
+ 858.08  It even caught real bugs in the code.
+ 860.30  For example, in our app, shop owners could delete products that had already been
+ 864.12  sold, even though the rule says a product that has sold can only be
+ 867.88  hidden, not deleted.
+ 869.18  It listed everything it found, and you can ask it to fix the problems
+ 872.58  in each part of the app, which makes your app much better.
+ 875.46  Now, this workflow is actually good if you're planning a large feature that's gonna
+ 879.30  cost you a lot if it goes wrong.
+ 881.20  That's because it went through the edge cases and possibilities more deeply than the
+ 885.54  other ways we've tried.
+ 886.82  But even though it's good, that doesn't mean you should use it for everything.
+ 890.04  Google says it isn't worth it for a small fix your agent can do
+ 893.12  in one go, because on small changes, all this planning and reviewing just slows
+ 897.24  you down.
+ 897.82  And this isn't the only way to plan with agents.
+ 900.24  There are a lot of others.
+ 901.28  With most of them, you do get a written plan, but finding out what's
+ 904.58  wrong with them is a hard part.
+ 906.20  With this one, the goldfish finds it for you, and since they never see
+ 909.64  your chat, nothing you said can talk them out of it.
+ 912.26  Out of the ones we looked at, only few others do something like that.
+ 915.90  And after you've built, this one can go back over your whole app and
+ 919.28  tell you where it no longer matches the plan, while the others mostly check
+ 922.84  one feature at a time, right after you build it.
+ 925.44  So even though it takes longer, on the features that matter, it's worth using.
+ 929.06  Now we've made a simpler version that does the same thing, but without going
+ 932.60  as in -depth as the original does by default.
+ 934.92  So if you've found value in what we do and want to support the
+ 938.28  channel, this is the best way to do it.
+ 940.18  The link's in the description.
+ 941.48  That brings us to the end of this video.
+ 943.28  If you'd like to support the channel and help us keep making videos like
+ 946.66  this, you can do so by using the super thanks button below.
+ 949.82  As always, thank you for watching and I'll see you in the next one.

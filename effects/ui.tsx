@@ -10,7 +10,7 @@ import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, In, lerp, Mark, MOVE, prog } from "./motion";
 import { t as type } from "./theme";
-import { CUSTOM } from "./custom";
+import { CUSTOM, STILL } from "./custom";
 
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { shot: ResolvedShot; time: number };
@@ -97,7 +97,7 @@ const ClaudeCode: React.FC<Props & { v: V<"claudecode"> }> = ({ shot, time, v })
               if (l.style === "prompt") {
                 const s = typed(l.text, time, ats[i]);
                 return (
-                  <div key={i} style={{ background: "rgba(255,255,255,0.07)", margin: `0 -${fs * 0.5}px ${fs * 0.4}px`, padding: `${fs * 0.15}px ${fs * 0.5}px`, borderRadius: 6, color: "#F2EFEA" }}>
+                  <div key={i} style={{ background: "#2A2928", margin: `0 -${fs * 0.5}px ${fs * 0.4}px`, padding: `${fs * 0.15}px ${fs * 0.5}px`, borderRadius: 6, color: "#F2EFEA" }}>
                     <span style={{ color: "#8A867F" }}>{"❯ "}</span>
                     {s}
                     <Caret time={time} on={i === lastPrompt && s.length <= l.text.length} color="#F2EFEA" />
@@ -461,7 +461,7 @@ const Custom: React.FC<Props & { v: V<"custom"> }> = ({ shot, time, v }) => {
   const C = CUSTOM[v.name];
   if (!C) throw new Error(`no custom graphic "${v.name}" in effects/custom/index.ts`);
   // A slow push across the shot, so a bespoke graphic never sits still.
-  const push = 1 + 0.06 * Math.min(1, Math.max(0, (time - shot.start) / Math.max(0.5, shot.end - shot.start)));
+  const push = STILL.has(v.name) ? 1 : 1 + 0.06 * Math.min(1, Math.max(0, (time - shot.start) / Math.max(0.5, shot.end - shot.start)));
   return (
     <AbsoluteFill style={{ scale: String(push) }}>
       <C shot={shot} time={time} props={v.props} times={v.times ?? []} {...box} />

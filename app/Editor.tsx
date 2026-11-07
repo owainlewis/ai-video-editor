@@ -4,8 +4,9 @@ import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
 import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
-import type { CutPlan, Resolved } from "../engine/schema";
+import type { CutPlan, Resolved, ResolvedShot } from "../engine/schema";
 import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
+import { Inspector } from "./Inspector";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
 
@@ -27,6 +28,9 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [dropError, setDropError] = useState("");
   const [segment, setSegment] = useState<string | null>(null);
   const [rate, setRate] = useState(1);
+  // The graphic open in the inspector (by its start time), and its unsaved look while it is edited.
+  const [picked, setPicked] = useState<number | null>(null);
+  const [draft, setDraft] = useState<ResolvedShot | null>(null);
   const player = useRef<PlayerRef>(null);
   // Each clip's loudness, read once, so trims snap to the real pauses between words.
   const [levels, setLevels] = useState<Record<string, Levels>>({});
@@ -72,7 +76,14 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     return () => pl.removeEventListener("frameupdate", on);
   }, [p?.resolved]);
 
-  const r = useMemo(() => (p?.resolved ? playable(p.resolved) : null), [p?.resolved]);
+  const r = useMemo(() => {
+    if (!p?.resolved) return null;
+    const base = playable(p.resolved);
+    if (!draft) return base;
+    return { ...base, shots: base.shots.map((s) => (Math.abs(s.start - draft.start) < 0.02 ? draft : s)) };
+  }, [p?.resolved, draft]);
+  // The server's next plan includes the edit, so the patch is dropped when it arrives.
+  useEffect(() => setDraft(null), [p?.resolved]);
   const seek = (t: number) => {
     player.current?.seekTo(Math.round(t * (r?.fps ?? 30)));
     setTime(t);
@@ -103,7 +114,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   // The editor's keys, as in Final Cut: J K L to play back, pause and play (again to go faster),
   // I and O to mark a range, B to blade at the playhead, Delete to ripple delete the selected
   // segment or the marked range, Cmd-Z and Shift-Cmd-Z to undo and redo. Not while typing a note.
-  const keys = useRef({ time, selection, segment, cut, rate, duration: r?.duration ?? 0 });
+  const keys = useRef({ time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0 });
   const marks = useRef<{ in?: number; out?: number }>({});
   // J K L: which way the playhead is moving, and the timer that steps it back for J.
   const shuttle = useRef<{ dir: -1 | 0 | 1; speed: number; timer?: number }>({ dir: 0, speed: 1 });
@@ -121,7 +132,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     pl.addEventListener("pause", paused);
     return () => pl.removeEventListener("pause", paused);
   }, [p?.resolved]);
-  keys.current = { time, selection, segment, cut, rate, duration: r?.duration ?? 0 };
+  keys.current = { time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0 };
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
@@ -134,7 +145,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
-      if (key === "b") saveCut(splitAt(k.cut, k.time)).catch(() => {});
+      if (key === "escape" && k.picked !== null) setPicked(null);
+      else if ((key === "delete" || key === "backspace") && k.picked !== null) {
+        // With a graphic open, Delete takes the graphic off; it never cuts the footage under it.
+        e.preventDefault();
+        api.post(slug, "shot", { start: k.picked, remove: true }).then(() => setPicked(null)).catch((err) => setDropError(String(err.message)));
+      } else if (key === "b") saveCut(splitAt(k.cut, k.time)).catch(() => {});
       else if (key === "delete" || key === "backspace") {
         e.preventDefault();
         if (k.segment) saveCut(rippleDelete(k.cut, k.segment)).then(() => setSegment(null)).catch(() => {});
@@ -227,7 +243,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
     >
       <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
-        <Library slug={slug} bin={p.bin ?? []} canvas={r.canvas} theme={r.theme} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
+        <Library slug={slug} r={r} picked={picked} onPick={(t) => setPicked(t)} cut={cut} onCut={saveCut} onSelect={setSelection} bin={p.bin ?? []} canvas={r.canvas} theme={r.theme} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
           <Player
             ref={player}
@@ -245,6 +261,23 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             acknowledgeRemotionLicense
           />
         </section>
+        {picked !== null ? (
+          <Inspector
+            key={picked}
+            slug={slug}
+            r={p.resolved!}
+            plan={p.plan ?? "{}"}
+            start={picked}
+            words={p.words}
+            time={time}
+            onPreview={setDraft}
+            onAsk={() => setPicked(null)}
+            onClose={() => setPicked(null)}
+            onSeek={seek}
+            variants={p.variants}
+            working={working}
+          />
+        ) : (
         <Chat
           slug={slug}
           messages={chat}
@@ -259,9 +292,11 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           onSeek={seek}
           onClear={() => setSelection(null)}
         />
+        )}
         <section className="bottom">
           <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))}
-            cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart} />
+            cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart}
+            picked={picked} onPick={(t) => (setPicked(t), setSegment(null))} />
           {dropError && (
             <div className="toast" onClick={() => setDropError("")}>
               {dropError}

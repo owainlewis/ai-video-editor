@@ -6,6 +6,7 @@ import { easeInOut, lerp, MOVE, prog } from "./motion";
 import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
 import { clamp, ease, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
+import { WordsOver } from "./house";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
 import { CutAudio, CutVideo } from "./cut";
 
@@ -33,7 +34,9 @@ const FLOAT = { x: 200, y: 110, w: WW - 400, h: WH - 220 };
 const FLOAT_IN = { x: FLOAT.x + 90, y: FLOAT.y + 70, w: FLOAT.w - 180, h: FLOAT.h - 140 };
 const HALF = { x: 150, y: 140, w: WW / 2 - 260, h: WH - 280 };
 // Cards that fill the frame in black; every other kind floats.
-const solid = (s: ResolvedShot) => s.visual?.kind === "chapter" || s.visual?.kind === "journey" || (s.visual?.kind === "title" && !!s.visual.cine);
+// The house graphics fill the frame too: a floating card around big type is the look they replace.
+const HOUSE = new Set(["words", "focus", "map", "shift"]);
+const solid = (s: ResolvedShot) => s.visual?.kind === "chapter" || s.visual?.kind === "journey" || (s.visual?.kind === "title" && !!s.visual.cine) || HOUSE.has(s.visual?.kind ?? "");
 const designed = (s?: ResolvedShot) => s?.layout === "media" || s?.layout === "half";
 // How far in a black-theme shot is (0 the picture, 1 the graphic), fading at the edges it shares
 // with the picture.
@@ -183,7 +186,7 @@ export const Wide: React.FC<Resolved> = (r) => {
   const tone: Tone = shot.tone ?? "light";
   const onCanvas = shot.layout === "side" || shot.layout === "media";
   // A cinematic title dims the picture a little so the line holds. No scrim, no gradient.
-  const titled = shot.layout === "over" && shot.visual?.kind === "title";
+  const titled = shot.layout === "over" && (shot.visual?.kind === "title" || shot.visual?.kind === "words");
   const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : 1;
 
   return (
@@ -270,6 +273,7 @@ export const Wide: React.FC<Resolved> = (r) => {
       })}
       {r.alpha ? <AbsoluteFill style={{ background: "black", opacity: 1 - dim }} /> : <Speaker r={r} shot={shot} k={stageK(r.shots, index, time)} dim={dim} />}
       {shot.layout === "over" && shot.visual?.kind === "lower" && <Lower title={shot.visual.title} sub={shot.visual.sub} shot={shot} time={time} />}
+      {titled && shot.visual?.kind === "words" && <WordsOver shot={shot} time={time} v={shot.visual} face={r.face.x} width={WW} height={WH} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
       {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}

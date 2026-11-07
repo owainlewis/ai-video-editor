@@ -33,10 +33,14 @@ export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme
   const card = cards.find((c) => c.id === cardId)!;
   const v = (longest ? atMax(card) : card.sample)!.visual;
   const n = Math.max(1, visualAnchors(v).length);
-  const times = Array.from({ length: n }, (_, i) => 0.3 + i * 0.3);
+  // The house graphics show one part at a time. Their parts land 0.6 s apart, about as close as
+  // speech puts them, so library QC sees one part leaving as the next lands.
+  const gap = v.kind === "words" || v.kind === "focus" || v.kind === "map" || v.kind === "shift" ? 0.6 : v.kind === "custom" ? 0.9 : 0.3;
+  const times = Array.from({ length: n }, (_, i) => 0.3 + i * gap);
   const duration = times[times.length - 1] + 2;
   const youtube = canvas === "youtube";
-  const layout = !youtube ? "split" : card.tier === "overlay" ? "over" : card.layouts.includes("side") ? "side" : "media";
+  // The card's first layout that 16:9 has: `over` for type over the picture, else beside the speaker or full frame.
+  const layout = !youtube ? "split" : card.tier === "overlay" ? "over" : (card.layouts.find((l) => l === "over" || l === "side" || l === "media") ?? "media");
   // As media/project.ts does: the video's theme is the graphic's tone.
   const tone = theme === "dark" || theme === "black" ? "dark" : undefined;
   const shot: ResolvedShot = { start: 0, end: duration, layout, visual: { ...v, times }, anchor: card.id, header: youtube ? undefined : card.sample!.header, tone };

@@ -205,8 +205,8 @@ export const EgmDrift: React.FC<CustomProps> = ({ time: t, times, width, height,
         const y = 860 + i * 110, bad = i === 3 && t > out;
         return (
           <g key={i} opacity={bad ? 1 : t > out ? 0.45 : 1}>
-            <line x1={170} y1={y} x2={170 + (i % 2 ? 210 : 260) * k(t, docs + i * 0.05, 0.2)} y2={y} stroke={C.white} strokeWidth={10} strokeLinecap="round" />
-            <line x1={660} y1={y} x2={660 + (i % 2 ? 190 : 250) * k(t, code + i * 0.05, 0.2)} y2={y} stroke={C.white} strokeWidth={10} strokeLinecap="round" />
+            <Line a={[170, y]} b={[170 + (i % 2 ? 210 : 260), y]} p={k(t, docs + i * 0.05, 0.2)} w={10} />
+            <Line a={[660, y]} b={[660 + (i % 2 ? 190 : 250), y]} p={k(t, code + i * 0.05, 0.2)} w={10} />
             <Line a={[450, y]} b={[630, y]} p={k(t, code + 0.35 + i * 0.05, 0.25)} w={3} dash={bad} opacity={0.7} color={bad ? C.sage : C.white} />
           </g>
         );

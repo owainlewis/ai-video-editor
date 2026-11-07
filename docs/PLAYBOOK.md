@@ -61,6 +61,34 @@ all six ("I love them all"). Where each lives now:
 | Kinetic + highlighter | his strongest line | `media`, `title` with `sync`, the key phrase `*marked*`; `//` to choose the line break |
 | Flow with a traveller | a process in stages | `pipeline`: connectors draw to each stage with a dot riding the tip |
 
+## The stage moves: an explainer Owain liked (studied 2026-11-06)
+
+AI LABS, "EGM: Google's New Way To Use Claude Code Is Insane", 15:54, about 57% graphics on near black, voice-over, no speaker. Full study with every graphic, timings and the ranked list: `research/youtube/xxf6D9jynFw/NOTES.md`.
+
+What makes it work, measured:
+
+- **One sentence, one composition.** 34 of 37 cuts to a new composition sit within 0.12 s of a sentence start. Two sentences in three open a new picture, about every 8 s. Read the script sentence by sentence and give each its picture.
+- **The frame holds still and one thing changes state.** No camera at all: card edges do not move by a pixel through a hold. A row tints, a tick lands, a meter falls. Our slow push is off for these (`STILL` in `effects/custom/index.ts`).
+- **Skeleton cards.** A file, a chat and an app are one quiet card with a name on it; grey bars stand for text. Nothing to read, nothing invented, and the eye goes to whatever changes.
+- **A hold before a number moves.** It sits 0.7 s, then runs. Going down: 1.9 s ease in and out, turning colour 0.4 s after it lands. Going up: an ease-in (about t^2.3) to a hard stop on the word.
+- **A card slides over to make room**: 406 px in 13 frames, our MOVE and our ease. Prefer it to cutting when a second part joins a picture.
+- **Cuts are a frame of nothing**: 1 frame out, 2 of black, parts arriving from there. No sound on them: the highest band is lower at a cut than anywhere else.
+
+Eight graphics came out of it, for `side` and `media`, all in the library (`effects/custom/stage.tsx` has the props and beats):
+
+| Graphic | Use it when he says | Plan |
+| --- | --- | --- |
+| `lens` | several things read or check one thing | `angles`, one beat each |
+| `drift` | two things are compared or a list is checked row by row | `rows` with `text`, `ok: false` on the one that matters; add `then` when the right side differs, and each row takes two beats, so the answer lands when it is said |
+| `wall` | something is kept apart on purpose | `inputs`, `said`; beats: reader, chat, wall, message stops |
+| `drain` | something runs out: memory, context, time, budget | `from`, `to`, or `number: false` when no number is said |
+| `thread` | a plan causes a result, part by part | `rows`, one beat each |
+| `surge` | load: a real count arriving and something giving | `count`, `from`, `nodes`, `fail`; the third beat is the said number, the fourth is where it gives |
+| `gaps` | something gets complete | `holes`, `helpers`; `count: false` unless the number is said |
+| `scale` | a trade-off with a verdict | `left`, `right` |
+
+Rules: filled rings remember, empty rings know nothing. One accent, on the part that matters; older beams go quiet. Numbers only when said. These are moments, not a look for a whole video: on camera only, and each video still gets its own `DESIGN.md`. Try them on his words at `#/gallery?tab=projects&q=stage`.
+
 ## Needs Owain's call (conflicts with a rule)
 
 - **Annotate the screen recording**: a hand-drawn circle or highlight on the exact word in the article

@@ -80,4 +80,36 @@ describe("clean plans", () => {
     expect(ev.filter((e) => e.kind === "pop")).toHaveLength(2);
     expect(ev.some((e) => e.kind === "whoosh")).toBe(false);
   });
+
+  it("sounds only what lands: a low whoosh as a graphic takes over, one tick per diagram, a click per marker", () => {
+    const { shots } = resolveShots(
+      plan([
+        { at: "If", layout: "full" },
+        { at: "having", layout: "diagram", visual: { kind: "custom", name: "x", at: ["good", "review"] } },
+        { at: "tool is", layout: "split", visual: { kind: "image", src: "a.png", highlight: [{ rect: [0, 0, 1, 0.1], at: "essential" }] } },
+      ]),
+      words,
+      5,
+    );
+    const ev = cleanSfx(shots);
+    expect(ev.filter((e) => e.kind === "thud").map((e) => e.t)).toEqual([shots[1].start]);
+    expect(ev.filter((e) => e.kind === "blip")).toHaveLength(1);
+    expect(ev.filter((e) => e.kind === "pop")).toHaveLength(0); // the diagram's first beat sits on the whoosh
+  });
+
+  it("rings a logo, hits a hit word and types a Claude Code prompt", () => {
+    const { shots } = resolveShots(
+      plan([
+        { at: "If", layout: "split", visual: { kind: "logos", items: [{ src: "a.png", at: "AI" }] } },
+        { at: "having", layout: "full", hit: { text: "CODE", at: "code" } },
+        { at: "tool is", layout: "split", visual: { kind: "claudecode", lines: [{ text: "/egm-review a.md", style: "prompt" }] } },
+      ]),
+      words,
+      5,
+    );
+    const ev = cleanSfx(shots);
+    expect(ev.filter((e) => e.kind === "chime")).toHaveLength(1);
+    expect(ev.filter((e) => e.kind === "impact")).toHaveLength(1);
+    expect(ev.filter((e) => e.kind === "key").length).toBeGreaterThan(3);
+  });
 });

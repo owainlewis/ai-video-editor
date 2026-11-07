@@ -173,3 +173,46 @@ describe("inserting shots at a time", () => {
     expect(out.map((s) => [s.at, s.layout])).toEqual([["one two", "full"], ["three four five", "cutaway"], ["six seven eight", "punch"]]);
   });
 });
+
+describe("the inspector", () => {
+  it("finds the plan's shot behind a resolved shot, counting repeated anchors in order", async () => {
+    const { planIndex } = await import("../engine/insert.ts");
+    const plan = [{ at: "so" }, { at: "and then" }, { at: "so" }];
+    const resolved = [{ anchor: "" }, { anchor: "so" }, { anchor: "and then" }, { anchor: "so" }];
+    expect([0, 1, 2, 3].map((k) => planIndex(plan, resolved, k))).toEqual([-1, 0, 1, 2]);
+  });
+
+  it("drops a library sample's own anchors, keeping everything else", async () => {
+    const { stripAnchors } = await import("../engine/insert.ts");
+    expect(stripAnchors({ kind: "list", items: [{ text: "a", at: "said" }], region: [1, 2], at: "x" })).toEqual({ kind: "list", items: [{ text: "a" }], region: [1, 2] });
+  });
+
+  it("previews an edit over the resolved timing, spacing a new card's parts", async () => {
+    const { previewShot } = await import("../app/Inspector.tsx");
+    const rs = { start: 2, end: 6, layout: "split" as const, anchor: "x", visual: { kind: "title", text: "Old", times: [2.4] } as never };
+    expect(previewShot(rs, { at: "x", layout: "media", visual: { kind: "title", text: "New" } as never })).toMatchObject({ layout: "media", visual: { text: "New", times: [2.4] } });
+    const swapped = previewShot(rs, { at: "x", layout: "split", visual: { kind: "list", items: [{ text: "a" }, { text: "b" }] } as never });
+    expect((swapped.visual as { times: number[] }).times.map((t) => +t.toFixed(2))).toEqual([2.3, 2.7]);
+  });
+});
+
+describe("takes on a graphic", () => {
+  it("resolves each take against the real words and reports what it would break", async () => {
+    const { resolveVariants, saveVariants } = await import("../server/variants.ts");
+    const dir = mkdtempSync(join(tmpdir(), "takes-"));
+    const said = "so here are the three things you need context jobs and skills thanks".split(" ");
+    writeFileSync(join(dir, "transcript.json"), JSON.stringify(said.map((text, i) => ({ text, start: i * 0.5, end: i * 0.5 + 0.4 }))));
+    writeFileSync(join(dir, "project.json"), JSON.stringify({ duration: 8 }));
+    writeFileSync(join(dir, "edit.json"), JSON.stringify({ title: "t", canvas: "reel", face: { x: 0.5, y: 0.3, h: 0.2 }, shots: [{ at: "so here are", layout: "full" }, { at: "the three things", layout: "split", visual: { kind: "title", text: "Three things" } }, { at: "thanks", layout: "full" }] }));
+    const start = 3 * 0.5 - 0.1;
+    saveVariants(dir, { start, items: [
+      { id: "v1", label: "Focus", shot: { at: "the three things", layout: "split", visual: { kind: "focus", items: [{ text: "Context", at: "context" }, { text: "Jobs", at: "jobs" }, { text: "Skills", at: "skills" }] } } },
+      { id: "v2", label: "Broken", shot: { at: "the three things", layout: "split", visual: { kind: "words", lines: [{ text: "Nope", at: "never said" }] } } },
+    ] });
+    const v = resolveVariants(dir)!;
+    expect(v.items[0].problems).toEqual([]);
+    expect(v.items[0].resolved?.visual?.kind).toBe("focus");
+    expect((v.items[0].resolved?.visual as { times: number[] }).times.map((t) => Math.round(t * 10) / 10)).toEqual([4, 4.5, 5.5]);
+    expect(v.items[1].problems.join()).toMatch(/never said/);
+  });
+});

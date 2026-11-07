@@ -71,6 +71,10 @@ const opacity = (el: Element | null) => {
   return o;
 };
 
+// The colour a word is drawn in. SVG text is painted with `fill`; its CSS `color` is whatever it
+// inherits (black by default), which read as invisible on black (egm reel, 2026-11-05).
+const textColor = (el: Element) => (el instanceof SVGElement ? getComputedStyle(el).fill : getComputedStyle(el).color);
+
 // The block a word belongs to: the nearest ancestor laid out as a block or flex box. Kinetic titles
 // set each word in its own inline-block span, so their lines are read from the flex box around them.
 const blockOf = (el: Element): Element => {
@@ -88,8 +92,9 @@ function measure() {
   const W = root.getBoundingClientRect().width, H = root.getBoundingClientRect().height;
   // Everything drawn (cards, dots, lines, svg shapes), for balance: is the graphic as a whole centred?
   const paint: number[][] = [];
-  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string; clipped: boolean }[] = [];
+  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string; clipped: boolean; label: boolean }[] = [];
   const marks: { box: number[]; opacity: number }[] = [];
+  const edges: { points: number[][]; opacity: number }[] = [];
   const blocks = new Map<Element, number>();
   const words: { block: number; top: number; h: number }[] = [];
   for (const el of root.querySelectorAll("*")) {
@@ -109,6 +114,19 @@ function measure() {
     if (el.getAttribute("data-qc") === "mark") {
       const b = el.getBoundingClientRect();
       if (b.width || b.height) marks.push({ box: [b.left, b.top, b.width, b.height], opacity: o });
+    }
+    // A diagram's strokes as points along what is drawn so far: a box cannot tell a label sitting on a
+    // diagonal line from one beside it, or a label inside a ring from one across its outline.
+    if (el.getAttribute("data-qc") === "edge" && el instanceof SVGGeometryElement) {
+      const len = el.getTotalLength(), ctm = el.getScreenCTM()!;
+      const [on, off] = (el.getAttribute("stroke-dasharray") ?? "").split(" ").map(Number);
+      const drawn = off >= len * 0.99 ? on : len;
+      const points: number[][] = [];
+      for (let d = 0; d <= drawn; d += 6) {
+        const p = el.getPointAtLength(d).matrixTransform(ctm);
+        points.push([p.x, p.y]);
+      }
+      edges.push({ points, opacity: o });
     }
     const nodes = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent!.trim());
     if (!nodes.length) continue;
@@ -172,7 +190,7 @@ function measure() {
       if (r.width > W * 0.85 && r.height > H * 0.85) continue;
       if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)" && !e.closest('[data-qc="canvas"]')) under = c;
     }
-    texts.push({ text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: getComputedStyle(el).color, block: id, under, clipped });
+    texts.push({ label: el.getAttribute("data-qc") === "label", text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: textColor(el), block: id, under, clipped });
     // Each word's line, to find a last line with a single word on it.
     for (const n of nodes) {
       const s = n.textContent!;
@@ -187,7 +205,7 @@ function measure() {
       }
     }
   }
-  return { texts, marks, words, paint };
+  return { texts, marks, edges, words, paint };
 }
 
 const root = createRoot(document.getElementById("root")!);
