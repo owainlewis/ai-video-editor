@@ -34,6 +34,11 @@ describe("clean plans", () => {
     expect(issues.map((i) => i.message).join()).toMatch(/hit "tool"/);
   });
 
+  it("rejects a hit word too wide for the frame", () => {
+    const { shots } = resolveShots(plan([{ at: "If", layout: "full", hit: { text: "PROFESSIONAL", at: "AI" } }]), words, 5);
+    expect(lintClean(shots, 5, false).some((i) => i.level === "error" && /too wide/.test(i.message))).toBe(true);
+  });
+
   it("resolves card beats on their words", () => {
     const { shots } = resolveShots(plan([{ at: "If", layout: "card", bg: "paper", visual: { kind: "beats", items: [{ text: "CODE", at: "code" }, { text: "review", size: "small", at: "review" }] } }]), words, 5);
     expect(shots[0].visual!.times).toHaveLength(2);

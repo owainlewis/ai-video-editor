@@ -9,6 +9,7 @@
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
 //   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
 //   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
+//   npm run studio -- record <slug>                film the real pages in record.json, timed to the spoken words
 //   npm run studio -- auphonic <slug>              clean the voice with Auphonic (timing unchanged; key in .env)
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 import { existsSync } from "node:fs";
@@ -16,6 +17,7 @@ import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { cleanProject } from "./media/auphonic.ts";
 import { resolveProject } from "./media/project.ts";
+import { record } from "./media/record.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
@@ -93,6 +95,10 @@ async function main() {
       for (const i of issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
       console.log(`\n${issues.filter((i) => i.level === "error").length} errors, ${issues.filter((i) => i.level === "warn").length} warnings. ${sheets.length} contact sheets in projects/${slug}/checks/qc/${overview ? "; overview.jpg shows every graphic settled" : ""}`);
       if (issues.some((i) => i.level === "error")) process.exitCode = 1;
+      return;
+    }
+    case "record": {
+      console.log(`Wrote ${await record(projects, need(target), log)}`);
       return;
     }
     case "stills": {

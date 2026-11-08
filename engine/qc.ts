@@ -39,7 +39,8 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     const last = Math.max(s.start, ...(v.times ?? []).filter((t) => t < s.end), ...((v as { words?: number[] }).words ?? []));
     const linger = s.end - last;
     const settle = v.kind === "constraint" ? 5 : 3;
-    if (s.layout !== "over" && v.kind !== "chapter" && linger > settle)
+    // A recorded screen keeps moving; QC measures that on the footage instead.
+    if (s.layout !== "over" && v.kind !== "chapter" && !(v.kind === "video" && v.sync) && linger > settle)
       issues.push({ level: "warn", message: `${label(s, i)}: lingers ${linger.toFixed(1)}s after its last part lands; end it about 2s after` });
     // A part that lands as the graphic leaves is never seen: its word is said too late in the shot.
     let chain = i;
@@ -118,6 +119,21 @@ export type Measure = {
   edges?: { points: number[][]; opacity: number }[];
   words: { block: number; top: number; h: number }[];
   paint?: Box[];
+};
+
+// A panel should not sit still (Owain, 2026-11-08: "quite slow and static"; the reels he pointed to
+// never hold longer than 0.9 s). `diffs`: the mean change from each frame to the next. `moving`: times
+// something else moves the picture, like a zoom. Returns the longest still stretch, in seconds.
+export const STILL_LIMIT = 1.5;
+export const longestStill = (diffs: number[], fps: number, moving: (t: number) => boolean = () => false, threshold = 0.06) => {
+  let best = { secs: 0, at: 0 };
+  let from = 0;
+  diffs.forEach((d, i) => {
+    if (d <= threshold && !moving(i / fps)) {
+      if ((i + 1 - from) / fps > best.secs) best = { secs: (i + 1 - from) / fps, at: from / fps };
+    } else from = i + 1;
+  });
+  return best;
 };
 
 // The frame's safe area: clear of the edges, and higher clearance at the bottom, where YouTube's

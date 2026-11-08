@@ -3,8 +3,8 @@
 //   split (the main view: the visual on top, Owain or b-roll below, the caption on the seam), text
 //   cards, cinematic shots, a full-screen line diagram on green now and then, and the graphic b-roll
 //   overlay (the diagram in a dark glass panel over a full-frame picture).
-//   Text is the six-part kit: caption sized by weight, typed hit with a Signifier tag, two-line
-//   Signifier title, caption inside the diagram, bracketed list, card beats. One at a time.
+//   Text is one style (display in text.tsx) in six parts: caption sized by weight, hit, two-line
+//   title, caption inside the diagram, bracketed list, card beats. One at a time.
 // Fixed geometry: one centre line (x 540), the seam at y 960, the glass panel at 60, 380, 960 x 880,
 // chips at y 120.
 // Hard cuts between shots; easing only inside a graphic. Diagrams are `custom` visuals drawn per
@@ -17,8 +17,8 @@ import { CutAudio } from "../cut";
 import { CUSTOM } from "../custom";
 import { Speaker } from "../Speaker";
 import { VisualView } from "../Visuals";
-import { C, H, lerp, move, SANS, SERIF, W } from "./kit";
-import { blurIn, Center, Chip, chunkClean, CREAM, GREEN, Typed } from "./text";
+import { C, H, lerp, move, W } from "./kit";
+import { blurIn, Center, Chip, chunkClean, display, GREEN, Typed, WHITE } from "./text";
 
 export const SEAM = 960;
 // A chip's top on a split: below Instagram's top bar (QC's safe area starts at y 96).
@@ -27,6 +27,12 @@ export const GLASS = { left: 60, top: 380, width: W - 120, height: 880 };
 // The box each layout draws its visual in, in frame pixels.
 export const box = (layout: ResolvedShot["layout"]) =>
   layout === "split" ? { left: 0, top: 0, width: W, height: SEAM } : layout === "over" ? GLASS : { left: 0, top: 0, width: W, height: H };
+
+// A screen recording on a split runs right down to the seam, a true 50/50 with nothing between the
+// halves. A page is often white, so its caption and hit sit just under the seam, on the speaker's half.
+const fillsPanel = (s: ResolvedShot) => s.layout === "split" && s.visual?.kind === "video" && !!s.visual.sync;
+const UNDER_SEAM = SEAM + 22;
+const ON_FOOTAGE = { textShadow: "0 2px 26px rgba(0,0,0,0.6)" };
 
 const BG = { ink: C.ink, paper: C.paper, green: GREEN };
 const bgOf = (s: ResolvedShot) => (s.layout === "diagram" ? GREEN : s.layout === "card" ? BG[s.bg ?? "ink"] : C.ink);
@@ -54,7 +60,12 @@ const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number }> = ({ r, s
   const v = s.visual;
   if (!v || s.layout === "card") return null;
   // A capture sits in the panel as a window, with margins, so the page never touches the frame's edge.
-  const b = v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96 } : box(s.layout);
+  // On a split it keeps below Instagram's top bar (QC's safe area starts at y 96) and above the seam
+  // caption, so a tall capture never runs under either.
+  // Any other library kind (the house graphics, windows) gets the same safe panel on a split; a custom
+  // diagram is drawn for the whole panel and keeps its own margins.
+  // A synced screen recording fills the top half edge to edge, down to the seam.
+  const b = fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top: 100, height: 690 } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top: 100, width: W - 120, height: 690 } : box(s.layout);
   const Custom = v.kind === "custom" ? CUSTOM[v.name] : undefined;
   return (
     <div style={{ position: "absolute", ...b, overflow: "visible" }}>
@@ -73,11 +84,11 @@ export const Clean: React.FC<Resolved> = (r) => {
   const shot = r.shots[index] ?? r.shots[r.shots.length - 1];
   const words = useMemo(() => r.chunks.flatMap((c) => c.words), [r.chunks]);
   const chunks = useMemo(() => chunkClean(words), [words]);
-  const faceless = !r.video && !r.cut;
+  const faceless = !r.video && !r.cut && !r.standIn;
   if (!shot) return <AbsoluteFill style={{ background: C.ink }} />;
 
   const paper = shot.layout === "card" && shot.bg === "paper";
-  const ink = paper ? GREEN : CREAM;
+  const ink = paper ? GREEN : WHITE;
   const glass = shot.layout === "over";
   const v = shot.visual;
 
@@ -95,19 +106,20 @@ export const Clean: React.FC<Resolved> = (r) => {
   const ch = [...chunks].reverse().find((c) => c.start <= time + 0.02);
   const next = ch ? chunks[chunks.indexOf(ch) + 1] : undefined;
   const capOn = r.captions && ch && time < Math.min(next?.start ?? Infinity, ch.end + 0.5) && !hit && !beat && !list;
+  const filled = fillsPanel(shot);
   const cp = (() => {
     switch (shot.layout) {
-      case "split": return { y: SEAM - 98, size: 110 };
+      case "split": return { y: filled ? UNDER_SEAM : SEAM - 98, size: 110 };
       case "over": return { y: GLASS.top + GLASS.height + 120, size: 92 };
       case "diagram": return shot.inside ? { y: 960 - 52, size: 76 } : { y: 1520, size: 84 };
       case "card": return { y: 900, size: 120 };
-      // Small on Owain's chest; big at the centre over b-roll.
-      default: return shot.picture || faceless ? { y: 1150, size: 92 } : { y: 1250, size: 72 };
+      // In the middle of the frame, where a hit lands.
+      default: return { y: 880, size: 130 };
     }
   })();
   // On a split the hit sits on the seam like the caption, and a tag stacks it upward: nothing but the
   // seam word crosses onto the speaker's panel.
-  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : shot.layout === "split" ? SEAM - 75 - (shot.hit?.tag ? 160 : 0) : 1080;
+  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : filled ? UNDER_SEAM : shot.layout === "split" ? SEAM - 75 - (shot.hit?.tag ? 160 : 0) : 870;
 
   return (
     <AbsoluteFill style={{ background: bgOf(shot) }}>
@@ -139,17 +151,17 @@ export const Clean: React.FC<Resolved> = (r) => {
       {shot.chip && <Chip t={time} at={shot.chip.at} name={shot.chip.name} y={glass ? GLASS.top + 36 : CHIP_Y} />}
 
       {shot.title && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: 300, fontFamily: SERIF, fontStyle: "italic", fontWeight: 400, fontSize: 104, lineHeight: 0.86, color: CREAM, letterSpacing: -1 }}>
-          <div style={{ textAlign: "center", transform: "translateX(-70px)" }}><Typed s={shot.title.lines[0]} t={time} at={shot.title.at} per={0.05} /></div>
-          <div style={{ textAlign: "center", transform: "translateX(70px)" }}><Typed s={shot.title.lines[1]} t={time} at={shot.title.at + shot.title.lines[0].length * 0.05 + 0.1} per={0.045} /></div>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 300, ...display(104), color: WHITE }}>
+          <div style={{ textAlign: "center" }}><Typed s={shot.title.lines[0]} t={time} at={shot.title.at} per={0.05} /></div>
+          <div style={{ textAlign: "center" }}><Typed s={shot.title.lines[1]} t={time} at={shot.title.at + shot.title.lines[0].length * 0.05 + 0.1} per={0.045} /></div>
         </div>
       )}
 
       {list && (
         <>
-          {list.title && <Center y={640} style={{ fontFamily: SANS, fontWeight: 700, fontSize: 96, letterSpacing: -3, color: ink, ...blurIn(time, shot.start) }}>{list.title}</Center>}
+          {list.title && <Center y={640} style={{ ...display(96), color: ink, ...blurIn(time, shot.start) }}>{list.title}</Center>}
           {list.items.map((it, i) => (
-            <Center key={i} y={800 + i * 150} style={{ fontFamily: SANS, fontWeight: 700, fontSize: 110, letterSpacing: -4, color: ink, ...blurIn(time, list.times?.[i] ?? shot.start + i * 0.12) }}>{it.text}</Center>
+            <Center key={i} y={800 + i * 150} style={{ ...display(110), color: ink, ...blurIn(time, list.times?.[i] ?? shot.start + i * 0.12) }}>{it.text}</Center>
           ))}
         </>
       )}
@@ -157,20 +169,20 @@ export const Clean: React.FC<Resolved> = (r) => {
       {beat && (() => {
         const size = beat.size === "huge" ? 250 : beat.size === "mid" ? 150 : 76;
         return (
-          <Center y={960 - size * 0.62} style={{ fontFamily: SANS, fontWeight: 700, fontSize: size, lineHeight: 1, letterSpacing: -size * 0.045, color: ink }}>
+          <Center y={960 - size * 0.62} style={{ ...display(size), color: ink }}>
             {beat.typed ? <Typed s={beat.text} t={time} at={beat.at} per={0.05} /> : beat.text}
           </Center>
         );
       })()}
-      {beats?.line && time >= lineAt && <Center y={1150} style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 64, color: ink, ...blurIn(time, lineAt) }}>{beats.line.text}</Center>}
+      {beats?.line && time >= lineAt && <Center y={1150} style={{ ...display(64), color: ink, ...blurIn(time, lineAt) }}>{beats.line.text}</Center>}
 
       {hit && (
         <>
-          <Center y={hitY} style={{ fontFamily: SANS, fontWeight: 700, fontSize: 150, lineHeight: 1, letterSpacing: -6, color: ink }}>
+          <Center y={hitY} style={{ ...display(176), color: ink, ...(filled ? ON_FOOTAGE : {}) }}>
             <Typed s={hit.text} t={time} at={hit.at} per={0.045} />
           </Center>
           {hit.tag && (
-            <Center y={hitY + 150} style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 84, lineHeight: 1, color: ink, paddingLeft: 260 }}>
+            <Center y={hitY + 150} style={{ ...display(84), color: ink, ...(filled ? ON_FOOTAGE : {}) }}>
               <Typed s={hit.tag} t={time} at={hit.at + hit.text.length * 0.045 + 0.05} per={0.04} />
             </Center>
           )}
@@ -180,8 +192,8 @@ export const Clean: React.FC<Resolved> = (r) => {
       {capOn && ch && (() => {
         const size = ch.small ? cp.size * 0.6 : cp.size;
         return (
-          <Center y={cp.y} style={{ fontFamily: SANS, fontWeight: 700, fontSize: size, lineHeight: 1.1, letterSpacing: -size * 0.035, color: ink, marginTop: ch.small ? cp.size * 0.25 : 0 }}>
-            {ch.text.toLowerCase()}
+          <Center y={cp.y} style={{ ...display(size), color: ink, marginTop: ch.small ? cp.size * 0.25 : 0, ...(filled ? ON_FOOTAGE : {}) }}>
+            {ch.text}
           </Center>
         );
       })()}

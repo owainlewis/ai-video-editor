@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { contrast, type Measure, qcLayout, qcPlan, saidTwice, visualText } from "../engine/qc.ts";
+import { contrast, longestStill, type Measure, qcLayout, qcPlan, saidTwice, visualText } from "../engine/qc.ts";
+import { zoomAt } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 
 const size: [number, number] = [1920, 1080];
@@ -127,5 +128,21 @@ describe("parts that are never seen", () => {
     expect(seen([shot(0, 4, [1, 11]), shot(10, 14, [10, 12])])).toBe(true);
     expect(seen([shot(0, 4, [1, 11]), shot(9, 10, [9, 11])])).toBe(true);
     expect(seen([shot(0, 4, [1, 11]), shot(10, 14, [10, 11], "list")])).toBe(true);
+  });
+});
+
+describe("recorded screens", () => {
+  it("finds the longest still stretch", () => {
+    expect(longestStill([1, 0, 0, 0, 1, 0, 1], 10)).toEqual({ secs: 0.3, at: 0.1 });
+  });
+  it("counts a zoom as movement", () => {
+    expect(longestStill([0, 0, 0, 0], 10, (t) => t >= 0.2).secs).toBeCloseTo(0.2);
+  });
+  it("eases a zoom in and holds it", () => {
+    const zooms = [{ t: 1, x: 0.2, y: 0.4, s: 1.5, ms: 400 }];
+    expect(zoomAt(zooms, 0.5).s).toBe(1);
+    expect(zoomAt(zooms, 0.5).y).toBe(0);
+    expect(zoomAt(zooms, 1.2).s).toBeCloseTo(1.25);
+    expect(zoomAt(zooms, 3)).toEqual({ x: 0.2, y: 0.4, s: 1.5 });
   });
 });

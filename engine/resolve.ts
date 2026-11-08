@@ -533,6 +533,21 @@ export const CLEAN_LAYOUTS = ["split", "full", "card", "diagram", "over", "cutaw
 // typing. A diagram draws on many small beats, so only its first beat sounds, and only in the clear.
 // A kind has several files that take turns (audio/library.py). Nothing on a cut back to the speaker.
 const CLEAR = 1;
+// A recorded screen's camera at time t: each zoom eases from where the last one left it.
+export type ScreenZoom = { t: number; x: number; y: number; s: number; ms: number };
+export const zoomAt = (zooms: ScreenZoom[], t: number) => {
+  const cur = { x: 0.5, y: 0, s: 1 }; // Unzoomed, a recording taller than its panel hangs from the top.
+  for (const z of zooms) {
+    if (t < z.t) break;
+    const p = z.ms ? Math.min(1, ((t - z.t) * 1000) / z.ms) : 1;
+    const e = p < 0.5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2;
+    cur.x += (z.x - cur.x) * e;
+    cur.y += (z.y - cur.y) * e;
+    cur.s += (z.s - cur.s) * e;
+  }
+  return cur;
+};
+
 export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
   const ev: SfxEvent[] = [];
   const diagram: SfxEvent[] = [];
@@ -553,6 +568,8 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
     if (v.kind === "custom" && times.length) diagram.push({ kind: "pop", t: times[0], gain: 0.6, exact: true });
     const each = v.kind === "image" ? "blip" : v.kind === "logos" ? "chime" : v.kind === "list" || v.kind === "beats" ? "pop" : null;
     if (each) times.forEach((t) => ev.push({ kind: each, t, gain: 0.6, exact: true }));
+    // A click or a mark on a recorded screen; the file spans the reel, so only this shot's.
+    if (v.kind === "video") for (const t of v.ticks ?? []) if (t >= s.start && t < s.end) ev.push({ kind: "pop", t, gain: 0.45, exact: true });
   });
   const loud = ev.filter((e) => e.kind !== "key");
   return [...ev, ...diagram.filter((d) => loud.every((e) => Math.abs(e.t - d.t) >= CLEAR))].sort((a, b) => a.t - b.t);
@@ -575,8 +592,15 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
       issues.push({ level: "error", message: `${label}: there is no footage of the speaker, so a ${s.layout} shot needs a picture (b-roll)` });
     if (len < 0.4) issues.push({ level: "warn", message: `${label} is only ${len.toFixed(2)}s` });
     if (len > 7 && s.layout !== "split") issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; the cinematic references cut about every 3 s` });
+    if (v?.kind === "custom" && v.times?.length && s.layout !== "card") {
+      const beats = [s.start, ...v.times, s.end];
+      const hold = Math.max(...beats.slice(1).map((t, n) => t - beats[n]));
+      if (hold > 2) issues.push({ level: "warn", message: `${label}: the diagram holds still for ${hold.toFixed(1)}s; land a part or cut away within 2 s` });
+    }
     if (s.hit) {
       if (s.hit.text.length > 12) issues.push({ level: "warn", message: `${label}: hit "${s.hit.text}" is long; a hit is one to three short words (12 letters at most)` });
+      // A hit wraps at spaces, so one long word runs off the frame: "SLOW DOWN" (9) already fills 85% of it.
+      for (const w of s.hit.text.split(/\s+/)) if (w.length > 10) issues.push({ level: "error", message: `${label}: hit word "${w}" is too wide for the frame; use a word of 10 letters at most` });
       if (s.hit.tag && s.hit.tag.length > 24) issues.push({ level: "warn", message: `${label}: hit tag "${s.hit.tag}" is long; keep it under 24 letters` });
       if (s.layout === "card" && v?.kind === "beats") issues.push({ level: "warn", message: `${label}: a hit over card beats; one text treatment at a time` });
     }

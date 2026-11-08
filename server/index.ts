@@ -170,7 +170,7 @@ export async function startServer(port = 4747) {
       return send(res, 200, { busy: libraryBusy, clips: loadLibrary().map((c) => ({ ...c, thumb: `library/${c.id}-thumb.jpg` })) });
     }
 
-    if (parts[0] === "effects") return send(res, 200, effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube"));
+    if (parts[0] === "effects") return send(res, 200, effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube", url.searchParams.get("style") ?? undefined));
 
     // The gallery: every project's graphics, from the plan as last resolved, without captions.
     if (parts[0] === "gallery") {

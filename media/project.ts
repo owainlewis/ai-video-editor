@@ -1,10 +1,10 @@
 // Turn a project's plan (edit.json) into what the compositions render (build/edit.resolved.json),
 // with every check the house rules need. The editor runs this on every change to the plan, so
 // the player always shows the plan as it is, and problems show next to it.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { type ScreenZoom, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
@@ -91,6 +91,13 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       else s.picture = { ...s.picture, src: rel };
     } else if (!existsSync(join(dir, s.picture.src))) issues.push({ level: "error", message: `missing picture ${s.picture.src}` });
     pictures.set(s.picture.src, (pictures.get(s.picture.src) ?? 0) + 1);
+    // A picture shorter than its shot loops back to its first frame, which reads as a glitch (Owain,
+    // 2026-11-08: "some of it was 1s loops").
+    const file = join(dir, s.picture.src);
+    if (existsSync(file)) {
+      const plays = (probeDuration(file) - s.picture.start) / s.picture.rate;
+      if (s.end - s.start > plays + 0.05) issues.push({ level: "error", message: `picture ${s.picture.src} at "${s.anchor}" plays ${plays.toFixed(1)}s but the shot holds ${(s.end - s.start).toFixed(1)}s, so it loops; use a longer shot or cut the shot sooner` });
+    }
   }
   for (const [src, n] of pictures) if (n > 1) issues.push({ level: "warn", message: `picture ${src} is used ${n} times; fresh b-roll reads better` });
   // Library logos ("logo:<name>", library/logos/<name>.png) become data URLs wherever they appear in a
@@ -123,13 +130,17 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       }
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
-      s.visual = { ...v, size: probeSize(join(dir, v.src)) };
+      const moves = join(dir, v.src.replace(/\.\w+$/, ".json"));
+      s.visual = { ...v, size: probeSize(join(dir, v.src)), ...(v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[] }>(moves) : {}) };
+      // A recording is timed to the cut it was made for; it does not follow a re-cut as the anchors do.
+      const cutFile = join(dir, "cut.json");
+      if (v.sync && !s.keep && existsSync(cutFile) && statSync(cutFile).mtimeMs > statSync(join(dir, v.src)).mtimeMs) issues.push({ level: "warn", message: `"${s.anchor}": cut.json changed after ${v.src} was made, so the screen may be out of step with the words` });
       // A slowed clip lasts longer on screen.
-      const left = (probeDuration(join(dir, v.src)) - v.start) / (v.rate ?? 1);
+      const left = (probeDuration(join(dir, v.src)) - (v.sync ? s.start : v.start)) / (v.rate ?? 1);
       if (!v.loop && s.end - s.start > left + 0.04) issues.push({ level: "error", message: `"${s.anchor}": shot is ${(s.end - s.start).toFixed(2)}s but ${v.src} has ${left.toFixed(2)}s from start ${v.start}` });
     }
     // A kept shot carries on the same clip; that is one use, not two.
-    if (v?.kind === "video" && !s.keep) {
+    if (v?.kind === "video" && !s.keep && !v.sync) {
       if (seen.has(v.src)) issues.push({ level: "error", message: `b-roll ${v.src} is used twice` });
       seen.add(v.src);
     }

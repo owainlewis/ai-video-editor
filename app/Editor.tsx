@@ -3,9 +3,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { compositionFor } from "../effects/canvas";
 import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
+import { beatAt, reelBeats } from "../engine/beats";
 import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot } from "../engine/schema";
 import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
+import { BeatBar } from "./Beats";
 import { Inspector } from "./Inspector";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
@@ -88,6 +90,15 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     player.current?.seekTo(Math.round(t * (r?.fps ?? 30)));
     setTime(t);
   };
+  // A reel's beats, for stepping through its graphics one change at a time (app/Beats.tsx).
+  const beats = useMemo(() => (r && r.canvas === "reel" && p?.words ? reelBeats(r.shots, p.words, r.duration, r.fps) : []), [r, p?.words]);
+  const beat = beatAt(beats, time);
+  const step = (i: number) => {
+    const b = beats[Math.max(0, Math.min(beats.length - 1, i))];
+    if (!b) return;
+    stopShuttle();
+    seek(b.at);
+  };
 
   // Every cut edit writes the whole cut back; the server saves it as a version and resolves the
   // plan on it, and the editor reloads when it says so.
@@ -114,7 +125,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   // The editor's keys, as in Final Cut: J K L to play back, pause and play (again to go faster),
   // I and O to mark a range, B to blade at the playhead, Delete to ripple delete the selected
   // segment or the marked range, Cmd-Z and Shift-Cmd-Z to undo and redo. Not while typing a note.
-  const keys = useRef({ time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0 });
+  const keys = useRef({ time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0, beat, step });
   const marks = useRef<{ in?: number; out?: number }>({});
   // J K L: which way the playhead is moving, and the timer that steps it back for J.
   const shuttle = useRef<{ dir: -1 | 0 | 1; speed: number; timer?: number }>({ dir: 0, speed: 1 });
@@ -132,7 +143,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     pl.addEventListener("pause", paused);
     return () => pl.removeEventListener("pause", paused);
   }, [p?.resolved]);
-  keys.current = { time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0 };
+  keys.current = { time, selection, segment, cut, rate, picked, duration: r?.duration ?? 0, beat, step };
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
@@ -163,6 +174,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         else (m.out = k.time), m.in !== undefined && m.in >= k.time && (m.in = undefined);
         setSelection({ start: m.in ?? 0, end: m.out ?? k.duration });
       }
+      else if (key === "arrowleft" || key === "arrowright") k.step(k.beat + (key === "arrowright" ? 1 : -1));
       else if (key === "k") stopShuttle();
       else if (key === "l") {
         // Again while playing forward goes faster: 2x, then 4x.
@@ -245,6 +257,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
         <Library slug={slug} r={r} picked={picked} onPick={(t) => setPicked(t)} cut={cut} onCut={saveCut} onSelect={setSelection} bin={p.bin ?? []} canvas={r.canvas} theme={r.theme} assets={p.assets ?? []} words={p.words} time={time} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
+          <div className="screen">
           <Player
             ref={player}
             component={(r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>}
@@ -260,6 +273,8 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             spaceKeyToPlayOrPause
             acknowledgeRemotionLicense
           />
+          </div>
+          {beats.length > 0 && <BeatBar beats={beats} current={beat} shots={r.shots} onStep={step} />}
         </section>
         {picked !== null ? (
           <Inspector
@@ -296,7 +311,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         <section className="bottom">
           <Timeline r={r} words={p.words} time={time} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))}
             cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart}
-            picked={picked} onPick={(t) => (setPicked(t), setSegment(null))} />
+            picked={picked} onPick={(t) => (setPicked(t), setSegment(null))} beats={beats} beat={beat} onBeat={step} />
           {dropError && (
             <div className="toast" onClick={() => setDropError("")}>
               {dropError}
@@ -392,8 +407,7 @@ const Chat: React.FC<{
       <div className="messages" ref={list}>
         {messages.length === 0 && (
           <p className="muted small">
-            Select a section on the timeline, then say what to change: "add a graphic for these three steps", "put a lower third with my name
-            here", "make the captions smaller". You can also edit with Claude Code in a terminal; this page updates either way.
+            Select a section on the timeline, then say what to change.
           </p>
         )}
         {messages.map((m, i) => (

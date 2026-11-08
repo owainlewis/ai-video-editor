@@ -41,9 +41,13 @@ export const Library: React.FC<{
     [r],
   );
   const [effects, setEffects] = useState<Effect[]>([]);
+  const style = canvas === "reel" && r.style === "clean" ? "clean" : undefined;
   useEffect(() => {
-    api.effects(canvas).then(setEffects).catch(() => {});
-  }, [canvas]);
+    api.effects(canvas, style).then(setEffects).catch(() => {});
+  }, [canvas, style]);
+  // Cards off the project's look stay out of the way unless asked for.
+  const [showOff, setShowOff] = useState(false);
+  const off = effects.filter((e) => e.off).length;
   const [over, setOver] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -226,16 +230,28 @@ export const Library: React.FC<{
       ) : tab === "effects" ? (
         <div className="assets">
           <p className="muted small">
-            Every graphic in your style, live. Hover to play; click one to add it at the playhead ({clock(time)}). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
+            Every graphic in this video's look ({lookName(canvas, style, theme)}), live. House graphics first. Hover to play; click one to add it at the playhead ({clock(time)}). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
           </p>
           {error && <p className="error small">{error}</p>}
           <div className="effects">
-            {effects.map((e) => {
-              const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme);
-              const item = { key: e.id, title: e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
-              return <Tile key={e.id} item={item} onOpen={() => place(e.id)} />;
-            })}
+            {effects
+              .filter((e) => showOff || !e.off)
+              .map((e) => {
+                const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme, false, style);
+                const item = { key: e.id, title: e.name ?? e.kind, sub: e.off ? `${e.off}. ${e.summary}` : e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
+                return (
+                  // Shown on request, dimmed: off this look.
+                  <div key={e.id} style={e.off ? { opacity: 0.45 } : undefined}>
+                    <Tile item={item} onOpen={() => place(e.id)} />
+                  </div>
+                );
+              })}
           </div>
+          {off > 0 && (
+            <button className="small quiet" onClick={() => setShowOff((v) => !v)}>
+              {showOff ? "Hide" : "Show"} {off} card{off === 1 ? "" : "s"} off this look
+            </button>
+          )}
         </div>
       ) : (
         <Script words={words} sentences={sentences} time={time} cut={cut} onCut={onCut} onSeek={onSeek} onSelect={onSelect} />
@@ -243,6 +259,10 @@ export const Library: React.FC<{
     </aside>
   );
 };
+
+// The look a project's graphics draw in, as Owain names it.
+const lookName = (canvas: string, style: string | undefined, theme?: Resolved["theme"]) =>
+  style === "clean" ? "clean reel" : `${theme === "black" ? "Black" : theme === "dark" ? (canvas === "reel" ? "Forest" : "Graphite") : "Ivory"}${canvas === "reel" ? " reel" : ""}`;
 
 // The script, word by word: select words and cut them (the button, or Delete), as in a text editor.
 // Tighten proposes what to lose (retakes, fillers, long pauses) struck through in the script; click

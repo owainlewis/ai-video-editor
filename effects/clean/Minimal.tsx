@@ -269,7 +269,7 @@ export const Minimal: React.FC<SampleProps> = ({ words, voice, music, musicGain 
           <Label x={CX} y={720} size={44} opacity={k(t, A.comment, 0.2)}>Comment</Label>
           <Rect x={CX - 280} y={790} w={560} h={250} p={k(t, A.comment, 0.4)} r={28} sw={4} />
           <Label x={CX} y={918} size={170} weight={700} opacity={k(t, A.comment + 0.4, 0.15)}>EGM</Label>
-          <Label x={CX} y={1120} size={40} serif opacity={k(t, A.link - 0.6, 0.3)}>and I'll send you the link</Label>
+          <Label x={CX} y={1120} size={40} opacity={k(t, A.link - 0.6, 0.3)}>and I'll send you the link</Label>
         </g>
       </svg>
 

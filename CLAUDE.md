@@ -73,12 +73,13 @@ A project can hold several clips (its bin: the first clip at the project's root,
 
 The reel style locked on 2026-11-06 (`research/reels/STUDY.md`), drawn by `effects/clean/Clean.tsx`. Example: `projects/egm-clean/edit.json`.
 
-- **Split is the main view**: half the reel or more (`check` warns under 45%). The visual on top (y 0 to 960), Owain or b-roll below, the caption on the seam. Diagrams in the top panel stay above y 830; a chip takes y 120 to 190.
+- **Split is the main view**: half the reel or more (`check` warns under 45%). The visual on top (y 0 to 960), Owain or b-roll below, the caption on the seam (on a recorded screen, which runs right down to the seam, just under it). Diagrams in the top panel stay above y 830; a chip takes y 120 to 190.
 - Layouts: `split`; `full` (cinematic: Owain, or b-roll from `picture`); `card` (`bg`: `ink`, `paper` or `green`); `diagram` (full-screen line diagram on green, now and then, a fifth of the reel at most); `over` (the diagram in a glass panel, 960 x 880, over a full-frame `picture`).
 - `picture`: `"broll:<id>"` or `{ "src", "start", "rate" }`, the footage instead of Owain. A faceless reel (a voiced script) needs one on every `full`, `split` and `over` shot. Slow motion only from 60 fps sources.
-- The text kit, one treatment at a time: the caption (automatic, sized by weight); `hit` (`text` in caps, optional `tag`, `at`, `until`); `title` (two `lines`, on a diagram); `chip` (the real skill or command name); `beats` on a card (huge, small, huge); `list` on a card with a bracketed `title` like `"[REVIEW]"`; `inside: true` puts the caption in a diagram's centre.
+- The text kit, one treatment at a time: the caption (automatic, sized by weight); `hit` (one lower-case word, 10 letters at most, optional `tag`, `at`, `until`); `title` (two `lines`, on a diagram); `chip` (the real skill or command name); `beats` on a card (huge, small, huge); `list` on a card with a bracketed `title` like `"[REVIEW]"`; `inside: true` puts the caption in a diagram's centre.
 - Diagrams are `custom` visuals drawn for each video in `effects/custom/` with the parts in `effects/clean/kit.tsx` (Line, Ring, Rect, Doc, Dots, Label): thin white lines that draw on their words, sage on the one thing that matters.
 - Show the thing: anything named gets the real thing, a diagram or its real logo. Repos and docs are real captures in a browser window (`frame: "browser"`, `dark: true`) with markers on the spoken words. A skill or command runs in a Claude Code mock-up (`claudecode`, the real command), then a diagram explains it.
+- Recorded screens: `npm run studio -- record <slug>` films the real pages in `record.json` (scenes with a `url`, spoken `from` and `to`, and actions on spoken words: `move`, `click`, `scroll`, `mark`, `zoom`, `reset`, `clear`, `type`). It writes `assets/screen.mp4`, as long as the cut, for `{ "kind": "video", "src": "assets/screen.mp4", "sync": true }`, and `assets/screen.json` (zooms and click sounds). Marks go only on words that are on the page. Example: `projects/egm-live`. Pages behind a login need a session Owain signed in to himself, which the recorder does not do yet.
 - Sounds (`cleanSfx`): only what the eye sees land: a low whoosh as a graphic takes over, a sub hit under a hit word, a ring for a logo, a tick per item, a click per marker, keys under typing, one tick for a diagram, and `"sfx": "riser"` into a diagram. Nothing on a cut back to the speaker.
 
 ## B-roll
@@ -96,6 +97,7 @@ He edits by hand now, so expect plans to change under you; read edit.json fresh 
 - **Inspector:** click a graphic on the timeline (or in the Graphics tab) to edit its words, layout, start word or card, live, or remove it (Delete). Saved through `POST /api/projects/<slug>/shot`, which puts the plan back if the change adds an error.
 - **Library tab:** click a card to put it at the playhead (`place`).
 - **Script tab:** select words and cut them; Tighten proposes retakes, fillers and long pauses (`engine/tighten.ts`) to strike in one go. Each is a cut edit.
+- **Beats (reels):** the reel cut into beats of about 2 s, one at every change on screen (`engine/beats.ts`). Step with ← and → or the bar under the player, or click a marker on the Beats track; each lands on the beat's settled frame, to check every graphic before an export.
 - **Takes:** "Ask Claude" in the inspector writes `variants.json` (see `server/variants.ts` for the prompt); `npm run studio -- variants <slug>` checks it. Owain plays each take in the player and picks one.
 
 ## Notes from Owain

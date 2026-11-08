@@ -31,7 +31,9 @@ export async function renderCut(projects: string, slug: string, onStage: (stage:
   for (const f of readdirSync(work)) rmSync(join(work, f), { recursive: true });
 
   // The finished picture takes the main clip's original size and frame rate; other clips are fitted to it.
-  const main = readJson<{ original: string }>(join(dir, "project.json")).original;
+  // (or its working copy's, if the original has moved)
+  const original = readJson<{ original: string }>(join(dir, "project.json")).original;
+  const main = existsSync(original) ? original : join(dir, "source/talking.mp4");
   const [num, den] = probeRate(main);
   const fps = num / den;
   const [w, h] = probeSize(main);

@@ -819,6 +819,9 @@
           "layouts": [
             "card"
           ],
+          "styles": [
+            "clean"
+          ],
           "slots": [
             {
               "name": "items",
@@ -848,7 +851,50 @@
             "min": 2.5,
             "max": 7
           },
-          "preview": false
+          "preview": true
+        },
+        {
+          "id": "ivory.t1.list.bracket",
+          "kind": "list",
+          "tier": "t1",
+          "purpose": "list",
+          "treatment": "bracket",
+          "summary": "The clean style's list card: a bracketed title, then each item stacks on its word, big and bold.",
+          "layouts": [
+            "card"
+          ],
+          "styles": [
+            "clean"
+          ],
+          "slots": [
+            {
+              "name": "title",
+              "type": "text",
+              "maxChars": 12
+            },
+            {
+              "name": "items",
+              "type": "list",
+              "minItems": 2,
+              "maxItems": 4
+            },
+            {
+              "name": "items[].text",
+              "type": "text",
+              "maxChars": 16
+            },
+            {
+              "name": "items[].at",
+              "type": "anchor",
+              "optional": true,
+              "note": "a spoken phrase; the part lands on its first word"
+            }
+          ],
+          "duration": {
+            "min": 2.5,
+            "max": 7
+          },
+          "preview": true
         },
         {
           "id": "ivory.t1.words",

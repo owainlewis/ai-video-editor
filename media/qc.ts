@@ -4,7 +4,7 @@
 // checks in engine/qc.ts on its settled frame. It also finds the cuts in the footage (for the plan
 // checks) and makes one contact sheet per graphic: the picture before it, its first frame, each
 // reveal landing, settled, and the picture after it. Nothing is rendered to video.
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { C } from "../effects/clean/kit.tsx";
 import { GREEN } from "../effects/clean/text.tsx";
 import { createServer as createHttp } from "node:http";
@@ -13,7 +13,7 @@ import { openBrowser } from "@remotion/renderer";
 import { createServer as createVite } from "vite";
 import { compositionFor } from "../effects/canvas.ts";
 import { type Canvas, cardPlan, effectList } from "../effects/preview.ts";
-import { type Measure, qcLayout } from "../engine/qc.ts";
+import { longestStill, type Measure, qcLayout, STILL_LIMIT } from "../engine/qc.ts";
 import type { Issue } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 import { serveFile } from "../server/index.ts";
@@ -196,6 +196,19 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
     await browser.close({ silent: true } as never).catch(() => {});
     srv.close();
   }
+  // A recorded screen has to keep moving: measured on the footage, zooms counted as movement.
+  for (const [i, s] of r.shots.entries()) {
+    const v = s.visual;
+    if (v?.kind !== "video" || !v.sync || (at && !at.some((t) => t >= s.start && t < s.end))) continue;
+    // A recording the wrong shape for the panel gets its edges cropped.
+    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 960) > 0.02) issues.push({ level: "warn", message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 960), so its edges are cropped` });
+    const stats = join(out, `motion-${i + 1}.txt`);
+    run("ffmpeg", ["-v", "error", "-y", "-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`, "-f", "null", "-"], { log });
+    const diffs = [...readFileSync(stats, "utf8").matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
+    rmSync(stats);
+    const still = longestStill(diffs, 30, (t) => (v.zooms ?? []).some((z) => s.start + t >= z.t && s.start + t < z.t + z.ms / 1000));
+    if (still.secs > STILL_LIMIT) issues.push({ level: "error", message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): the screen holds still for ${still.secs.toFixed(1)}s from ${(s.start + still.at).toFixed(1)}s; something should move at least every ${STILL_LIMIT}s` });
+  }
   // Every graphic settled, on one page: the quick look before an export.
   let overview: string | null = null;
   if (settledShots.length) overviewSheet(settledShots, (overview = join(out, "overview.jpg")), log);
@@ -208,10 +221,15 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
 // that uses it, so this runs after a change to a visual or the style (Owain, 2026-11-02: the quote
 // card stacked one word a line beside him, and list numbers sat at 1.2:1, both found by eye first).
 export const LIBRARY_QC = join(ROOT, "library", "qc");
+// Clean reels are always on ink, so they are checked once, beside the Ivory reel themes.
 export const libraryVariants = (canvas?: Canvas) =>
   (["youtube", "reel"] as const)
     .filter((c) => !canvas || c === canvas)
-    .flatMap((c) => (["light", "dark", "black"] as const).flatMap((theme) => [false, true].map((longest) => ({ canvas: c, theme, longest }))));
+    .flatMap((c) => [
+      ...(["light", "dark", "black"] as const).map((theme) => ({ canvas: c, theme, style: "ivory" })),
+      ...(c === "reel" ? [{ canvas: c, theme: "dark" as const, style: "clean" }] : []),
+    ])
+    .flatMap((v) => [false, true].map((longest) => ({ ...v, longest })));
 
 export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log?: Log, onStage?: (s: string) => void): Promise<QcResult> {
   const issues: Issue[] = [];
@@ -222,20 +240,25 @@ export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log
   try {
     for (const canvas of ["youtube", "reel"] as const) {
       const variants = libraryVariants(opts.canvas).filter((v) => v.canvas === canvas);
-      const cards = effectList(canvas).filter((e) => !opts.card || e.id.includes(opts.card) || e.kind === opts.card);
-      if (!variants.length || !cards.length) continue;
+      // Every card, the lower third included (Owain may still ask for one); in the clean style only
+      // its kit, since the rest are checked in Ivory, the look they draw in.
+      const cardsIn = (style: string) => effectList(canvas, style).filter((e) => !(style === "clean" && e.off) && (!opts.card || e.id.includes(opts.card) || e.kind === opts.card));
+      if (!variants.length || !variants.some((v) => cardsIn(v.style).length)) continue;
       const { browser, page } = await qcPage(srv, compositionFor(canvas), "library=1", log);
       try {
         for (const v of variants) {
-          const name = `${canvas}-${v.theme}${v.longest ? "-longest" : ""}`;
+          const cards = cardsIn(v.style);
+          if (!cards.length) continue;
+          const look = v.style === "clean" ? "clean" : v.theme;
+          const name = `${canvas}-${look}${v.longest ? "-longest" : ""}`;
           const frames = join(LIBRARY_QC, name);
           mkdirSync(frames, { recursive: true });
           const settled: string[] = [];
           for (const [n, e] of cards.entries()) {
             onStage?.(`${name}: ${n + 1}/${cards.length} ${e.kind}`);
-            const r = cardPlan(e.id, canvas, v.theme, v.longest);
+            const r = cardPlan(e.id, canvas, v.theme, v.longest, v.style);
             await page.evaluate((plan: Resolved) => window.qcLoad!(plan), r as never);
-            const where = `${e.id} (${canvas}, ${v.theme}${v.longest ? ", longest text" : ""})`;
+            const where = `${e.id} (${canvas}, ${look}${v.longest ? ", longest text" : ""})`;
             const got = await checkGraphic(page, r, r.shots[0], where, frames, e.id.replace(/^blueprint\./, ""), issues);
             if (got.settled) settled.push(got.settled);
           }

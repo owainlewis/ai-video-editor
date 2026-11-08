@@ -48,12 +48,12 @@ export const EgmOneAgent: React.FC<CustomProps> = ({ time: t, times, width, heig
       <Dots x={480} y={y} r={220} p={k(t, whole, 1)} n={110} />
       <g opacity={k(t, talk)}>
         <Ring x={110} y={y} r={34} p={k(t, talk, 0.3)} w={3} />
-        <Label x={110} y={y + 72} size={32} serif weight={400}>you</Label>
+        <Label x={110} y={y + 72} size={32}>you</Label>
         <Line a={[150, y]} b={[248, y]} p={k(t, talk + 0.15, 0.3)} w={3} head />
       </g>
       <Line a={[712, y]} b={[790, y]} p={k(t, writes, 0.3)} w={3} head />
       <Doc x={810} y={y - 110} w={170} h={220} p={k(t, writes + 0.15, 0.35)} lines={k(t, plan, 0.8) * 6} />
-      <Label x={895} y={y + 160} size={32} serif weight={400} opacity={k(t, plan + 0.3)}>the plan</Label>
+      <Label x={895} y={y + 160} size={32} opacity={k(t, plan + 0.3)}>the plan</Label>
     </Stage>
   );
 };
@@ -111,12 +111,12 @@ export const EgmBrainstorm: React.FC<CustomProps> = ({ time: t, times, width, he
   return (
     <Stage width={width} height={height}>
       <circle cx={CX} cy={250} r={18 * k(t, idea, 0.2)} fill={C.white} />
-      <Label x={CX + 40} y={250} size={34} serif weight={400} anchor="start" opacity={k(t, idea + 0.1)}>your idea</Label>
+      <Label x={CX + 40} y={250} size={34} anchor="start" opacity={k(t, idea + 0.1)}>your idea</Label>
       <Line a={[CX, 270]} b={[320, 450]} p={k(t, trade, 0.3)} w={3} />
       <Line a={[CX, 270]} b={[760, 450]} p={k(t, trade, 0.3)} w={3} />
       <Ring x={320} y={476} r={26} p={k(t, trade + 0.25, 0.3)} w={3} />
       <Ring x={760} y={476} r={26} p={k(t, trade + 0.25, 0.3)} w={3} />
-      <Label x={CX} y={476} size={34} serif weight={400} opacity={k(t, trade + 0.25)}>trade-offs</Label>
+      <Label x={CX} y={476} size={34} opacity={k(t, trade + 0.25)}>trade-offs</Label>
       <Line a={[320, 502]} b={[CX - 75, 600]} p={k(t, saves, 0.3)} w={3} />
       <Line a={[760, 502]} b={[CX + 75, 600]} p={k(t, saves, 0.3)} w={3} />
       <Doc x={CX - 75} y={600} w={150} h={190} p={k(t, saves + 0.2, 0.3)} lines={k(t, brief, 0.4) * 4} n={4} color={C.sage} />

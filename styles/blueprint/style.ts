@@ -241,13 +241,26 @@ const catalog: Card[] = [
     purpose: "point",
     summary: "The clean style's card beats: one huge caps word at a time on a flat card, hard swapped on its word, with size contrast.",
     layouts: ["card"],
+    styles: ["clean"],
     slots: [
       { name: "items", type: "list", minItems: 1, maxItems: 6 },
       { name: "items[].text", type: "text", maxChars: 16 },
       { name: "line.text", type: "text", maxChars: 32, optional: true },
       at("items[].at"),
     ],
-    noSample: "Clean style only (style \"clean\"); drawn by effects/clean/Clean.tsx, not the library.",
+    sample: { visual: { kind: "beats", items: [{ text: "PLAN", size: "huge", typed: true }, { text: "before", size: "small" }, { text: "CODE", size: "huge", typed: true }] }, header: "", scene: "" },
+  },
+  {
+    id: "blueprint.t1.list.bracket",
+    kind: "list",
+    tier: "t1",
+    purpose: "list",
+    treatment: "bracket",
+    summary: "The clean style's list card: a bracketed title, then each item stacks on its word, big and bold.",
+    layouts: ["card"],
+    styles: ["clean"],
+    slots: [{ name: "title", type: "text", maxChars: 12 }, { name: "items", type: "list", minItems: 2, maxItems: 4 }, { name: "items[].text", type: "text", maxChars: 16 }, at("items[].at")],
+    sample: { visual: { kind: "list", title: "[CHECK]", items: [{ text: "clear?" }, { text: "fits?" }, { text: "ready?" }], preview: false }, header: "", scene: "" },
   },
   // ---- The house motion library (effects/house.tsx, 2026-11-02): big type, no boxes ----
   {

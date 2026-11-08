@@ -2,11 +2,16 @@
 // every treatment is made of. Shared by the Studio renderer (Clean.tsx) and the samples.
 import React from "react";
 import { t as type } from "../theme";
-import { C, k, type Word } from "./kit";
+import { C, k, SANS, type Word } from "./kit";
 
-export const CREAM = "#EADCCB"; // captions and hits over footage: warm, not white
+export const CREAM = "#EADCCB"; // the old samples only
+export const WHITE = "#FFFFFF"; // all type over footage and dark stages
 export const GREEN = "#1D3832"; // diagrams, and type on paper
 export const MONO = type.mono; // code only: commands, skills, file names
+
+// The one type style of a clean reel (Owain, 2026-11-08): tight white lower-case Helvetica Bold, at
+// any size. Every caption, hit, card and title is this, so a reel reads as one voice.
+export const display = (size: number): React.CSSProperties => ({ fontFamily: SANS, fontWeight: 700, fontSize: size, lineHeight: 1, letterSpacing: -size * 0.0625, textTransform: "lowercase" });
 
 // Letter by letter: the visible part of `s`, the next letter half in. The rest is laid out but
 // hidden, so the line never shifts as it types.

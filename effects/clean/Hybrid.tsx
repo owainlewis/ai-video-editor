@@ -93,7 +93,7 @@ export const Hybrid: React.FC<SampleProps> = ({ slug, words, voice, music, music
           <Dots x={CX} y={960} r={300} p={k(t, A.whole, 1)} inner={0.55} />
           <g opacity={k(t, A.talk)}>
             <Ring x={130} y={960} r={34} p={k(t, A.talk, 0.3)} w={3} />
-            <Label x={130} y={1030} size={32} serif weight={400}>you</Label>
+            <Label x={130} y={1030} size={32}>you</Label>
             <Line a={[168, 960]} b={[232, 960]} p={k(t, A.talk + 0.15, 0.3)} w={3} />
           </g>
           <Line a={[CX, 1268]} b={[CX, 1350]} p={k(t, A.writes, 0.3)} w={3} head />
@@ -125,12 +125,12 @@ export const Hybrid: React.FC<SampleProps> = ({ slug, words, voice, music, music
       panel: (t) => (
         <>
           <circle cx={CX} cy={250} r={18 * k(t, A.idea, 0.2)} fill={C.white} />
-          <Label x={CX + 40} y={250} size={34} serif weight={400} anchor="start" opacity={k(t, A.idea + 0.1)}>your idea</Label>
+          <Label x={CX + 40} y={250} size={34} anchor="start" opacity={k(t, A.idea + 0.1)}>your idea</Label>
           <Line a={[CX, 270]} b={[320, 450]} p={k(t, A.trade, 0.3)} w={3} />
           <Line a={[CX, 270]} b={[760, 450]} p={k(t, A.trade, 0.3)} w={3} />
           <Ring x={320} y={476} r={26} p={k(t, A.trade + 0.25, 0.3)} w={3} />
           <Ring x={760} y={476} r={26} p={k(t, A.trade + 0.25, 0.3)} w={3} />
-          <Label x={CX} y={476} size={34} serif weight={400} opacity={k(t, A.trade + 0.25)}>trade-offs</Label>
+          <Label x={CX} y={476} size={34} opacity={k(t, A.trade + 0.25)}>trade-offs</Label>
           <Line a={[320, 502]} b={[CX - 75, 610]} p={k(t, A.saves, 0.3)} w={3} />
           <Line a={[760, 502]} b={[CX + 75, 610]} p={k(t, A.saves, 0.3)} w={3} />
           <Doc x={CX - 75} y={610} w={150} h={190} p={k(t, A.saves + 0.2, 0.3)} lines={k(t, A.brief, 0.4) * 4} n={4} color={C.sage} />

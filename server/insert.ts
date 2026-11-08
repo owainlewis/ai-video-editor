@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mergeShots, phraseAt, planIndex, stripAnchors, wordAt } from "../engine/insert.ts";
 import { cards } from "../styles/blueprint/style.ts";
-import { cardPlan } from "../effects/preview.ts";
+import { cardLayout } from "../effects/preview.ts";
 import { findPhrase } from "../engine/resolve.ts";
 import type { Word } from "../engine/schema.ts";
 import { resolveProject } from "../media/project.ts";
@@ -179,10 +179,14 @@ export function editShot(projects: string, slug: string, start: number, change: 
 export function placeCard(projects: string, slug: string, cardId: string, at: number) {
   const card = cards.find((c) => c.id === cardId);
   if (!card?.sample) throw Object.assign(new Error(`no library card ${cardId}`), { code: 404 });
-  const canvas = readJson<{ canvas?: string }>(join(projects, slug, "edit.json")).canvas === "youtube" ? "youtube" : "reel";
-  const layout = cardPlan(cardId, canvas).shots[0].layout;
+  const plan = readJson<{ canvas?: string; style?: string }>(join(projects, slug, "edit.json"));
+  const canvas = plan.canvas === "youtube" ? "youtube" : "reel";
+  const clean = canvas === "reel" && plan.style === "clean";
+  const layout = cardLayout(card, canvas, plan.style);
   const visual = stripAnchors(card.sample.visual) as Shot["visual"];
-  const from = placeOver(projects, slug, { at: "", layout, visual, ...(canvas === "reel" && card.sample.header ? { header: card.sample.header } : {}) }, at, 4, 1.6);
+  // A clean reel has no headers; its cards sit on ink and its panels draw light on ink.
+  const look = clean ? (layout === "card" ? { bg: "ink" } : { tone: "dark" }) : canvas === "reel" && card.sample.header ? { header: card.sample.header } : {};
+  const from = placeOver(projects, slug, { at: "", layout, visual, ...look }, at, 4, 1.6);
   // Where the new shot really starts: a shot leads its word by a few frames.
   const shots = resolveProject(projects, slug).resolved?.shots ?? [];
   return shots.reduce((best, s) => (Math.abs(s.start - from) < Math.abs(best - from) ? s.start : best), shots[0]?.start ?? from);

@@ -42,7 +42,8 @@ export const Visual = z.discriminatedUnion("kind", [
   // `start` is the offset into the clip in seconds.
   // `loop` repeats a short clip (a library's own preview loop) to fill the shot.
   // `rate` below 1 slows a clip a little so a short shot can cover the next spoken word.
-  z.object({ kind: z.literal("video"), src: z.string(), start: z.number().default(0), loop: z.boolean().default(false), rate: z.number().min(0.5).max(2).default(1) }),
+  // `sync`: a screen recording cut to match the video, so it plays from the shot's own time.
+  z.object({ kind: z.literal("video"), src: z.string(), start: z.number().default(0), loop: z.boolean().default(false), rate: z.number().min(0.5).max(2).default(1), sync: z.boolean().default(false) }),
   // One or more official logos, never redrawn.
   z.object({
     kind: z.literal("logos"),
@@ -486,7 +487,8 @@ export type Word = { text: string; start: number; end: number };
 
 // Everything below is computed by `reel validate`.
 export type ResolvedItem = { text: string; t: number };
-export type ResolvedVisual = VisualSpec & { times?: number[]; size?: [number, number] };
+// `zooms` and `ticks`: from a recorded screen (media/record.ts), on the timeline.
+export type ResolvedVisual = VisualSpec & { times?: number[]; size?: [number, number]; zooms?: { t: number; x: number; y: number; s: number; ms: number }[]; ticks?: number[] };
 export type ResolvedShot = {
   header?: string;
   start: number;
@@ -533,6 +535,9 @@ export type Resolved = {
   theme?: "light" | "dark" | "black";
   // Light copies for the review board's players: 1080p H.264 video and AAC audio. Renders use the originals.
   preview?: { video?: string; audio?: string };
+  // The library only: no footage, but the speaker's place is drawn with the stand-in, where a clean
+  // reel with no footage would otherwise be faceless.
+  standIn?: boolean;
   // The editor only, when the project has a cut: the segments to play from the clips' preview
   // copies, `start` to `end` on the timeline from `in` in the clip. Exports flatten the cut to one
   // file first (media/cutrender.ts), so they never see this.

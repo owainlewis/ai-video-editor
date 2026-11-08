@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { Beat } from "../engine/beats";
 import { cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
 import { type BinClip, clock, type Suggestion } from "./api";
@@ -44,7 +45,11 @@ export const Timeline: React.FC<{
   onShotStart: (from: number, to: number) => Promise<unknown>;
   picked?: number | null;
   onPick?: (start: number | null) => void;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick }) => {
+  // A reel's beats (engine/beats.ts): a strip of markers, the current one lit; a click steps to it.
+  beats?: Beat[];
+  beat?: number;
+  onBeat?: (i: number) => void;
+}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick, beats = [], beat = -1, onBeat }) => {
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   // A cut being trimmed shows live while the drag lasts, and until the server sends the new one back.
   const [live, setLive] = useState<CutPlan | null>(null);
@@ -215,6 +220,25 @@ export const Timeline: React.FC<{
   };
 
   const tracks: Track[] = [
+    ...(beats.length
+      ? [{
+          id: "beats",
+          label: "Beats",
+          height: 24,
+          render: (pps: number) =>
+            beats.map((b, i) => (
+              <div
+                key={i}
+                className={`clip beat ${i === beat ? "on" : ""} ${b.changes[0] === "held" ? "held" : ""}`}
+                style={{ left: b.start * pps, width: Math.max(2, (b.end - b.start) * pps - 2) }}
+                title={`Beat ${i + 1}, ${clock(b.start)}: ${b.changes.join(", ")}${b.said ? ` · "${b.said}"` : ""}`}
+                onClick={() => onBeat?.(i)}
+              >
+                {(b.end - b.start) * pps > 18 && <b>{i + 1}</b>}
+              </div>
+            )),
+        }]
+      : []),
     {
       id: "graphics",
       label: "Graphics",
@@ -231,8 +255,8 @@ export const Timeline: React.FC<{
         </>
       ),
     },
-    { id: "text", label: "Text", height: 34, render: (pps) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "lower" ? "lower third" : c.shot.visual?.kind ?? "text")) },
-    { id: "broll", label: "B-roll", height: 34, render: (pps) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll", true)) },
+    ...(clips.some((c) => isText(c.shot)) ? [{ id: "text", label: "Text", height: 34, render: (pps: number) => clips.filter((c) => isText(c.shot)).map((c) => clip(c, pps, "text", c.shot.visual?.kind === "lower" ? "lower third" : c.shot.visual?.kind ?? "text")) }] : []),
+    ...(clips.some((c) => isBroll(c.shot)) ? [{ id: "broll", label: "B-roll", height: 34, render: (pps: number) => clips.filter((c) => isBroll(c.shot)).map((c) => clip(c, pps, "broll", "b-roll", true)) }] : []),
     {
       id: "aroll",
       label: "A-roll",
@@ -277,9 +301,8 @@ export const Timeline: React.FC<{
           </div>
         )),
     },
-    ...(r.captions ? [{ id: "captions", label: "Captions", height: 22, render: (pps: number) => r.chunks.map((c, i) => <div key={i} className="tbar caption" style={{ left: c.start * pps, width: Math.max(2, (c.end - c.start) * pps - 1) }} />) }] : []),
     ...(music ? [{ id: "music", label: "Music", height: 22, render: (pps: number) => <div className="tbar music" style={{ left: 0, width: r.duration * pps }} /> }] : []),
-    { id: "sfx", label: "Sound", height: 22, render: (pps) => r.sfx.map((s, i) => <div key={i} className="sfx" style={{ left: s.t * pps }} title={s.kind} />) },
+    ...(r.sfx.length ? [{ id: "sfx", label: "Sound", height: 22, render: (pps: number) => r.sfx.map((s, i) => <div key={i} className="sfx" style={{ left: s.t * pps }} title={s.kind} />) }] : []),
   ];
 
   const step = pps < 1 ? 120 : pps < 3 ? 60 : pps < 12 ? 30 : pps < 30 ? 15 : pps < 70 ? 5 : 1;

@@ -2,15 +2,33 @@
 // the real compositions. Nothing is rendered to a file, so a change to a visual shows in seconds.
 import type { Resolved, ResolvedShot } from "../engine/schema";
 import { visualAnchors } from "../engine/resolve";
-import { atMax } from "../styles/catalog";
+import { atMax, type Card } from "../styles/catalog";
 import { cards } from "../styles/blueprint/style";
 
 export type Canvas = "reel" | "youtube";
 
-export const effectList = (canvas: Canvas) =>
+// The house graphics (effects/house.tsx): reach for these first, so the library shows them first.
+const HOUSE = ["words", "focus", "shift", "map"];
+// The library kinds the clean reel style draws as part of its kit, beside the cards made for it
+// (`styles: ["clean"]`): the house graphics in the split's top panel, and real captures.
+const CLEAN_KINDS = new Set([...HOUSE, "image", "windows"]);
+
+// Why a card does not fit a project's look, or undefined when it does (Owain, 2026-11-07: "improve
+// the library so it matches my theme / brand"). The library hides these unless asked.
+export function offBrand(c: Card, canvas: Canvas, style = "ivory"): string | undefined {
+  if (canvas === "youtube" && c.kind === "lower") return "No lower thirds unless Owain asks for one";
+  if (style === "clean" && !c.styles?.includes("clean") && !CLEAN_KINDS.has(c.kind)) return "Not in the clean reel kit";
+}
+
+// The cards a canvas can show, in a house style, house graphics first. Cards drawn only in another
+// style are left out; cards that draw but are off the brand say why in `off`.
+export const effectList = (canvas: Canvas, style = "ivory") =>
   cards
     .filter((c) => c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : c.tier !== "overlay"))
-    .map((c) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary }));
+    .filter((c) => !c.styles || c.styles.includes(style))
+    .map((c, i) => ({ c, rank: (c.styles ? 0 : HOUSE.includes(c.kind) ? 1 : 2) * 1000 + i }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ c }) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary, name: c.kind === "custom" ? (c.sample!.visual as { name: string }).name : undefined, off: offBrand(c, canvas, style) }));
 
 const blank = (canvas: Canvas): Omit<Resolved, "title" | "duration" | "shots"> => ({
   slug: "",
@@ -28,8 +46,9 @@ const blank = (canvas: Canvas): Omit<Resolved, "title" | "duration" | "shots"> =
 });
 
 // A library card's sample, its parts landing 0.3 s apart, then held for 2 s. `longest` fills every
-// text slot to its maxChars, to see that the layout holds at the limit.
-export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme"], longest = false): Resolved {
+// text slot to its maxChars, to see that the layout holds at the limit. In the clean style a card
+// draws as a clean reel does: on a card when it is one, else in the split's top panel, on ink.
+export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme"], longest = false, style = "ivory"): Resolved {
   const card = cards.find((c) => c.id === cardId)!;
   const v = (longest ? atMax(card) : card.sample)!.visual;
   const n = Math.max(1, visualAnchors(v).length);
@@ -39,12 +58,20 @@ export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme
   const times = Array.from({ length: n }, (_, i) => 0.3 + i * gap);
   const duration = times[times.length - 1] + 2;
   const youtube = canvas === "youtube";
-  // The card's first layout that 16:9 has: `over` for type over the picture, else beside the speaker or full frame.
-  const layout = !youtube ? "split" : card.tier === "overlay" ? "over" : (card.layouts.find((l) => l === "over" || l === "side" || l === "media") ?? "media");
-  // As media/project.ts does: the video's theme is the graphic's tone.
-  const tone = theme === "dark" || theme === "black" ? "dark" : undefined;
-  const shot: ResolvedShot = { start: 0, end: duration, layout, visual: { ...v, times }, anchor: card.id, header: youtube ? undefined : card.sample!.header, tone };
-  return { ...blank(canvas), title: card.id, duration, theme, shots: [shot] };
+  const clean = !youtube && style === "clean";
+  const layout = cardLayout(card, canvas, style);
+  // As media/project.ts does: the video's theme is the graphic's tone. Clean reels are always on ink.
+  const tone = clean || theme === "dark" || theme === "black" ? "dark" : undefined;
+  const header = youtube || clean ? undefined : card.sample!.header;
+  const shot: ResolvedShot = { start: 0, end: duration, layout, visual: { ...v, times }, anchor: card.id, header, tone, ...(layout === "card" ? { bg: "ink" as const } : {}) };
+  return { ...blank(canvas), title: card.id, duration, theme, ...(clean ? { style, standIn: true } : {}), shots: [shot] };
+}
+
+// The layout a card is placed in. YouTube: its first 16:9 layout, `over` for type over the picture,
+// else beside the speaker or full frame. Reels: the split, or a card in the clean style.
+export function cardLayout(card: Card, canvas: Canvas, style = "ivory"): ResolvedShot["layout"] {
+  if (canvas === "reel") return style === "clean" && card.layouts.includes("card") ? "card" : "split";
+  return card.tier === "overlay" ? "over" : (card.layouts.find((l) => l === "over" || l === "side" || l === "media") ?? "media");
 }
 
 // One shot of a project, alone and silent. Without footage the speaker is the placeholder.

@@ -8,12 +8,19 @@ import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
 import { IgCta, Hub, Phases, StatBadge, Stopwatch, Timeline, Verifier } from "./moves";
 import { Analogy, Swarm } from "./ax";
+import { CcrDrop, CcrFifty, CcrFlood, CcrRounds } from "./ccreview";
 import { Egm } from "./egm";
+import { EffAssume, EffBench, EffCost, EffTurns } from "./effort";
 import { EgmAgents, EgmBrainstorm, EgmDraft, EgmDrift, EgmGaps, EgmHandoff, EgmOneAgent, EgmPick, EgmReviewers } from "./egmclean";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
 import { Points } from "./points";
 import { Skills } from "./skills";
+import { AutoFlood, AutoMorning } from "./automations";
+import { SlowDeep, SlowEager, SlowFeedback, SlowGoldfish, SlowTradeoffs, SlowTwo } from "./egmslow";
+import { NatAngles, NatFull, NatGoldfish, NatTwo } from "./egmnatural";
+import { RmdFile, RmdLoop, RmdRepo, RmdRules } from "./reviewmd";
+import { SubAlive, SubLife, SubReopen, SubSame, SubZero } from "./subtasks";
 import { Drain, Drift, Gaps, Lens, Scale, Surge, Thread, Wall } from "./stage";
 import { Blueprint, Commits, Swap, Three } from "./threethings";
 import { Tools } from "./tools";
@@ -51,6 +58,40 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   "egm-reviewers": EgmReviewers,
   "egm-pick": EgmPick,
   "egm-drift": EgmDrift,
+  // Three faceless test reels in the clean style (2026-11-07).
+  "ccr-flood": CcrFlood,
+  "ccr-rounds": CcrRounds,
+  "ccr-fifty": CcrFifty,
+  "ccr-drop": CcrDrop,
+  "eff-assume": EffAssume,
+  "eff-bench": EffBench,
+  "eff-cost": EffCost,
+  "eff-turns": EffTurns,
+  "sub-alive": SubAlive,
+  "sub-life": SubLife,
+  "sub-zero": SubZero,
+  "sub-reopen": SubReopen,
+  "sub-same": SubSame,
+  // REVIEW.md on camera (2026-11-08).
+  "rmd-file": RmdFile,
+  "rmd-repo": RmdRepo,
+  "rmd-rules": RmdRules,
+  "rmd-loop": RmdLoop,
+  // EGM, the natural take (2026-11-08).
+  "nat-two": NatTwo,
+  "nat-full": NatFull,
+  "nat-goldfish": NatGoldfish,
+  "nat-angles": NatAngles,
+  // EGM, "it forces you to slow down" (2026-11-08).
+  "slow-two": SlowTwo,
+  "slow-deep": SlowDeep,
+  "slow-goldfish": SlowGoldfish,
+  "slow-feedback": SlowFeedback,
+  "slow-eager": SlowEager,
+  "slow-tradeoffs": SlowTradeoffs,
+  // ChatGPT scheduled automations, the hybrid test (2026-11-08).
+  "auto-flood": AutoFlood,
+  "auto-morning": AutoMorning,
   // The stage moves, for YouTube (research/youtube/xxf6D9jynFw/NOTES.md).
   drain: Drain,
   lens: Lens,

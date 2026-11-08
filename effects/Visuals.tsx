@@ -4,6 +4,7 @@ import { Video } from "@remotion/media";
 import { UiVisual } from "./ui";
 import { Img, interpolate, staticFile } from "remotion";
 import { cameraProgress, frameRect, TRANSITION } from "./camera";
+import { zoomAt } from "../engine/resolve";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
 import { markColor } from "./motion";
@@ -201,6 +202,22 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
 // B-roll. In a panel it sits in a rounded card; as a cutaway it fills the frame edge to edge.
 // Either way it gets a slow push-in on top of its own motion, and the speaker's colour grade.
 const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w, h, v, filter, bleed }) => {
+  // A synced screen recording: locked, so the page stays sharp and still. It fits the width and hangs
+  // from the top, so the page's header always shows and any extra height runs off the bottom.
+  if (v.sync) {
+    const [vw0, vh0] = v.size ?? [w, h];
+    const full = Math.max(h, (w * vh0) / vw0);
+    const z = zoomAt(v.zooms ?? [], time);
+    const tx = Math.min(0, Math.max(w - w * z.s, w / 2 - z.x * w * z.s));
+    const ty = Math.min(0, Math.max(h - full * z.s, h / 2 - z.y * full * z.s));
+    return (
+      <div style={{ width: w, height: h, overflow: "hidden" }}>
+        <div style={{ width: w, height: full, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${z.s})` }}>
+          <Video src={src(slug, v.src)} muted trimBefore={Math.round(shot.start * 30)} objectFit="cover" style={{ width: w, height: full }} />
+        </div>
+      </div>
+    );
+  }
   // On a scene the clip sits in a card at its own shape with a locked camera; the clip is the motion.
   if (shot.layout === "scene") {
     const c = pal(shot.tone);

@@ -115,9 +115,9 @@ export const Doc: React.FC<{ x: number; y: number; w: number; h: number; p: numb
 };
 
 // Text placed by its centre, for labels inside a diagram.
-export const Label: React.FC<{ x: number; y: number; children: React.ReactNode; size?: number; color?: string; opacity?: number; weight?: number; serif?: boolean; anchor?: "middle" | "start" | "end" }> = ({ x, y, children, size = 34, color = C.white, opacity = 1, weight = 500, serif, anchor = "middle" }) =>
+export const Label: React.FC<{ x: number; y: number; children: React.ReactNode; size?: number; color?: string; opacity?: number; weight?: number; anchor?: "middle" | "start" | "end" }> = ({ x, y, children, size = 34, color = C.white, opacity = 1, weight = 700, anchor = "middle" }) =>
   opacity <= 0.01 ? null : (
-    <text data-qc="label" x={x} y={y} fill={color} opacity={opacity} fontFamily={serif ? SERIF : SANS} fontWeight={weight} fontSize={size} textAnchor={anchor} dominantBaseline="middle" letterSpacing={serif ? 0 : -0.3}>
+    <text data-qc="label" x={x} y={y} fill={color} opacity={opacity} fontFamily={SANS} fontWeight={weight} fontSize={size} textAnchor={anchor} dominantBaseline="middle" letterSpacing={-size * 0.05}>
       {children}
     </text>
   );
@@ -140,3 +140,11 @@ export const Dots: React.FC<{ x: number; y: number; r: number; p: number; inner?
   }, [inner, n]);
   return <g>{pts.map((d, i) => (d.o < p ? <circle key={i} cx={x + d.dx * r} cy={y + d.dy * r} r={4} fill={C.white} opacity={0.3 + d.o * 0.5} /> : null))}</g>;
 };
+
+// The svg a diagram draws in, and the time of its nth word, or a fallback when the plan names fewer.
+export const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
+  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+    {children}
+  </svg>
+);
+export const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;

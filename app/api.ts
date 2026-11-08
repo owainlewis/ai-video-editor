@@ -7,7 +7,7 @@ export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
 export type LibraryClip = { id: string; duration: number; description: string; tags: string[]; thumb: string };
 export type Suggestion = { id: string; start: number; end: number; layout: string; visual: { kind: string }; reason: string; status: "pending" | "accepted" | "rejected"; note?: string };
-export type Effect = { id: string; kind: string; purpose: string; summary: string };
+export type Effect = { id: string; kind: string; purpose: string; summary: string; name?: string; off?: string };
 export type Version = { n: number; at: string; by: string };
 // Claude's takes on one graphic (server/variants.ts), each resolved against the real words.
 export type Take = { id: string; label: string; reason?: string; shot: Record<string, unknown> & { at: string; layout: string }; resolved?: import("../engine/schema").ResolvedShot; problems: string[] };
@@ -49,7 +49,7 @@ const json = async <T,>(res: Response): Promise<T> => {
 export const api = {
   projects: () => fetch("/api/projects").then((r) => json<ProjectSummary[]>(r)),
   library: () => fetch("/api/library").then((r) => json<{ busy: boolean; clips: LibraryClip[] }>(r)),
-  effects: (canvas: string) => fetch(`/api/effects?canvas=${canvas}`).then((r) => json<Effect[]>(r)),
+  effects: (canvas: string, style?: string) => fetch(`/api/effects?canvas=${canvas}${style ? `&style=${style}` : ""}`).then((r) => json<Effect[]>(r)),
   gallery: () => fetch("/api/gallery").then((r) => json<{ slug: string; resolved: Resolved }[]>(r)),
   project: (slug: string) => fetch(`/api/projects/${slug}`).then((r) => json<Project>(r)),
   upload: (file: File, onProgress: (f: number) => void, to = "/api/upload", params: Record<string, string> = {}) =>

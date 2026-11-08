@@ -78,6 +78,9 @@ export type Card = {
   duration?: { min: number; max: number };
   // New in this style's catalog (not one of the editor's first visuals).
   added?: boolean;
+  // The house styles (a plan's `style`) that draw this card. Left out: Ivory, and the clean style
+  // when its kind is in CLEAN_KINDS (effects/preview.ts).
+  styles?: string[];
   // Sample content for the style lab: the visual, a docked header for split, a scene headline.
   sample?: { visual: VisualSpec & { size?: [number, number] }; header: string; scene: string };
   // Why there is no sample, when the card needs a real asset to show anything honest.
@@ -118,8 +121,9 @@ const site = (url: string) => url.replace(/^[a-z]+:\/\//i, "").replace(/^www\./,
 // The card a visual uses in a catalog (a chart picks its treatment by type, a capture by frame).
 export const cardFor = (cards: Card[], v: VisualSpec) => {
   const all = cards.filter((c) => c.kind === v.kind);
-  const treatment = v.kind === "chart" ? v.type : v.kind === "image" ? (v.frame === "browser" ? "browser" : "card") : undefined;
-  return all.find((c) => !treatment || c.treatment === treatment) ?? all[0];
+  // A list with a bracketed title ("[REVIEW]") is the clean style's list card.
+  const treatment = v.kind === "chart" ? v.type : v.kind === "image" ? (v.frame === "browser" ? "browser" : "card") : v.kind === "list" && v.title?.startsWith("[") ? "bracket" : undefined;
+  return all.find((c) => (treatment ? c.treatment === treatment : !c.treatment)) ?? all[0];
 };
 
 // Slots past their limits, for `validate`.
