@@ -17,7 +17,7 @@ Entry and compositions:
 Plan (`schema.ts`):
 
 - Zod: `Edit`, `Shot`, `Layout`, `Visual`, `SfxKind`.
-- Types: `EditPlan`, `VisualSpec`, `Word`, `ResolvedItem`, `ResolvedVisual`, `ResolvedShot`, `Chunk`, `SfxEvent`, `Resolved`.
+- Types: `EditPlan`, `VisualSpec`, `Word`, `ResolvedVisual`, `ResolvedShot`, `Chunk`, `SfxEvent`, `Resolved`.
 
 Drawing:
 
@@ -31,7 +31,7 @@ Drawing:
 
 Shared values:
 
-- `style.ts`: `style`, `look`, `ACCENT`, `STYLE_IDS`, and type `ToneTokens`. It is the one place that picks the active tokens.
+- `style.ts`: `style`, `look`, `ACCENT`, and type `ToneTokens`. It is the one place that picks the active tokens.
 - `theme.ts`: `t`, `W`, `H`, `HEADER`, `MEDIA`, `splitGeom`, `ease`, `clamp`, and types `SplitMode`, `Box`.
 - `camera.ts`: `frameRect`, `cameraProgress`, `cameraEase`, `TRANSITION`, and type `Rect`.
 

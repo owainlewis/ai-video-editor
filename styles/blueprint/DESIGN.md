@@ -2,7 +2,7 @@
 
 The house look for Owain's reels and YouTube graphics, picked from his notes in October 2026.
 `docs/RULES.md` wins over anything here. The numbers live in `tokens.ts`; the cards live in
-`style.ts` (and `style.json`, written from it). Review every card live in the style lab:
+`style.ts`. Review every card live in the style lab:
 `npm run reel -- review`, then "Blueprint style lab".
 
 ## Style prompt
@@ -83,7 +83,7 @@ Most cards work in both t1 and t2; the catalog's `layouts` says where each can g
 
 ## Cards
 
-See `style.json` for every card's id, slots and limits (`maxChars`, `minItems`, `maxItems`) and its
+See `style.ts` for every card's id, slots and limits (`maxChars`, `minItems`, `maxItems`) and its
 `duration` (t1 2.5 to 7 s, t2 1.5 to 5 s, overlay 2.5 to 6 s; build longer cards across shots with
 `keep`). New in this catalog: `agenda`, `beforeafter`, `kpi`, `matrix`, `timeline`, `levels` (a
 layer stack), `checklist`, `quote`, `logowall`, `bento`, and the stat shapes `ring`, `meter` and

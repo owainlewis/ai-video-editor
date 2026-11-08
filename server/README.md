@@ -9,7 +9,7 @@ The local API behind the editor. It serves the UI through Vite, serves project f
 ### Modules
 
 - `index.ts`: `startServer(port = 4747)` returns `{ url, close }`. `serveFile(root, req, res, prefix = "")` serves a file with byte ranges and returns false if it did not. `media/qc.ts` uses it too.
-- `agent.ts`: `ask(projects, slug, note, selection, playhead, emit, onDone?, prompt?)`, `stop`, `isRunning`, `loadChat`, `promptFor`, `lastMessages`, types `ChatMessage` and `Selection`.
+- `agent.ts`: `ask(projects, slug, note, selection, playhead, emit, onDone?, prompt?)`, `stop`, `isRunning`, `loadChat`, `promptFor`, types `ChatMessage` and `Selection`.
 - `history.ts`: `snapshot(project, by)`, `undo`, `redo`, `versions`, `redoable`, type `Version`.
 - `insert.ts`: plan edits that roll back on new errors: `insertAt`, `placeOver`, `dropBroll`, `moveShotStart`, `moveShotEnd`, `editShot`, `placeCard`.
 - `assets.ts`: `listAssets(dir, slug)`, `saveAsset(dir, name, req)`, type `Asset`.

@@ -5,18 +5,12 @@
 // sits; a chip takes y 120 to 190. The overlay draws in the glass (960 x 880); the full-screen
 // diagram in the whole frame.
 import React from "react";
-import { C, Doc, Dots, k, Label, lerp, Line, Rect, Ring } from "../clean/kit";
+import { at, C, Doc, Dots, k, Label, lerp, Line, Rect, Ring, Stage } from "../clean/kit";
 import { MONO } from "../clean/text";
 import type { CustomProps } from "./index";
 
 const CX = 540;
 const P = 470;
-const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
-  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-    {children}
-  </svg>
-);
-const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;
 
 // "coding agents like Claude Code or Codex": two terminal windows. times: [Claude Code, Codex]
 export const EgmAgents: React.FC<CustomProps> = ({ time: t, times, width, height, shot }) => (

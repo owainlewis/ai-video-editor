@@ -14,12 +14,12 @@ import { createServer as createVite } from "vite";
 import { compositionFor } from "../effects/canvas.ts";
 import { type Canvas, cardPlan, effectList } from "../effects/preview.ts";
 import { longestStill, type Measure, qcLayout, STILL_LIMIT } from "../engine/qc.ts";
-import type { Issue } from "../engine/resolve.ts";
+import { type Issue, isGraphic, shotLabel } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 import { serveFile } from "../server/index.ts";
 import { GRAPHITE, BLACK, tokens } from "../styles/ivory/tokens.ts";
 import { resolveProject } from "./project.ts";
-import { type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
+import { ffmpeg, type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
 
 // Cuts in the footage, by scene detection on the light preview. Cached until the preview changes.
 export function footageCuts(dir: string, log?: Log): number[] {
@@ -157,8 +157,8 @@ async function checkGraphic(page: Page, r: Resolved, s: ResolvedShot, where: str
 function overviewSheet(settled: string[], file: string, log?: Log) {
   const cols = 5;
   const lay = settled.map((_, k) => `${(k % cols) * 384}_${Math.floor(k / cols) * 216}`).join("|");
-  if (settled.length === 1) run("ffmpeg", ["-v", "error", "-y", "-i", settled[0], "-vf", "scale=384:216", file], { log });
-  else run("ffmpeg", ["-v", "error", "-y", ...settled.flatMap((f) => ["-i", f]), "-filter_complex", `${settled.map((_, k) => `[${k}]scale=384:216[v${k}]`).join(";")};${settled.map((_, k) => `[v${k}]`).join("")}xstack=inputs=${settled.length}:layout=${lay}:fill=black`, "-frames:v", "1", file], { log });
+  if (settled.length === 1) ffmpeg(["-i", settled[0], "-vf", "scale=384:216", file], log);
+  else ffmpeg([...settled.flatMap((f) => ["-i", f]), "-filter_complex", `${settled.map((_, k) => `[${k}]scale=384:216[v${k}]`).join(";")};${settled.map((_, k) => `[v${k}]`).join("")}xstack=inputs=${settled.length}:layout=${lay}:fill=black`, "-frames:v", "1", file], log);
 }
 
 export async function runQc(projects: string, slug: string, log?: Log, onStage?: (s: string) => void, at?: number[]): Promise<QcResult> {
@@ -176,7 +176,7 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   mkdirSync(join(out, "frames"), { recursive: true });
 
   // `at`: only the graphics on screen at these seconds (a quick look at one or two).
-  const graphics = r.shots.map((s, i) => ({ s, i })).filter(({ s }) => s.visual && !s.keep && s.layout !== "full" && (!at || at.some((t) => t >= s.start && t < s.end)));
+  const graphics = r.shots.map((s, i) => ({ s, i })).filter(({ s }) => isGraphic(s) && (!at || at.some((t) => t >= s.start && t < s.end)));
   const srv = await qcServer(projects);
   const { browser, page } = await qcPage(srv, comp, `slug=${encodeURIComponent(slug)}`, log);
   const sheets: string[] = [];
@@ -184,12 +184,12 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   try {
     for (const [n, { s, i }] of graphics.entries()) {
       onStage?.(`Checking graphic ${n + 1}/${graphics.length}`);
-      const where = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+      const where = shotLabel(s, i);
       const { files, settled } = await checkGraphic(page, r, s, where, join(out, "frames"), String(i + 1).padStart(3, "0"), issues);
       if (settled) settledShots.push(settled);
       // One strip per graphic: before, first frame, reveals, settled, after.
       const sheet = join(out, `${String(i + 1).padStart(3, "0")}-${s.visual!.kind}.jpg`);
-      run("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, sheet], { log });
+      ffmpeg([...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, sheet], log);
       sheets.push(sheet);
     }
   } finally {
@@ -201,13 +201,13 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
     const v = s.visual;
     if (v?.kind !== "video" || !v.sync || (at && !at.some((t) => t >= s.start && t < s.end))) continue;
     // A recording the wrong shape for the panel gets its edges cropped.
-    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 960) > 0.02) issues.push({ level: "warn", message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 960), so its edges are cropped` });
+    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 960) > 0.02) issues.push({ level: "warn", message: `${shotLabel(s, i)}: the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 960), so its edges are cropped` });
     const stats = join(out, `motion-${i + 1}.txt`);
-    run("ffmpeg", ["-v", "error", "-y", "-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`, "-f", "null", "-"], { log });
+    ffmpeg(["-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`, "-f", "null", "-"], log);
     const diffs = [...readFileSync(stats, "utf8").matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
     rmSync(stats);
     const still = longestStill(diffs, 30, (t) => (v.zooms ?? []).some((z) => s.start + t >= z.t && s.start + t < z.t + z.ms / 1000));
-    if (still.secs > STILL_LIMIT) issues.push({ level: "error", message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): the screen holds still for ${still.secs.toFixed(1)}s from ${(s.start + still.at).toFixed(1)}s; something should move at least every ${STILL_LIMIT}s` });
+    if (still.secs > STILL_LIMIT) issues.push({ level: "error", message: `${shotLabel(s, i)}: the screen holds still for ${still.secs.toFixed(1)}s from ${(s.start + still.at).toFixed(1)}s; something should move at least every ${STILL_LIMIT}s` });
   }
   // Every graphic settled, on one page: the quick look before an export.
   let overview: string | null = null;

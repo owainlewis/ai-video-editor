@@ -4,9 +4,9 @@
 // its frames. Plans use a shot as "broll:<id>"; it is copied into the project when the plan is
 // resolved. Ported from ai-reel-editor's tools/broll.ts.
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
-import { type Log, ROOT, run } from "./tools.ts";
+import { ffmpeg, type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
 
 export type Clip = {
   id: string;
@@ -26,10 +26,6 @@ const INDEX = join(BROLL, "index.json");
 const VIDEO = new Set([".mp4", ".mov", ".m4v", ".mkv", ".webm"]);
 
 const ff = (args: string[]) => spawnSync("ffmpeg", ["-hide_banner", "-nostdin", ...args], { encoding: "utf8", maxBuffer: 1 << 26 });
-const ffOk = (args: string[]) => {
-  const r = ff(["-loglevel", "error", "-y", ...args]);
-  if (r.status !== 0) throw new Error(`ffmpeg failed: ${r.stderr.slice(-1500)}`);
-};
 const probe = (file: string) => {
   const j = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", file], { encoding: "utf8" }));
   return { w: j.streams[0].width as number, h: j.streams[0].height as number, duration: parseFloat(j.format.duration) };
@@ -59,7 +55,7 @@ const brightnessOf = (file: string) => {
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
 };
 
-export const loadLibrary = (): Clip[] => (existsSync(INDEX) ? JSON.parse(readFileSync(INDEX, "utf8")) : []);
+export const loadLibrary = (): Clip[] => (existsSync(INDEX) ? readJson<Clip[]>(INDEX) : []);
 
 export function indexLibrary(log: Log = () => {}): Clip[] {
   mkdirSync(CLIPS, { recursive: true });
@@ -84,19 +80,19 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
       const out = join(CLIPS, `${id}.mp4`);
       // Landscape keeps its shape at 1920 wide; portrait at 1080x1920.
       const scale = cw >= ch ? "scale=1920:-2" : "scale=1080:-2";
-      ffOk(["-ss", String(start), "-to", String(end), "-i", file, "-vf", `crop=${cw}:${ch}:${cx}:${cy},${scale},fps=30,setsar=1`, "-an", "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]);
+      ffmpeg(["-ss", String(start), "-to", String(end), "-i", file, "-vf", `crop=${cw}:${ch}:${cx}:${cy},${scale},fps=30,setsar=1`, "-an", "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]);
       // Three frames (start, middle, end) for describing it; one for the editor's thumbnail.
       const n = Math.floor((end - start) * 30);
-      ffOk(["-i", out, "-vf", `select='eq(n\\,0)+eq(n\\,${Math.floor(n / 2)})+eq(n\\,${Math.max(0, n - 2)})',scale=360:-2,tile=3x1:padding=4`, "-frames:v", "1", "-fps_mode", "vfr", join(CLIPS, `${id}.jpg`)]);
+      ffmpeg(["-i", out, "-vf", `select='eq(n\\,0)+eq(n\\,${Math.floor(n / 2)})+eq(n\\,${Math.max(0, n - 2)})',scale=360:-2,tile=3x1:padding=4`, "-frames:v", "1", "-fps_mode", "vfr", join(CLIPS, `${id}.jpg`)]);
       index.push({ id, source: stamp, start, end, duration: +(end - start).toFixed(3), crop: `crop=${cw}:${ch}:${cx}:${cy}`, brightness: brightnessOf(out), description: "", tags: [] });
     }
   }
   for (const c of index) {
     const thumb = join(CLIPS, `${c.id}-thumb.jpg`);
-    if (!existsSync(thumb) && existsSync(join(CLIPS, `${c.id}.mp4`))) ffOk(["-ss", String(Math.min(0.5, c.duration / 2)), "-i", join(CLIPS, `${c.id}.mp4`), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "4", thumb]);
+    if (!existsSync(thumb) && existsSync(join(CLIPS, `${c.id}.mp4`))) ffmpeg(["-ss", String(Math.min(0.5, c.duration / 2)), "-i", join(CLIPS, `${c.id}.mp4`), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "4", thumb]);
   }
   index.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-  writeFileSync(INDEX, JSON.stringify(index, null, 2) + "\n");
+  writeJson(INDEX, index);
   return index;
 }
 

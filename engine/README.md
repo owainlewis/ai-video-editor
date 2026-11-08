@@ -14,14 +14,13 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `Layout`: `full`, `punch`, `split`, `media`, `cutaway`, `scene`. YouTube only: `side`, `half`, `over`. Clean style only: `card`, `diagram`. On clean reels, `over` is the glass overlay.
 - `Picture`, `SfxKind`.
 - `Cut`, `Segment`, `MAIN` (the id `"main"`, the clip the project was made from): schema for `cut.json`.
-- Types: `EditPlan`, `VisualSpec`, `CutPlan`, `CutSegment`, `Word`, `ResolvedItem`, `ResolvedVisual`, `ResolvedShot`, `Chunk`, `SfxEvent`, `Resolved`.
+- Types: `EditPlan`, `VisualSpec`, `CutPlan`, `CutSegment`, `Word`, `ResolvedVisual`, `ResolvedShot`, `Chunk`, `SfxEvent`, `Resolved`.
 
 ### `resolve.ts`
 
 - `resolveShots(plan, words, duration, fps = 30, cut = false)`: returns `{ shots, issues }`.
-- `norm`, `findPhrase(words, phrase, from = 0)`, `visualAnchors(v)`, `syncWords`.
+- `norm`, `snap`, `findPhrase(words, phrase, from = 0)`, `visualAnchors(v)`, `syncWords`, `shotLabel(s, i)`, `isGraphic(s)`, `lastKept(shots, i)`.
 - `chunkWords(words, accents, cuts, fps)`: caption chunks.
-- `estimateWords(script, wpm = 165)`: word timings for a script with no recording.
 - `sfxEvents(shots)`, `cleanSfx(shots)`: sound events sorted by time.
 - `cameraRanges(dist, rate, threshold = 20, minRun = 2, bridge = 0.5)`: on-camera stretches from a picture scan.
 - `lintShots`, `lintWide`, `lintClean`, `lintLeave`, `lintOnCamera`: each returns `Issue[]`.

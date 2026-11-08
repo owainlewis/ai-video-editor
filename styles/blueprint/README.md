@@ -2,7 +2,7 @@
 
 ## Overview
 
-Blueprint is the card catalog that Ivory is built from. It is not a look you can render: `effects/style.ts` uses Ivory's tokens only, and `styles/index.ts` does not register Blueprint.
+Blueprint is the card catalog that Ivory is built from. It is not a look you can render: `effects/style.ts` uses Ivory's tokens only.
 
 The catalog lists every visual kind the editor can put on screen. Each card has an id, a tier, a purpose, its layouts, typed slots, and sample content or a reason it has none. `DESIGN.md` holds the spec and the table for picking a card. Its opening still calls Blueprint the house look. That is out of date: Ivory replaced it.
 
@@ -12,7 +12,6 @@ From `style.ts`:
 
 - `cards: Card[]`: the full catalog. Used by `effects/preview.ts`, `app/Inspector.tsx`, `server/insert.ts` and `media/project.ts`.
 - `blueprint: StyleDef`: the catalog with its name, palette, fonts and motion notes.
-- `cardsFor(kind)`: the cards for one visual kind.
 - `slotIssues(visual)`: messages for slots past their limits. `media/project.ts` turns each one into a warning.
 - Re-exports from `../catalog`: `atMax`, `slotValues`, `Card`, `Slot`.
 
@@ -26,10 +25,6 @@ From `samples.ts` (used by `style.ts` only):
 
 - `samplePage`, `sampleArticle`, `sampleRepo`, `sampleLogo`, `sampleThumb`: inline SVG data URLs that stand in for real assets.
 - `SAMPLE_PAGE_SIZE`, `SAMPLE_ARTICLE_SIZE`, `SAMPLE_REPO_SIZE`: their sizes.
-
-Data:
-
-- `style.json`: `blueprint` as JSON.
 
 ## Invariants
 
@@ -47,7 +42,6 @@ Enforced by `tests/catalog.test.ts`:
 - Samples parse as a `Visual`, match the card's kind, fill every required slot and pass `slotIssues`. That checks the card `cardFor` picks, not the card under test. So the eight `blueprint.t2` custom cards are checked against `blueprint.t1.custom` and their `props.*` limits are never tested, and `blueprint.t2.capture.repo` is checked against `blueprint.t2.capture.browser`.
 - `chart` and `kpi` samples give `Illustration` as their source.
 - Cards marked `added` that have a sample fit four panel sizes, with their sample and with `atMax`.
-- `style.json` equals `blueprint`.
 
 ## Side Effects
 

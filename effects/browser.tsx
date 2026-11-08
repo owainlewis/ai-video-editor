@@ -1,7 +1,7 @@
 import React from "react";
-import { Img, interpolate, staticFile } from "remotion";
+import { Img, interpolate } from "remotion";
 import { frameRect } from "./camera";
-import { pal, type Tone } from "./soft";
+import { pal, src, type Tone } from "./soft";
 import { style } from "./style";
 import { clamp, ease } from "./theme";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
@@ -9,8 +9,6 @@ import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 // A browser window around a real capture: three quiet dots, the page's tab (its real title and
 // favicon, when the plan gives them) and the URL with the site in ink and the path muted. Our own
 // frame, drawn from tokens; the page inside is always the real capture.
-
-const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
 
 // The bar's height for a window this wide: about 7% of the width, 66 to 80 px, so the address
 // is never under the 24 px label floor.

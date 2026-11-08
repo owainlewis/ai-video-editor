@@ -3,8 +3,8 @@
 // footage, numbers that were never said. Layout checks read measurements of real frames, taken in a
 // headless browser by `studio qc` (media/qc.ts): safe area, collisions, orphans, type size, contrast,
 // balance. Errors stop an export; warnings are reported.
-import type { Issue } from "./resolve.ts";
-import type { Resolved, ResolvedShot, Word } from "./schema.ts";
+import { type Issue, isGraphic as graphic, lastKept, shotLabel as label } from "./resolve.ts";
+import type { Resolved, Word } from "./schema.ts";
 
 // ---------- plan checks ----------
 
@@ -18,12 +18,10 @@ export const visualText = (v: unknown): string[] => {
   return [];
 };
 
-const label = (s: ResolvedShot, i: number) => `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
 const digits = (t: string) => (t.match(/\d[\d,.]*/g) ?? []).map((n) => n.replace(/[,.]/g, "")).filter((n) => n.length);
 
 export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[], cuts: number[] = []): Issue[] => {
   const issues: Issue[] = [];
-  const graphic = (s: ResolvedShot) => !!s.visual && !s.keep && s.layout !== "full";
   r.shots.forEach((s, i) => {
     if (!graphic(s)) return;
     const v = s.visual!;
@@ -43,8 +41,7 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     if (s.layout !== "over" && v.kind !== "chapter" && !(v.kind === "video" && v.sync) && linger > settle)
       issues.push({ level: "warn", message: `${label(s, i)}: lingers ${linger.toFixed(1)}s after its last part lands; end it about 2s after` });
     // A part that lands as the graphic leaves is never seen: its word is said too late in the shot.
-    let chain = i;
-    while (r.shots[chain + 1]?.keep) chain++;
+    const chain = lastKept(r.shots, i);
     const end = r.shots[chain].end;
     // A list that carries on in a later graphic names what is to come: a part said there lands there.
     const landsLater = (t: number) => r.shots.some((o, k) => k > chain && o.visual?.kind === v.kind && t >= o.start && t < o.end - 0.4 && (o.visual as { times?: number[] }).times?.includes(t));

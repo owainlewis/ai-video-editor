@@ -47,7 +47,7 @@ The props and beats each graphic reads are in its source. In `egmclean.tsx`, `cc
 
 - A plan name that is not in `CUSTOM` throws: `no custom graphic "<name>" in effects/custom/index.ts` (`../ui.tsx`).
 - Every name in `STILL` must be in `CUSTOM`. Every library card with a `custom` sample must name a graphic in `CUSTOM` and in `STILL` (`tests/stage.test.ts`).
-- `times` holds one entry per `at` beat, and can be empty or short. Read it by index with a fallback. The fallback differs by graphic: `shot.start` (`ccreview.tsx:at`, `egmclean.tsx:at`, and `at` from `../clean/kit` in `egmnatural.tsx`, `egmslow.tsx` and `automations.tsx`), a steady walk on (`stage.tsx:beats`, `egm.tsx:at`, `Tools`, `Points`), or `Infinity`, so that part never appears (`Migrate` tags, `Swap` names).
+- `times` holds one entry per `at` beat, and can be empty or short. Read it by index with a fallback. The fallback differs by graphic: `shot.start` (`at` in `clean/kit.tsx` for `ccreview.tsx`, `egmclean.tsx`, and `at` from `../clean/kit` in `egmnatural.tsx`, `egmslow.tsx` and `automations.tsx`), a steady walk on (`stage.tsx:beats`, `egm.tsx:at`, `Tools`, `Points`), or `Infinity`, so that part never appears (`Migrate` tags, `Swap` names).
 - `time` and `times` are timeline seconds, not seconds from the start of the shot.
 - `stage.tsx` drops extra items: `Lens` and `Thread` keep 4, `Gaps` 4 holes, `Drift` 5 rows, `Surge` 3 nodes, `Wall` 2 inputs.
 - `stage.tsx` draws for 16:9, for `side` and `media`. Bars stand for text so nothing is made up, a number shows only when it is said, and there is one accent (header comment).

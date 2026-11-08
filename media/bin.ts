@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { cutLength, cutWords, type Levels, wholeCut } from "../engine/cut.ts";
+import { cutLength, cutWords, type Levels, mapRanges, wholeCut } from "../engine/cut.ts";
 import { Cut, type CutPlan, MAIN, type Word } from "../engine/schema.ts";
 import { liveStatus, type Status } from "./ingest.ts";
 import { readJson, writeJson } from "./tools.ts";
@@ -69,6 +69,13 @@ export function timeline(dir: string) {
   }
   const byClip = clipWords(dir, cut.segments.map((s) => s.src));
   return { cut, explicit, error, words: cutWords(cut, byClip), byClip, duration: cutLength(cut) };
+}
+
+// Where the camera scan says the speaker is on screen, on the timeline. The scan is in the main clip's
+// own time; added clips have none, so they count as off camera. Undefined before a scan.
+export function cameraOnTimeline(dir: string, cut: CutPlan): [number, number][] | undefined {
+  const file = join(dir, "build/camera.json");
+  return existsSync(file) ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(file).ranges) : undefined;
 }
 
 // A clip's loudness every 10 ms, from its voice, cached in build/level.json until the voice changes.

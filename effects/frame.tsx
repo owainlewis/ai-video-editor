@@ -6,13 +6,12 @@ import { Video } from "@remotion/media";
 import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, staticFile, useVideoConfig } from "remotion";
 import { REVIEW_MD } from "../engine/reviewmd";
 import { UI_KINDS, UiVisual } from "./ui";
-import type { Resolved, ResolvedShot, ResolvedVisual } from "../engine/schema";
+import type { Resolved, ResolvedShot } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
-import { pal, isBlack } from "./soft";
+import { pal, isBlack, type V } from "./soft";
 import { CutVideo } from "./cut";
 import { t as type } from "./theme";
 
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { r: Resolved; shot: ResolvedShot; time: number };
 
 export const FRAME_KINDS = new Set(["odometer", "lift", "reviewmd", ...UI_KINDS]);
@@ -180,7 +179,6 @@ const Lift: React.FC<Props & { v: V<"lift"> }> = ({ r, shot, time, v }) => {
 };
 
 // ---------- REVIEW.md in a browser: the docs' own example, a line marked as each is said ----------
-const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
 // Graphite with a faint grid and crosses that drift about a pixel a second: a stage that is alive.
 export const GridStage: React.FC<{ t: number }> = ({ t }) => {
@@ -220,11 +218,11 @@ export const ReviewMdPage: React.FC<{ t: number; at: number; marks: Map<number, 
             {["#E06C5A", "#E0B04F", "#7CB36B"].map((c) => (
               <div key={c} style={{ width: 14, height: 14, borderRadius: 7, background: c }} />
             ))}
-            <div style={{ marginLeft: 22, padding: "6px 18px", borderRadius: "10px 10px 0 0", background: "#FAF8F3", fontFamily: SANS, fontSize: 24, color: ink }}>REVIEW.md</div>
+            <div style={{ marginLeft: 22, padding: "6px 18px", borderRadius: "10px 10px 0 0", background: "#FAF8F3", fontFamily: type.sans, fontSize: 24, color: ink }}>REVIEW.md</div>
           </div>
-          <div style={{ height: 36, borderRadius: 18, background: "#FAF8F3", display: "flex", alignItems: "center", padding: "0 18px", fontFamily: SANS, fontSize: 24, color: muted }}>your-repo / REVIEW.md</div>
+          <div style={{ height: 36, borderRadius: 18, background: "#FAF8F3", display: "flex", alignItems: "center", padding: "0 18px", fontFamily: type.sans, fontSize: 24, color: muted }}>your-repo / REVIEW.md</div>
         </div>
-        <div style={{ padding: "28px 70px", color: ink, fontFamily: SANS }}>
+        <div style={{ padding: "28px 70px", color: ink, fontFamily: type.sans }}>
           {REVIEW_MD.map((b, i) => {
             const markAt = marks.get(i);
             const body = markAt !== undefined ? <Mark t={t} at={markAt} color="rgba(183,205,191,0.75)"><Inline text={b.text} /></Mark> : <Inline text={b.text} />;
@@ -242,7 +240,7 @@ export const ReviewMdPage: React.FC<{ t: number; at: number; marks: Map<number, 
         </div>
       </div>
       <In t={t} at={at + 2.0} style={{ position: "absolute", left: 300, top: 946 }}>
-        <div style={{ fontFamily: SANS, fontSize: 24, color: "#A3A19C", letterSpacing: 0.5 }}>Example REVIEW.md from the Claude Code docs: code.claude.com/docs/en/code-review-customize</div>
+        <div style={{ fontFamily: type.sans, fontSize: 24, color: "#A3A19C", letterSpacing: 0.5 }}>Example REVIEW.md from the Claude Code docs: code.claude.com/docs/en/code-review-customize</div>
       </In>
     </AbsoluteFill>
   );

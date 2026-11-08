@@ -35,15 +35,22 @@ export function stills(projects: string, slug: string, times: number[], log?: Lo
   });
 }
 
+// What every export does before its picture. A cut is flattened from the originals first, and the
+// export draws the picture from that file. The order matters: resolving with the flat files writes
+// the settings the mix reads, and resolving after the mix picks it up.
+export async function prepareExport(projects: string, slug: string, onStage: (stage: string) => void, log?: Log) {
+  ensureResolved(projects, slug);
+  const flat = hasCut(projects, slug) ? await renderCut(projects, slug, onStage, log) : undefined;
+  if (flat) ensureResolved(projects, slug, flat);
+  onStage("Mixing audio");
+  mixAudio(projects, slug, log, flat);
+  return { flat, resolved: ensureResolved(projects, slug, flat) };
+}
+
 // The finished video: mix the audio, then render every frame. Progress comes from Remotion's
 // "Rendered n/total" lines.
 export async function renderFinal(projects: string, slug: string, onProgress: (done: number, total: number) => void, log?: Log, onStage: (stage: string) => void = () => {}): Promise<string> {
-  ensureResolved(projects, slug);
-  // A cut is flattened from the originals first, and the render draws the picture from that file.
-  const flat = hasCut(projects, slug) ? await renderCut(projects, slug, onStage, log) : undefined;
-  ensureResolved(projects, slug, flat);
-  mixAudio(projects, slug, log, flat);
-  const resolved = ensureResolved(projects, slug, flat);
+  const { flat, resolved } = await prepareExport(projects, slug, onStage, log);
   const out = join(projects, slug, "renders/final.mp4");
   mkdirSync(join(projects, slug, "renders"), { recursive: true });
   return new Promise((ok, fail) => {

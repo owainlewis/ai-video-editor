@@ -2,13 +2,13 @@ import { FocusVisual, MapVisual, ShiftVisual, WordsVisual } from "./house";
 import React from "react";
 import { Video } from "@remotion/media";
 import { UiVisual } from "./ui";
-import { Img, interpolate, staticFile } from "remotion";
+import { Img, interpolate } from "remotion";
 import { cameraProgress, frameRect, TRANSITION } from "./camera";
 import { zoomAt } from "../engine/resolve";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
 import { markColor } from "./motion";
-import { FunnelVisual, GridVisual, isBlack, pal, SoftAccented, TypeVisual, type Tone } from "./soft";
+import { FunnelVisual, GridVisual, isBlack, pal, prog, SoftAccented, src, TypeVisual, type Tone } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
@@ -18,10 +18,6 @@ import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number; filter?: string; bleed?: boolean };
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[]; size?: [number, number] };
 
-// Project files, web URLs, or inline data (the style lab's illustrative samples).
-const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
-// 0 to 1 over `dur` seconds from `at`, eased.
-const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
 // Colours for a designed graphic in the shot's tone. On paper the hairline and shadow are the split
 // canvas's own (as they always were); on graphite everything comes from the dark tone.
@@ -207,12 +203,10 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
   if (v.sync) {
     const [vw0, vh0] = v.size ?? [w, h];
     const full = Math.max(h, (w * vh0) / vw0);
-    const z = zoomAt(v.zooms ?? [], time);
-    const tx = Math.min(0, Math.max(w - w * z.s, w / 2 - z.x * w * z.s));
-    const ty = Math.min(0, Math.max(h - full * z.s, h / 2 - z.y * full * z.s));
+    const z = zoomAt(v.zooms ?? [], time, h / full);
     return (
       <div style={{ width: w, height: h, overflow: "hidden" }}>
-        <div style={{ width: w, height: full, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${z.s})` }}>
+        <div style={{ width: w, height: full, transformOrigin: "0 0", transform: `translate(${z.tx * w}px, ${z.ty * full}px) scale(${z.s})` }}>
           <Video src={src(slug, v.src)} muted trimBefore={Math.round(shot.start * 30)} objectFit="cover" style={{ width: w, height: full }} />
         </div>
       </div>

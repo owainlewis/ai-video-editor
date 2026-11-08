@@ -1,10 +1,10 @@
 import React from "react";
-import { Img, interpolate, staticFile } from "remotion";
-import { pal, SoftAccented } from "./soft";
+import { Img, interpolate } from "remotion";
+import { pal, type Props, SoftAccented, src, type V } from "./soft";
 import { browserGeom } from "./browser";
 import { style } from "./style";
 import { clamp, ease } from "./theme";
-import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
+import type { ResolvedVisual } from "../engine/schema";
 
 // Blueprint card kinds: agenda, before/after, KPI row, 2x2 matrix, timeline, layers, checklist,
 // quote, logo wall, bento, and the stat shapes ring, meter and waffle. Each is laid out by a pure geometry function (exported, and tested in
@@ -12,8 +12,6 @@ import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 // padding is even on every side, and every text is sized so its longest line fits its room.
 // Sizes, colours and motion all come from the style's tokens.
 
-type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 export type Box = { x: number; y: number; w: number; h: number };
 // A text and the room it was sized for: `chars` at `size` must fit `room` px on `lines` lines.
 // `floor` overrides the readable minimum for interface text such as a browser's address.
@@ -26,7 +24,6 @@ const S = style.space;
 const F = style.font;
 const M = style.motion;
 
-const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
 const prog = (time: number, at: number, dur: number = M.enter) => (isFinite(at) ? interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease }) : 0);
 // Arrives out of a blur, rising a little.
 const land = (p: number, dy = 24): React.CSSProperties => ({ opacity: p, filter: `blur(${(1 - p) * M.blur}px)`, translate: `0 ${(1 - p) * dy}px` });

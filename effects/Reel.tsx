@@ -1,16 +1,16 @@
 import React from "react";
-import { Audio } from "@remotion/media";
-import { AbsoluteFill, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, Sequence, useCurrentFrame } from "remotion";
 import { Captions } from "./Captions";
 import { FrameVisual, isFrame } from "./frame";
 import { Speaker } from "./Speaker";
-import { CutAudio } from "./cut";
-import { clamp, ease, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
+import { Soundtrack } from "./cut";
+import { clamp, ease, gradeFilter, HEADER, MEDIA, splitGeom, t, W, H } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { Blueprint, funnelCardBox, gridTileBox, headlineSize, pal, SCENE, SceneCanvas, SoftAccented, typeInputBox, type Box, darkIsGraphite } from "./soft";
 import { cameraEase, TRANSITION } from "./camera";
 import { style } from "./style";
 import type { Resolved, ResolvedShot } from "../engine/schema";
+import { lastKept } from "../engine/resolve";
 import { Clean } from "./clean/Clean";
 
 // The header is large on the first shot (the on-screen hook in frame 1), then docks small.
@@ -142,8 +142,7 @@ const SceneLayer: React.FC<{ r: Resolved; i: number; time: number; grade: string
   const shot = r.shots[i];
   let head = i;
   while (head > 0 && r.shots[head].keep) head--;
-  let last = head;
-  while (r.shots[last + 1]?.keep) last++;
+  const last = lastKept(r.shots, head);
   const s = { ...r.shots[head], end: r.shots[last].end };
   const tone = shot.tone ?? "light";
   let since = i;
@@ -183,8 +182,7 @@ const enterBox = (r: Resolved, i: number): Box | undefined => {
   if (e.from === "rect" && e.rect) return { x: e.rect[0] * W, y: e.rect[1] * H, w: e.rect[2] * W, h: e.rect[3] * H, r: 24 };
   let head = i - 1;
   while (head > 0 && r.shots[head].keep) head--;
-  let last = head;
-  while (r.shots[last + 1]?.keep) last++;
+  const last = lastKept(r.shots, head);
   const s = { ...r.shots[head], end: r.shots[last].end };
   if (!s.visual || s.layout !== "scene") return undefined;
   const box = panel(s, r, head === 0);
@@ -214,7 +212,7 @@ const ReelHouse: React.FC<Resolved> = (r) => {
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
   const shot = r.shots[index] ?? r.shots[r.shots.length - 1];
-  const grade = `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})`;
+  const grade = gradeFilter(r.grade);
   const onCanvas = shot.layout === "split" || shot.layout === "media";
   // The header animates from the shot where its text last changed.
   let since = index;
@@ -249,8 +247,7 @@ const ReelHouse: React.FC<Resolved> = (r) => {
         // A kept shot carries on the visual of the shot before it, so one scene runs across them.
         const visual = head.visual;
         if (!visual || head.keep) return null;
-        let last = i;
-        while (r.shots[last + 1]?.keep) last++;
+        const last = lastKept(r.shots, i);
         const s = { ...head, end: r.shots[last].end };
         const from = Math.round(s.start * r.fps);
         const dur = Math.max(1, Math.round(s.end * r.fps) - from);
@@ -286,8 +283,7 @@ const ReelHouse: React.FC<Resolved> = (r) => {
 
       {onCanvas && !isFrame(shot) && shot.header && <Header text={shot.header} first={index === 0} time={time} start={r.shots[since].start} animate={since > 0} tone={shot.tone ?? "light"} />}
       <Captions r={r} shot={shot} time={time} />
-      {r.audio && <Audio src={staticFile(r.audio)} />}
-      {r.cut && <CutAudio r={r} />}
+      <Soundtrack r={r} />
     </AbsoluteFill>
   );
 };

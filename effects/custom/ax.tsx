@@ -6,15 +6,10 @@ import { AbsoluteFill } from "remotion";
 import { easeInOut, easeOut, lerp, prog } from "../motion";
 import { t as type } from "../theme";
 import type { CustomProps } from "./index";
+import { seeded } from "./stage";
 
 const PINE = "#2C4441";
 const SAGE = "#B7CDBF";
-
-// A fixed scatter so the wave front is irregular but every render is identical.
-const jitter = (i: number) => {
-  const x = Math.sin(i * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
-};
 
 // props: { cols?, rows? }   times: [the field starts filling]
 export const Swarm: React.FC<CustomProps> = ({ shot, time, props, times, width, height, panel }) => {
@@ -32,7 +27,7 @@ export const Swarm: React.FC<CustomProps> = ({ shot, time, props, times, width, 
       {Array.from({ length: cols * rows }, (_, i) => {
         const c = i % cols, r = Math.floor(i / cols);
         const d = Math.hypot(c - cx, r - cy) / maxD;
-        const t0 = at + d * 0.7 + jitter(i) * 0.15;
+        const t0 = at + d * 0.7 + seeded(i) * 0.15;
         const box = prog(time, t0 - 0.25, 0.25, easeOut);
         const agent = prog(time, t0, 0.22, easeOut);
         // A soft ripple keeps passing through the filled field.

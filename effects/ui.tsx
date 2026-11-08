@@ -7,12 +7,12 @@
 //   tiers       a stack of cards in depth; the tier being said comes forward and its rule is marked
 import React from "react";
 import { AbsoluteFill, interpolate, useVideoConfig } from "remotion";
-import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
+import type { ResolvedShot } from "../engine/schema";
 import { easeInOut, In, lerp, Mark, MOVE, prog } from "./motion";
+import type { V } from "./soft";
 import { t as type } from "./theme";
 import { CUSTOM, STILL } from "./custom";
 
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props = { shot: ResolvedShot; time: number };
 
 const SAGE = "#B7CDBF";

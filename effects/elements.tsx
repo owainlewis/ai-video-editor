@@ -1,17 +1,16 @@
 import React from "react";
 import { easeInOut } from "./motion";
 import { interpolate } from "remotion";
-import { pal } from "./soft";
+import { pal, type V } from "./soft";
 import { look } from "./style";
 import { constraintGeom } from "./cards";
 import { clamp, ease, t } from "./theme";
-import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
+import type { ResolvedShot } from "../engine/schema";
 
 // Data and structure graphics, so a reel is not only text on cards. Minimal: thin lines, mono
 // numbers, one accent for the thing being said, and things arrive on their spoken words.
 
 type Props = { shot: ResolvedShot; time: number; w: number; h: number };
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 
 // An element that never arrives (at = Infinity) stays at 0.
 const prog = (time: number, at: number, dur = 0.28) => (isFinite(at) ? interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease }) : 0);

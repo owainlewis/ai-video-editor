@@ -2,16 +2,10 @@
 // the ones said, from HumanLayer's SlopCodeBench write-up (Opus 5.5: medium 28/196 for $193.47,
 // xhigh 25/196 for $817.04). Split diagrams stay above y 830; the full-screen one above y 1400.
 import React from "react";
-import { C, k, Label, Line, Rect } from "../clean/kit";
+import { at, C, k, Label, Line, Rect, Stage } from "../clean/kit";
 import { MONO } from "../clean/text";
 import type { CustomProps } from "./index";
 
-const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
-  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-    {children}
-  </svg>
-);
-const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;
 
 // "It's easy to assume more thinking is always better": two axes and the straight line everyone
 // draws in their head, dashed. times: [more thinking, better]

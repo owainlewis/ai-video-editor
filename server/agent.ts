@@ -4,7 +4,7 @@
 // up, so the editor updates the same way whoever made the edit. Each project keeps one Claude
 // session, so later notes can say "smaller" without repeating themselves.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Word } from "../engine/schema.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
@@ -115,4 +115,3 @@ function describeTool(name: string, input: Record<string, unknown>): string {
   return name;
 }
 
-export const lastMessages = (project: string) => (existsSync(chatFile(project)) ? JSON.parse(readFileSync(chatFile(project), "utf8")).messages as ChatMessage[] : []);

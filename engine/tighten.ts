@@ -1,6 +1,7 @@
 // Cutting by the words: the stretch of the cut that holds words i to j, and the tightening pass
 // that finds what a talking-head edit usually loses (long pauses, filler words, a sentence started
 // again). Pure: the editor shows each cut as a proposal in the script and applies the ones kept.
+import { norm } from "./resolve.ts";
 import type { Word } from "./schema.ts";
 
 // The words' stretch, edge to edge: from just before word i to just before the word after j, so
@@ -16,7 +17,6 @@ export function wordsRange(words: Word[], i: number, j: number): [number, number
 export type Trim = { kind: "pause" | "filler" | "retake"; from: number; to: number; words: [number, number] | null; text: string };
 
 const FILLERS = new Set(["um", "umm", "uh", "uhh", "erm", "er", "ah", "hmm", "mm"]);
-const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
 
 // `pause`: gaps between words longer than this are cut down to `keep` seconds.
 // A retake: the speaker says three or more words, stops, and says them again; the first attempt

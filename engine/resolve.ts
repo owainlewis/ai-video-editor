@@ -16,13 +16,29 @@ export const findPhrase = (words: Word[], phrase: string, from = 0): number => {
   return -1;
 };
 
+// How the checks name a shot.
+export const shotLabel = (s: ResolvedShot, i: number) => `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+
+// A shot that puts up a graphic of its own, as opposed to the picture or a shot continuing one.
+export const isGraphic = (s: ResolvedShot) => !!s.visual && !s.keep && s.layout !== "full";
+
+// The last shot of the run that holds shot i's visual: i, and every `keep` straight after it.
+export const lastKept = (shots: { keep?: boolean }[], i: number) => {
+  let last = i;
+  while (shots[last + 1]?.keep) last++;
+  return last;
+};
+
+// How long the shots matching `pred` stay on screen.
+const timeIn = (shots: ResolvedShot[], pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
+
 // Cuts land slightly before the word so the new shot is up as the word starts.
 export const CUT_LEAD = 0.05;
 
 export type Issue = { level: "error" | "warn"; message: string };
 
 // Shot boundaries sit exactly on frames, so the layout and its visual always switch on the same frame.
-const snap = (t: number, fps: number) => Math.round(t * fps) / fps;
+export const snap = (t: number, fps: number) => Math.round(t * fps) / fps;
 
 // The spoken anchors inside a visual, in the order its parts reveal. `times` in the resolved plan
 // follows this order, one time per anchor (an unanchored part cascades in after the shot starts).
@@ -171,8 +187,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     // The house graphics show one part at a time, so parts without a word of their own are spread
     // over the shot instead of cascading in together.
     const spread = v.kind === "words" || v.kind === "focus" || v.kind === "map" || v.kind === "shift";
-    let last = k;
-    while (shots[last + 1]?.keep) last++;
+    const last = lastKept(shots, k);
     const span = shots[last].end - shot.start;
     const gap = Math.min(1.1, Math.max(0.35, (span - 1.5) / Math.max(1, anchors.length - 1)));
     const times = anchors.map((a, n) => {
@@ -268,21 +283,6 @@ export const chunkWords = (words: Word[], accents: string[], cuts: number[], fps
         if (out[i - 1] && out[i - 1].end > cut) out[i - 1].end = cut;
       }
     });
-  }
-  return out;
-};
-
-// Word timings for a script with no recording, at a natural reading pace (about 165 words a
-// minute), with pauses at commas and full stops. Good enough to pace and test the graphics.
-export const estimateWords = (script: string, wpm = 165): Word[] => {
-  const perWord = 60 / wpm;
-  const out: Word[] = [];
-  let t = 0.3;
-  for (const text of script.split(/\s+/).filter(Boolean)) {
-    // Longer words take longer to say; the average word stays near `perWord`.
-    const len = perWord * (0.55 + 0.09 * Math.min(12, text.replace(/[^\p{L}\p{N}]/gu, "").length));
-    out.push({ text, start: +t.toFixed(3), end: +(t + len * 0.9).toFixed(3) });
-    t += len + (/[.!?]$/.test(text) ? 0.45 : /[,;:]$/.test(text) ? 0.2 : 0);
   }
   return out;
 };
@@ -394,7 +394,7 @@ export const cameraRanges = (dist: number[], rate: number, threshold = 20, minRu
 export const lintLeave = (shots: ResolvedShot[], leave: [number, number][]): Issue[] =>
   shots.flatMap((s, i) =>
     s.layout !== "full" && leave.some(([a, b]) => s.start < b && s.end > a)
-      ? [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): inside a stretch to leave alone (a demo)` }]
+      ? [{ level: "error" as const, message: `${shotLabel(s, i)}: inside a stretch to leave alone (a demo)` }]
       : [],
   );
 
@@ -409,7 +409,7 @@ export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], 
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");
     const what = s.layout === "cutaway" ? "b-roll covers the talking head, not a screen recording or other b-roll" : "graphics go on the talking head only";
-    return [{ level: "error" as const, message: `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}"): not on camera; ${what}${near ? ` (on camera nearby: ${near})` : ""}` }];
+    return [{ level: "error" as const, message: `${shotLabel(s, i)}: not on camera; ${what}${near ? ` (on camera nearby: ${near})` : ""}` }];
   });
 
 // YouTube (16:9) over a hand-edited rough cut: sparse and calm. Graphics hold longer, the
@@ -419,7 +419,7 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
   let away = 0;
   shots.forEach((s, i) => {
     const len = s.end - s.start;
-    const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+    const label = shotLabel(s, i);
     if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "words")
@@ -438,8 +438,6 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
   const graphics = shots.filter((s) => s.layout !== "full" && s.layout !== "punch" && !s.keep).length;
   if (duration > 60 && graphics / (duration / 60) > 4)
     issues.push({ level: "warn", message: `${graphics} graphics in ${(duration / 60).toFixed(1)} min; keep YouTube sparse, about one every 20 to 60 s` });
-  const last = shots[shots.length - 1];
-  if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });
   return issues;
 };
 
@@ -449,17 +447,15 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
   for (const s of shots)
     if (s.layout === "side" || s.layout === "half" || s.layout === "over") issues.push({ level: "error", message: `"${s.anchor}": ${s.layout} is a YouTube layout; set "canvas": "youtube"` });
   const speaker = (l: string) => l !== "media" && l !== "cutaway" && l !== "scene";
-  const total = (pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
   let away = 0;
   let lastScene: ResolvedShot | undefined;
   shots.forEach((s, i) => {
     const len = s.end - s.start;
-    const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+    const label = shotLabel(s, i);
     // One camera move per shot, and never a rushed one: a capture's from-to move needs time.
     const v = s.visual;
     if (!s.keep && v?.kind === "image" && v.from && v.to && v.from.some((x, k) => Math.abs(x - v.to![k]) > 0.005)) {
-      let end = i;
-      while (shots[end + 1]?.keep) end++;
+      const end = lastKept(shots, i);
       const moveLen = shots[end].end - s.start - (s.enter ? 0.7 : 0);
       if (moveLen < 1.2) issues.push({ level: "warn", message: `${label}: the camera move lasts ${moveLen.toFixed(2)}s; under 1.2s it reads as a jolt. Lock the camera or give it time` });
     }
@@ -513,13 +509,11 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
   if (shots[0] && shots[0].layout !== "split" && !(format === "film" && shots[0].layout === "scene" && shots[0].header))
     issues.push({ level: "warn", message: "first shot should be a split with the topic on top" });
   if (format === "react" && duration > 0) {
-    const split = total((s) => s.layout === "split") / duration;
+    const split = timeIn(shots, (s) => s.layout === "split") / duration;
     if (split < 0.6) issues.push({ level: "warn", message: `split is ${Math.round(split * 100)}% of the reel; react reels sit around 70 to 85%` });
     const sources = shots.filter((s) => s.visual?.kind === "image").length;
     if (sources < 2) issues.push({ level: "warn", message: `only ${sources} source captures; a react reel walks through the source (repo, README, post)` });
   }
-  const last = shots[shots.length - 1];
-  if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });
   return issues;
 };
 
@@ -533,20 +527,31 @@ export const CLEAN_LAYOUTS = ["split", "full", "card", "diagram", "over", "cutaw
 // typing. A diagram draws on many small beats, so only its first beat sounds, and only in the clear.
 // A kind has several files that take turns (audio/library.py). Nothing on a cut back to the speaker.
 const CLEAR = 1;
-// A recorded screen's camera at time t: each zoom eases from where the last one left it.
+// A recorded screen's camera at time t: its scale and offset (tx a share of the panel's width, ty of the
+// page's height; box is panel height / page height). Each zoom eases these straight from where the last
+// one left them. Easing the offset, not the centre, moves every point on the page in one line: an eased
+// centre slid the page one way and back, and stuck at the page's edge, then lurched free (Owain, 2026-11-08).
 export type ScreenZoom = { t: number; x: number; y: number; s: number; ms: number };
-export const zoomAt = (zooms: ScreenZoom[], t: number) => {
-  const cur = { x: 0.5, y: 0, s: 1 }; // Unzoomed, a recording taller than its panel hangs from the top.
+export const zoomAt = (zooms: ScreenZoom[], t: number, box = 1) => {
+  const place = (x: number, y: number, s: number) => ({ s, tx: Math.min(0, Math.max(1 - s, 0.5 - x * s)), ty: Math.min(0, Math.max(box - s, box / 2 - y * s)) });
+  const cur = place(0.5, 0, 1); // Unzoomed, a recording taller than its panel hangs from the top.
   for (const z of zooms) {
     if (t < z.t) break;
     const p = z.ms ? Math.min(1, ((t - z.t) * 1000) / z.ms) : 1;
-    const e = p < 0.5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2;
-    cur.x += (z.x - cur.x) * e;
-    cur.y += (z.y - cur.y) * e;
-    cur.s += (z.s - cur.s) * e;
+    const e = p ** 3 * (p * (6 * p - 15) + 10); // Starts and stops with no sudden change of speed.
+    const to = place(z.x, z.y, z.s);
+    cur.s += (to.s - cur.s) * e;
+    cur.tx += (to.tx - cur.tx) * e;
+    cur.ty += (to.ty - cur.ty) * e;
   }
   return cur;
 };
+// A move that starts before the last one has settled reads as a jerk. A hard cut (ms 0) ends one cleanly.
+export const zoomClashes = (zooms: ScreenZoom[]) =>
+  zooms.filter((z, i) => {
+    const next = zooms[i + 1];
+    return !!next?.ms && next.t < z.t + z.ms / 1000 + 0.15;
+  });
 
 export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
   const ev: SfxEvent[] = [];
@@ -579,15 +584,13 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
 // no footage of the speaker (a voiced script), so every picture comes from b-roll.
 export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boolean): Issue[] => {
   const issues: Issue[] = [];
-  const total = (pred: (s: ResolvedShot) => boolean) => shots.filter(pred).reduce((t, s) => t + s.end - s.start, 0);
   shots.forEach((s, i) => {
     const len = s.end - s.start;
-    const label = `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
+    const label = shotLabel(s, i);
     const v = s.visual;
     if (!(CLEAN_LAYOUTS as readonly string[]).includes(s.layout)) issues.push({ level: "error", message: `${label}: ${s.layout} is not a clean layout; use ${CLEAN_LAYOUTS.join(", ")}` });
     if ((s.layout === "split" || s.layout === "over" || s.layout === "diagram") && !v) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "card" && v && v.kind !== "beats" && v.kind !== "list") issues.push({ level: "warn", message: `${label}: a card holds beats, a bracketed list or the caption alone, not a ${v.kind}` });
-    if (s.layout === "cutaway" && v?.kind !== "video") issues.push({ level: "error", message: `${label}: a cutaway needs a video visual; or use full with a picture` });
     if (faceless && (s.layout === "full" || s.layout === "split" || s.layout === "over") && !s.picture)
       issues.push({ level: "error", message: `${label}: there is no footage of the speaker, so a ${s.layout} shot needs a picture (b-roll)` });
     if (len < 0.4) issues.push({ level: "warn", message: `${label} is only ${len.toFixed(2)}s` });
@@ -615,13 +618,11 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
   });
   if (duration > 0) {
     // Split is the main view (Owain, 2026-11-06: "the split screen should be the primary view").
-    const split = total((s) => s.layout === "split") / duration;
+    const split = timeIn(shots, (s) => s.layout === "split") / duration;
     if (split < 0.45) issues.push({ level: "warn", message: `split is ${Math.round(split * 100)}% of the reel; it is the main view, so aim for half or more` });
     // A full-screen diagram only now and then, where it adds value.
-    const diagram = total((s) => s.layout === "diagram") / duration;
+    const diagram = timeIn(shots, (s) => s.layout === "diagram") / duration;
     if (diagram > 0.2) issues.push({ level: "warn", message: `diagrams fill ${Math.round(diagram * 100)}% of the reel; use one only now and then` });
   }
-  const last = shots[shots.length - 1];
-  if (last && last.end < duration - 0.05) issues.push({ level: "error", message: "shots do not reach the end" });
   return issues;
 };

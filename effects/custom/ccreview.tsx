@@ -3,15 +3,9 @@
 // draw in the top panel (1080 x 960) and stay above y 830; the full-screen diagram keeps above the
 // caption at y 1520.
 import React from "react";
-import { C, k, Label, Line, Rect, Ring } from "../clean/kit";
+import { at, C, k, Label, Line, Rect, Ring, Stage } from "../clean/kit";
 import type { CustomProps } from "./index";
 
-const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
-  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-    {children}
-  </svg>
-);
-const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;
 
 // "AI opens pull requests faster than anyone can read them": pull requests pile up in a queue while
 // one person reads one. times: [opens pull, faster, read them]

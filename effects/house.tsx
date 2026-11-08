@@ -10,10 +10,9 @@ import React from "react";
 import { interpolate } from "remotion";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, lerp, MOVE, prog, runs } from "./motion";
-import { pal, type Tone } from "./soft";
+import { pal, type Tone, type V } from "./soft";
 import { t } from "./theme";
 
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 type Props<K extends ResolvedVisual["kind"]> = { shot: ResolvedShot; time: number; w: number; h: number; v: V<K> };
 
 const toneOf = (shot: ResolvedShot): Tone => shot.tone ?? "light";

@@ -1,6 +1,5 @@
 // What every style in styles/ shares: the shape of its tokens, its cards and their typed slots, and
-// the helpers that check a plan against a card. A style is one folder (tokens.ts, style.ts,
-// DESIGN.md, review.json) registered in styles/index.ts. See styles/README.md.
+// the helpers that check a plan against a card. See styles/README.md.
 import type { VisualSpec } from "../engine/schema";
 
 // ---- Tokens ----

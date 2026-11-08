@@ -3,15 +3,9 @@
 // /tasks. Agents are rings, their work is dots. Split diagrams stay above y 830; the full-screen one
 // above y 1400.
 import React from "react";
-import { C, Dots, k, Label, Line, Rect, Ring } from "../clean/kit";
+import { at, C, Dots, k, Label, Line, Rect, Ring, Stage } from "../clean/kit";
 import type { CustomProps } from "./index";
 
-const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
-  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-    {children}
-  </svg>
-);
-const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;
 const Check: React.FC<{ x: number; y: number; p: number; color?: string }> = ({ x, y, p, color = C.sage }) =>
   p <= 0 ? null : <path d={`M ${x - 14} ${y} l 10 11 l 20 -22`} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="60" strokeDashoffset={60 * (1 - p)} />;
 

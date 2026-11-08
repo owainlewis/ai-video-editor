@@ -1,7 +1,7 @@
 // The Blueprint card catalog: every visual kind the editor can put on screen, as a card with an
 // id, a tier, a purpose, its slots (what the plan fills, and how long each may be) and sample
 // content for the style lab. Modelled on herk-edit-kit's style library: named styles, tiered cards,
-// declared slots. `npm run reel -- styles --write` writes style.json from this file.
+// declared slots.
 //
 // Tiers: t1 is a full-frame scene takeover, t2 sits in the split panel beside the speaker (or
 // `side` on 16:9), overlay sits over the speaker's picture. Most cards work in both t1 and t2;
@@ -940,9 +940,6 @@ export const blueprint: StyleDef = {
   spacing: tokens.space,
   cards,
 };
-
-// The cards for a visual kind (a chart has two treatments).
-export const cardsFor = (kind: string) => cards.filter((c) => c.kind === kind);
 
 // Slots past their limits, for `validate`: the card's layout is only sized and tested up to them.
 export const slotIssues = (v: VisualSpec): string[] => slotIssuesIn(cards, v);

@@ -218,10 +218,10 @@ export async function record(projects: string, slug: string, log?: Log) {
           await browser.js("__rec.clear()");
         } else if (a.act === "zoom") {
           const p = await place(on);
-          zooms.push({ t, x: a.x ?? p.x / VIEW.width, y: a.y ?? p.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 450 });
+          zooms.push({ t, x: a.x ?? p.x / VIEW.width, y: a.y ?? p.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 600 });
           zoomed = true;
         } else if (a.act === "reset") {
-          zooms.push({ t, x: 0.5, y: 0, s: 1, ms: a.ms ?? 400 });
+          zooms.push({ t, x: 0.5, y: 0, s: 1, ms: a.ms ?? 500 });
           zoomed = false;
         } else if (a.act === "type") {
           for (const ch of a.text ?? "") {

@@ -4,8 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Thumbnail } from "@remotion/player";
-import { Reel } from "../effects/Reel";
-import { Wide } from "../effects/Wide";
+import { component } from "./Gallery";
 import { compositionFor } from "../effects/canvas";
 import type { Resolved } from "../engine/schema";
 
@@ -52,7 +51,7 @@ const App: React.FC<{ r: Resolved }> = ({ r }) => {
         window.qcError = error?.message || String(error);
         return null;
       }}
-      component={(r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>}
+      component={component(r)}
       inputProps={r}
       compositionWidth={comp.width}
       compositionHeight={comp.height}

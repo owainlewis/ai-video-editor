@@ -10,7 +10,7 @@
 import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { easeInOut, lerp, prog } from "../motion";
-import { t as type } from "../theme";
+import { clamp, t as type } from "../theme";
 import { Digits } from "../frame";
 import type { CustomProps } from "./index";
 
@@ -19,7 +19,6 @@ const PINE = "#2C4441";
 const GREEN = "#3E7B5B";
 const RED = "#D9534F";
 const MONO = '"SF Mono", Menlo, monospace';
-const clampT = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 const tone = (panel: boolean) => ({
   ink: panel ? "#1F1F1D" : "#F2EFEA",
   muted: panel ? "#6E6B65" : "#A3A19C",
@@ -29,7 +28,6 @@ const tone = (panel: boolean) => ({
 });
 const str = (x: unknown, d = "") => (typeof x === "string" ? x : d);
 const arr = <T,>(x: unknown) => (Array.isArray(x) ? (x as T[]) : []);
-const tick = (time: number, at: number) => prog(time, at, 0.22, easeInOut);
 const Check: React.FC<{ k: number; size: number; color?: string }> = ({ k, size, color = GREEN }) => (
   <div style={{ width: size, height: size, borderRadius: size, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.7, fontWeight: 800, scale: String(k * (1 + 0.25 * Math.sin(k * Math.PI))), opacity: k }}>✓</div>
 );
@@ -42,9 +40,9 @@ export const StatBadge: React.FC<CustomProps> = ({ shot, time, props, times, wid
   const blur = prog(time, at - 0.15, 0.35, easeInOut);
   const k = prog(time, at, 0.4, easeInOut);
   const value = Number(props.value ?? 0);
-  const roll = interpolate(time, [at, at + 0.7], [0, value], { ...clampT, easing: easeInOut });
+  const roll = interpolate(time, [at, at + 0.7], [0, value], { ...clamp, easing: easeInOut });
   const [fx, fy, fw] = (props.focus as number[]) ?? [0, 0, 1];
-  const push = interpolate(time, [shot.start, shot.end], [1, 1.08], clampT);
+  const push = interpolate(time, [shot.start, shot.end], [1, 1.08], clamp);
   const fs = Math.round(width / 6.5);
   return (
     <AbsoluteFill style={{ overflow: "hidden", borderRadius: 28 }}>
@@ -76,7 +74,7 @@ export const Stopwatch: React.FC<CustomProps> = ({ shot, time, props, times, wid
   const fastOn = time >= t1;
   const r = Math.min(width, height) * 0.27;
   // The slow hand races and keeps going; at the reset it whips back to twelve and barely moves.
-  const angle = fastOn ? interpolate(time, [t1, t1 + 0.25, t1 + 3], [360 * 6, 0, 18], { ...clampT, easing: easeInOut }) : Math.max(0, time - t0) * 720;
+  const angle = fastOn ? interpolate(time, [t1, t1 + 0.25, t1 + 3], [360 * 6, 0, 18], { ...clamp, easing: easeInOut }) : Math.max(0, time - t0) * 720;
   const col = fastOn ? GREEN : RED;
   const flash = fastOn ? 1 - prog(time, t1, 0.5) : 0;
   const label = fastOn ? fast.label : slow.label;
@@ -119,14 +117,14 @@ export const Timeline: React.FC<CustomProps> = ({ shot, time, props, times, widt
   // The playhead rides the fill: where the last started segment has reached.
   let head = 0;
   segs.forEach((_, i) => {
-    const f = interpolate(time, [starts[i], ends[i]], [0, 1], clampT);
+    const f = interpolate(time, [starts[i], ends[i]], [0, 1], clamp);
     if (time >= starts[i]) head = (i + f) / n;
   });
   return (
     <AbsoluteFill>
       <div style={{ position: "absolute", left: x0, top: barY - barH / 2, width: w, height: barH, borderRadius: barH, background: panel ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.1)", overflow: "hidden", display: "flex" }}>
         {segs.map((s, i) => {
-          const f = interpolate(time, [starts[i], ends[i]], [0, 1], clampT);
+          const f = interpolate(time, [starts[i], ends[i]], [0, 1], clamp);
           return (
             <div key={i} style={{ width: w / n, height: "100%", borderRight: i < n - 1 ? `2px solid ${panel ? "#F4F1EA" : "#141413"}` : "none" }}>
               <div style={{ width: `${f * 100}%`, height: "100%", background: s.color }} />
@@ -206,7 +204,7 @@ export const Phases: React.FC<CustomProps> = ({ shot, time, props, times, width,
   const p = phases[cur] ?? { label: "" };
   const swap = prog(time, ats[cur], 0.3, easeInOut);
   const w = width * 0.88;
-  const progress = (cur + interpolate(time, [ats[cur], ats[cur + 1] ?? shot.end], [0, 1], clampT)) / n;
+  const progress = (cur + interpolate(time, [ats[cur], ats[cur + 1] ?? shot.end], [0, 1], clamp)) / n;
   return (
     <AbsoluteFill style={{ alignItems: "center" }}>
       {/* hero: the phase being said, swapping with a blur */}

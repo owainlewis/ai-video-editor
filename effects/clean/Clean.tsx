@@ -10,10 +10,11 @@
 // Hard cuts between shots; easing only inside a graphic. Diagrams are `custom` visuals drawn per
 // video in effects/custom/ with the parts in ./kit.
 import React, { useMemo } from "react";
-import { Audio, Video } from "@remotion/media";
+import { Video } from "@remotion/media";
 import { AbsoluteFill, Sequence, staticFile, useCurrentFrame } from "remotion";
 import type { Resolved, ResolvedShot } from "../../engine/schema";
-import { CutAudio } from "../cut";
+import { lastKept } from "../../engine/resolve";
+import { Soundtrack } from "../cut";
 import { CUSTOM } from "../custom";
 import { Speaker } from "../Speaker";
 import { VisualView } from "../Visuals";
@@ -138,8 +139,7 @@ export const Clean: React.FC<Resolved> = (r) => {
       {glass && <div style={{ position: "absolute", ...GLASS, borderRadius: 32, background: "rgba(12,18,15,0.66)", backdropFilter: "blur(28px) saturate(1.1)", border: "1.5px solid rgba(245,245,242,0.14)" }} />}
       {r.shots.map((s, i) => {
         if (!s.visual || s.keep || s.layout === "card") return null;
-        let last = i;
-        while (r.shots[last + 1]?.keep) last++;
+        const last = lastKept(r.shots, i);
         const from = Math.round(s.start * r.fps);
         return (
           <Sequence key={`v${i}`} from={from} durationInFrames={Math.max(1, Math.round(r.shots[last].end * r.fps) - from)} premountFor={15} name={`${i + 1} ${s.layout} ${s.visual.kind}`}>
@@ -198,8 +198,7 @@ export const Clean: React.FC<Resolved> = (r) => {
         );
       })()}
 
-      {r.audio && <Audio src={staticFile(r.audio)} />}
-      {r.cut && <CutAudio r={r} />}
+      <Soundtrack r={r} />
     </AbsoluteFill>
   );
 };

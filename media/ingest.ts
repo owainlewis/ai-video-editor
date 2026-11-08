@@ -94,13 +94,16 @@ async function prepare(dir: string, file: string, log: Log, fixed?: [number, num
     const pct = Math.floor(f * 100);
     if (pct !== last) setStatus(dir, `Preparing footage ${pct}%`), (last = pct);
   }, log);
-  ffmpeg(["-i", join(dir, "source/voice.wav"), "-c:a", "aac", "-b:a", "192k", join(dir, "build/preview.m4a")], log);
+  // The preview's sound encodes while Whisper works; both only read the voice.
+  const previewAudio = ffmpegProgress(["-i", join(dir, "source/voice.wav"), "-c:a", "aac", "-b:a", "192k", join(dir, "build/preview.m4a")], length, () => {}, log);
+  previewAudio.catch(() => {}); // A failure is thrown at the await below; this keeps it quiet if Whisper fails first.
   ffmpeg(["-ss", "1", "-i", join(dir, "source/talking.mp4"), "-frames:v", "1", "-q:v", "3", join(dir, "checks/frame.jpg")], log);
   const duration = probeDuration(join(dir, "source/talking.mp4"));
   onFootage?.(size, duration);
 
   setStatus(dir, "Transcribing");
   const words = transcribe(dir, log);
+  await previewAudio;
   return { size, duration, words };
 }
 

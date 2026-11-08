@@ -23,7 +23,7 @@ The Remotion compositions and every visual. The editor plays a resolved plan thr
 **Footage and words**
 
 - `Speaker` (`Speaker.tsx`): the speaker's video on reels, framed per layout.
-- `CutVideo`, `CutAudio` (`cut.tsx`): a project's cut, segment by segment, in the editor.
+- `CutVideo`, `Soundtrack` (`cut.tsx`): a project's cut, segment by segment, in the editor, and the video's sound.
 - `Footage` (`frame.tsx`): footage from a shot's own start.
 - `Captions`, `isKeyword` (`Captions.tsx`): the active caption from `r.chunks`, as a chunk or as one keyword, per `look.captions`.
 
@@ -40,7 +40,7 @@ The Remotion compositions and every visual. The editor plays a resolved plan thr
 
 **Design tokens and motion**
 
-- `style`, `look`, `ACCENT`, `STYLE_IDS`, and a re-export of the type `ToneTokens` (`style.ts`): the house style tokens. `STYLE_IDS` holds only `ivory`.
+- `style`, `look`, `ACCENT`, and a re-export of the type `ToneTokens` (`style.ts`): the house style tokens.
 - `t`, `W`, `H`, `splitGeom`, `SplitMode`, `Box`, `HEADER`, `MEDIA`, `ease`, `clamp` (`theme.ts`).
 - `FAST` (0.18), `MOVE` (0.46), `STAG` (0.08), `easeOut`, `easeInOut`, `prog`, `lerp`, `In`, `Mark`, `markColor`, `runs` (`motion.tsx`). The clean style has its own speeds in `clean/kit.tsx`.
 - `frameRect`, `Rect`, `TRANSITION`, `cameraEase`, `cameraProgress` (`camera.ts`).
@@ -87,7 +87,7 @@ Used by `app/` (editor, gallery, library, inspector, QC) and `server/` and `medi
 - `soft.tsx` holds module state (`graphite`, `black`), set by `darkIsGraphite` and read by `pal`, `isBlack` and `SceneCanvas`. `Wide` and the house reel set it at the top of each render. `Clean` does not set it.
 - Media loads through `staticFile`, from the `projects` public folder (`remotion.config.ts`): `r.video`, `r.audio`, cut segments, and `v.video` in `Lab`.
 - Images, captures, logos, favicons and video clips go through a local `src(slug, path)` in `Visuals.tsx`, `browser.tsx`, `cards.tsx` and `soft.tsx`. A path becomes `<slug>/<path>` through `staticFile`. Paths that start with `http` or `https` load from the network, and `data:` paths load inline.
-- `Reel` and `Wide` play `r.audio` and, with a cut, `CutAudio`. `Wide` skips both when `r.alpha` is set.
+- `Reel` and `Wide` play `Soundtrack`: `r.audio` and, with a cut, what is said. It plays nothing when `r.alpha` is set.
 - `ui.tsx:Custom` throws when a graphic is not in `CUSTOM`.
 - No file writes, storage access or `fetch` calls.
 

@@ -34,13 +34,13 @@ export const SCENE = { headTop: 96, headHeight: 340, top: 470, bottom: 1600, cap
 // Headlines are large: 150 px for a short line, 126 px when it needs two.
 export const headlineSize = (text: string) => (text.replace(/\*/g, "").length > 12 ? 126 : 150);
 
-type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };
-type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
+export type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };
+export type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 export type Box = { x: number; y: number; w: number; h: number; r: number };
 
 // Project files, web URLs, or inline data (the style lab's illustrative samples).
-const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
-const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
+export const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
+export const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
 // The scene background: flat warm colour with fine film grain. Nothing else.
 // Quiet architecture behind every graphic: a hairline grid, the panel's margin guides as long

@@ -7,13 +7,13 @@
 // overshoot. Nothing appears without easing; nothing jumps inside the frame.
 import React from "react";
 import { Easing, interpolate } from "remotion";
+import { clamp } from "./theme";
 
 export const FAST = 0.18;
 export const MOVE = 0.46;
 export const STAG = 0.08;
 export const easeOut = Easing.bezier(0.16, 1, 0.3, 1);
 export const easeInOut = Easing.bezier(0.55, 0, 0.1, 1);
-const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
 // Progress 0..1 from `at` over `d` seconds; 0 before, 1 after.
 export const prog = (t: number, at: number, d = FAST, e = easeOut) => (isFinite(at) ? interpolate(t, [at, at + d], [0, 1], { ...clamp, easing: e }) : 0);

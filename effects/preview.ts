@@ -4,6 +4,7 @@ import type { Resolved, ResolvedShot } from "../engine/schema";
 import { visualAnchors } from "../engine/resolve";
 import { atMax, type Card } from "../styles/catalog";
 import { cards } from "../styles/blueprint/style";
+import { blank } from "./canvas";
 
 export type Canvas = "reel" | "youtube";
 
@@ -20,30 +21,19 @@ export function offBrand(c: Card, canvas: Canvas, style = "ivory"): string | und
   if (style === "clean" && !c.styles?.includes("clean") && !CLEAN_KINDS.has(c.kind)) return "Not in the clean reel kit";
 }
 
+// Whether a library card has a sample and a layout this canvas can show it in.
+export const fitsCanvas = (c: Card, canvas: string) =>
+  !!c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : c.tier !== "overlay");
+
 // The cards a canvas can show, in a house style, house graphics first. Cards drawn only in another
 // style are left out; cards that draw but are off the brand say why in `off`.
 export const effectList = (canvas: Canvas, style = "ivory") =>
   cards
-    .filter((c) => c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : c.tier !== "overlay"))
+    .filter((c) => fitsCanvas(c, canvas))
     .filter((c) => !c.styles || c.styles.includes(style))
     .map((c, i) => ({ c, rank: (c.styles ? 0 : HOUSE.includes(c.kind) ? 1 : 2) * 1000 + i }))
     .sort((a, b) => a.rank - b.rank)
     .map(({ c }) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary, name: c.kind === "custom" ? (c.sample!.visual as { name: string }).name : undefined, off: offBrand(c, canvas, style) }));
-
-const blank = (canvas: Canvas): Omit<Resolved, "title" | "duration" | "shots"> => ({
-  slug: "",
-  fps: 30,
-  video: "",
-  videoSize: canvas === "youtube" ? [1920, 1080] : [1080, 1920],
-  audio: null,
-  face: { x: 0.5, y: 0.3, h: 0.17 },
-  grade: { brightness: 1, contrast: 1, saturate: 1 },
-  split: "half",
-  canvas,
-  captions: false,
-  chunks: [],
-  sfx: [],
-});
 
 // A library card's sample, its parts landing 0.3 s apart, then held for 2 s. `longest` fills every
 // text slot to its maxChars, to see that the layout holds at the limit. In the clean style a card

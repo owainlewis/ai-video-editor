@@ -281,7 +281,6 @@ export type VisualSpec = z.infer<typeof Visual>;
 export type Word = { text: string; start: number; end: number };
 
 // Everything below is computed by `reel validate`.
-export type ResolvedItem = { text: string; t: number };
 export type ResolvedVisual = VisualSpec & { times?: number[]; size?: [number, number] };
 export type ResolvedShot = {
   header?: string;

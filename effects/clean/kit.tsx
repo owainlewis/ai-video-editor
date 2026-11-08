@@ -5,6 +5,8 @@
 // Named kit.tsx: macOS file names ignore case, so no other file here may be called Kit.tsx.
 import React, { useMemo } from "react";
 import { Easing, interpolate } from "remotion";
+import type { Word } from "../../engine/schema";
+import { clamp } from "../theme";
 
 export const W = 1080;
 export const H = 1920;
@@ -29,7 +31,6 @@ export const REVEAL = 0.12;
 export const MOVE = 0.6;
 const io = Easing.bezier(0.65, 0, 0.35, 1);
 const out = Easing.bezier(0.16, 1, 0.3, 1);
-const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 export const k = (t: number, at: number, d = REVEAL, ease: "io" | "out" = "out") =>
   interpolate(t, [at, at + d], [0, 1], { ...clamp, easing: ease === "io" ? io : out });
 export const move = (t: number, at: number, d = MOVE) => k(t, at, d, "io");
@@ -37,7 +38,7 @@ export const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
 // Visible from `a` until `b` (a quick fade at each end).
 export const live = (t: number, a: number, b = Infinity, d = 0.25) => Math.min(k(t, a, d), isFinite(b) ? 1 - k(t, b - d, d) : 1);
 
-export type Word = { text: string; start: number; end: number };
+export type { Word };
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9']/g, "");
 

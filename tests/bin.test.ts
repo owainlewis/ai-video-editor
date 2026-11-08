@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { clips, loadCut, timeline } from "../media/bin.ts";
 import { resolveProject } from "../media/project.ts";
+import { mediaProbe } from "../media/tools.ts";
 
 const said = (text: string) => text.split(" ").map((t, i) => ({ text: t, start: +(i * 0.4).toFixed(3), end: +(i * 0.4 + 0.3).toFixed(3) }));
 const write = (file: string, data: unknown) => writeFileSync(file, JSON.stringify(data));
@@ -65,5 +66,28 @@ describe("a project's bin and cut", () => {
     write(join(dir, "cut.json"), { segments: [{ id: "s1", src: "main", in: 2, out: 1 }] });
     expect(resolveProject(projects, "p").issues[0].message).toMatch(/cut.json/);
     rmSync(projects, { recursive: true });
+  });
+});
+
+describe("measuring a project's media", () => {
+  it("keeps a measurement until the file changes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-probe-"));
+    mkdirSync(join(dir, "build"));
+    const file = join(dir, "clip.mp4");
+    writeFileSync(file, "not really a video");
+    const { mtimeMs, size } = statSync(file);
+    write(join(dir, "build/probe.json"), { "clip.mp4": { stamp: `${mtimeMs}:${size}`, duration: 12.5, size: [1080, 960], speechEnd: 11 } });
+    const probe = mediaProbe(dir);
+    expect([probe.duration(file), probe.size(file), probe.speechEnd(file)]).toEqual([12.5, [1080, 960], 11]);
+    writeFileSync(file, "a different and longer file now");
+    expect(() => mediaProbe(dir).duration(file)).toThrow(); // Measured again: ffprobe cannot read it.
+    rmSync(dir, { recursive: true });
+  });
+
+  it("writes the cache only after a new measurement", () => {
+    const dir = mkdtempSync(join(tmpdir(), "studio-probe-"));
+    mediaProbe(dir).save();
+    expect(existsSync(join(dir, "build/probe.json"))).toBe(false);
+    rmSync(dir, { recursive: true });
   });
 });

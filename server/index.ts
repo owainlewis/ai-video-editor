@@ -12,8 +12,7 @@ import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { redo, redoable, snapshot, undo, versions } from "./history.ts";
-import { Cut, MAIN } from "../engine/schema.ts";
-import { mapRanges } from "../engine/cut.ts";
+import { Cut } from "../engine/schema.ts";
 import { planIndex } from "../engine/insert.ts";
 import { trashProject } from "./trash.ts";
 import { dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
@@ -21,9 +20,10 @@ import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } from "./variants.ts";
 import { BROLL, loadLibrary } from "../media/broll.ts";
-import { clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
+import { cameraOnTimeline, clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
 import { effectList } from "../effects/preview.ts";
 import type { Resolved } from "../engine/schema.ts";
+import { lastKept } from "../engine/resolve.ts";
 
 const TYPES: Record<string, string> = {
   ".mp4": "video/mp4", ".m4a": "audio/mp4", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".png": "image/png",
@@ -239,7 +239,7 @@ export async function startServer(port = 4747) {
         suggestions: loadSuggestions(dir),
         variants: resolveVariants(dir),
         // The scan is in the main clip's time; with a cut it is shown where those stretches play.
-        camera: existsSync(join(dir, "build/camera.json")) ? (line.explicit ? mapRanges(line.cut, MAIN, readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : readJson<{ ranges: [number, number][] }>(join(dir, "build/camera.json")).ranges) : undefined,
+        camera: cameraOnTimeline(dir, line.cut),
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
       });
     }
@@ -301,10 +301,9 @@ export async function startServer(port = 4747) {
       const { resolved } = resolveProject(projects, slug);
       const k = resolved?.shots.findIndex((s) => Math.abs(s.start - start) < 0.05) ?? -1;
       if (!resolved || k < 0) return send(res, 409, { error: "no graphic starts there" });
-      const plan = JSON.parse(readFileSync(join(dir, "edit.json"), "utf8")) as { shots: { at: string }[] };
+      const plan = readJson<{ shots: { at: string }[] }>(join(dir, "edit.json"));
       const current = plan.shots[planIndex(plan.shots, resolved.shots, k)];
-      let last = k;
-      while (resolved.shots[last + 1]?.keep) last++;
+      const last = lastKept(resolved.shots, k);
       const end = resolved.shots[last].end;
       const said = timeline(dir).words.filter((w) => w.start >= start - 0.05 && w.start < end).map((w) => w.text).join(" ");
       saveVariants(dir, { start, note, items: [] });

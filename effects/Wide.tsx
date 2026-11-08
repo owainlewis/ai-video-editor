@@ -1,14 +1,15 @@
 import React from "react";
-import { Audio, Video } from "@remotion/media";
+import { Video } from "@remotion/media";
 import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { FrameVisual, isFrame } from "./frame";
 import { easeInOut, lerp, MOVE, prog } from "./motion";
 import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
-import { clamp, ease, t } from "./theme";
+import { clamp, ease, gradeFilter, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { WordsOver } from "./house";
 import type { Chunk, Resolved, ResolvedShot } from "../engine/schema";
-import { CutAudio, CutVideo } from "./cut";
+import { lastKept } from "../engine/resolve";
+import { CutVideo, Soundtrack } from "./cut";
 
 // YouTube, 16:9. The picture is a rough cut Owain edited by hand; this only lays graphics and
 // text over it, sparsely. Minimal: one idea on screen, monochrome plus one accent, serif titles,
@@ -16,8 +17,6 @@ import { CutAudio, CutVideo } from "./cut";
 export const WW = 1920;
 export const WH = 1080;
 
-type Box = { x: number; y: number; w: number; h: number; r: number; o: number };
-const FULL: Box = { x: 0, y: 0, w: WW, h: WH, r: 0, o: 1 };
 // The stage (Owain, 2026-10-25, from the motion lab): on a side shot the speaker shrinks into a
 // portrait card on the right in one long-tailed move, the graphic builds beside it, and the card grows
 // back to full frame as the shot ends. The card and the part of the picture it shows move on one
@@ -70,7 +69,7 @@ const Picture: React.FC<{ r: Resolved; style: React.CSSProperties }> = ({ r, sty
   );
 
 const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; k: number; dim: number; blur?: number }> = ({ r, shot, k, dim, blur = 0 }) => {
-  const grade = `brightness(${r.grade.brightness * dim}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})${blur ? ` blur(${blur}px)` : ""}`;
+  const grade = `${gradeFilter(r.grade, dim)}${blur ? ` blur(${blur}px)` : ""}`;
   // Hidden behind a full-frame card or b-roll (on black, the backdrop draws it instead).
   if (shot.layout === "media" || shot.layout === "cutaway" || shot.layout === "half") return null;
   const box = { x: lerp(0, CARD.x, k), y: lerp(0, CARD.y, k), w: lerp(WW, CARD.w, k), h: lerp(WH, CARD.h, k) };
@@ -169,7 +168,7 @@ const HalfStage: React.FC<{ r: Resolved; k: number; children: React.ReactNode }>
         {children}
       </div>
       <div style={{ position: "absolute", left: WW / 2, top: 0, width: WW / 2, height: WH, overflow: "hidden", background: "#000" }}>
-        {(r.video || r.cut) && <Picture r={r} style={{ left: -srcX, top: 0, width: WW, height: WH, filter: `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})` }} />}
+        {(r.video || r.cut) && <Picture r={r} style={{ left: -srcX, top: 0, width: WW, height: WH, filter: gradeFilter(r.grade) }} />}
       </div>
     </AbsoluteFill>
   );
@@ -201,8 +200,7 @@ export const Wide: React.FC<Resolved> = (r) => {
       {r.shots.map((head, i) => {
         const visual = head.visual;
         if (!visual || head.keep) return null;
-        let last = i;
-        while (r.shots[last + 1]?.keep) last++;
+        const last = lastKept(r.shots, i);
         const s = { ...head, end: r.shots[last].end };
         const from = Math.round(s.start * r.fps);
         const dur = Math.max(1, Math.round(s.end * r.fps) - from);
@@ -276,8 +274,7 @@ export const Wide: React.FC<Resolved> = (r) => {
       {titled && shot.visual?.kind === "words" && <WordsOver shot={shot} time={time} v={shot.visual} face={r.face.x} width={WW} height={WH} />}
       {titled && shot.visual?.kind === "title" && <OverTitle text={shot.visual.text} kicker={shot.visual.kicker} shot={shot} time={time} />}
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
-      {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}
-      {r.cut && !r.alpha && <CutAudio r={r} />}
+      <Soundtrack r={r} />
     </AbsoluteFill>
   );
 };

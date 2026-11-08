@@ -3,10 +3,9 @@ import { describe, expect, it } from "vitest";
 import { Visual } from "../engine/schema.ts";
 import { cardGeom, type Geom } from "../effects/cards.tsx";
 import { style } from "../effects/style.ts";
-import { blueprint, cards, slotIssues, slotValues } from "../styles/blueprint/style.ts";
+import { cards, slotIssues, slotValues } from "../styles/blueprint/style.ts";
 import { atMax } from "../styles/catalog.ts";
-import { registry, styles } from "../styles/index.ts";
-import { labResolved, labViews } from "../styles/lab.ts";
+import { cardPlan, effectList } from "../effects/preview.ts";
 
 const kinds = Visual.options.map((o) => o.shape.kind.value);
 
@@ -54,23 +53,13 @@ describe("the Blueprint catalog", () => {
     const v = { kind: "kpi", items: [{ value: "123456789", label: "x" }, { value: "1", label: "y" }], source: "Illustration" } as const;
     expect(slotIssues(v as never)[0]).toMatch(/items\[\]\.value/);
   });
-  it("builds a playable plan for every view of every sampled card", () => {
-    for (const c of cards.filter((x) => x.sample))
-      for (const { size, tone } of labViews(c)) {
-        const r = labResolved(c, size, tone)!;
-        expect(r.shots[0].visual?.times?.length, c.id).toBeGreaterThan(0);
-        expect(r.duration).toBeGreaterThanOrEqual(4.5);
+  it("builds a playable plan for every sampled card, on every canvas that shows it", () => {
+    for (const canvas of ["reel", "youtube"] as const)
+      for (const { id } of effectList(canvas)) {
+        const r = cardPlan(id, canvas);
+        expect(r.shots[0].visual?.times?.length, id).toBeGreaterThan(0);
+        expect(r.duration, id).toBeGreaterThanOrEqual(2);
       }
-  });
-  it("matches the committed registry.json, and every registered style has a folder with its files", () => {
-    const json = JSON.parse(readFileSync(new URL("../styles/registry.json", import.meta.url), "utf8"));
-    expect(json).toEqual(JSON.parse(JSON.stringify(registry())));
-    for (const st of styles)
-      for (const f of ["tokens.ts", "style.ts", "style.json", "DESIGN.md"]) expect(() => readFileSync(new URL(`../styles/${st.id}/${f}`, import.meta.url)), `${st.id}/${f}`).not.toThrow();
-  });
-  it("matches the committed style.json", () => {
-    const json = JSON.parse(readFileSync(new URL("../styles/blueprint/style.json", import.meta.url), "utf8"));
-    expect(json).toEqual(JSON.parse(JSON.stringify(blueprint)));
   });
 });
 

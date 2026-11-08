@@ -6,10 +6,9 @@ import { join } from "node:path";
 import { mergeShots, phraseAt, planIndex, stripAnchors, wordAt } from "../engine/insert.ts";
 import { cards } from "../styles/blueprint/style.ts";
 import { cardLayout } from "../effects/preview.ts";
-import { findPhrase } from "../engine/resolve.ts";
-import type { Word } from "../engine/schema.ts";
+import { findPhrase, lastKept } from "../engine/resolve.ts";
 import { resolveProject } from "../media/project.ts";
-import { probeDuration, readJson } from "../media/tools.ts";
+import { probeDuration, readJson, writeJson } from "../media/tools.ts";
 import { loadLibrary } from "../media/broll.ts";
 import { timeline } from "../media/bin.ts";
 
@@ -17,14 +16,31 @@ const brollLength = (id: string) => loadLibrary().find((c) => c.id === id)?.dura
 
 type Shot = { at: string; layout: string; [k: string]: unknown };
 
-export function insertAt(projects: string, slug: string, added: { start: number; shot: Shot }[], shown?: number) {
+// The plan, ready to change. `save` writes the change; if it adds an error, the plan goes back byte
+// for byte and the reason is thrown.
+function openPlan(projects: string, slug: string) {
   const dir = join(projects, slug);
-  const before = readFileSync(join(dir, "edit.json"), "utf8");
-  const plan = JSON.parse(before) as { shots: Shot[] };
-  const words = timeline(dir).words;
+  const file = join(dir, "edit.json");
+  const before = readFileSync(file, "utf8");
   const { resolved, issues } = resolveProject(projects, slug);
   if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
   const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
+  const plan = JSON.parse(before) as { shots: Shot[] };
+  const save = () => {
+    writeJson(file, plan);
+    const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
+    if (fresh.length) {
+      writeFileSync(file, before);
+      resolveProject(projects, slug);
+      throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
+    }
+  };
+  return { dir, file, plan, resolved, save };
+}
+
+export function insertAt(projects: string, slug: string, added: { start: number; shot: Shot }[], shown?: number) {
+  const { dir, plan, save } = openPlan(projects, slug);
+  const words = timeline(dir).words;
   // Where each shot's anchor lands, matched in order the way the resolver does.
   let cursor = 0;
   const existing = plan.shots.map((shot) => {
@@ -46,14 +62,7 @@ export function insertAt(projects: string, slug: string, added: { start: number;
     return { index, shot: a.shot };
   });
   plan.shots = mergeShots(words, existing, placed);
-  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
-  const after = resolveProject(projects, slug);
-  const fresh = after.issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
-  if (fresh.length) {
-    writeFileSync(join(dir, "edit.json"), before);
-    resolveProject(projects, slug);
-    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
-  }
+  save();
 }
 
 // Place one shot over a stretch of plain picture, from `start` to about `end`, then bring back the
@@ -97,11 +106,7 @@ export function dropBroll(projects: string, slug: string, ref: string, at: numbe
 // the shot after it). The shot is re-anchored on the words there, so it still follows them through
 // a re-cut. Like any insert, a change that adds an error is put back and the reason returned.
 export function moveShotStart(projects: string, slug: string, from: number, to: number) {
-  const dir = join(projects, slug);
-  const before = readFileSync(join(dir, "edit.json"), "utf8");
-  const plan = JSON.parse(before) as { shots: Shot[] };
-  const { resolved, issues } = resolveProject(projects, slug);
-  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  const { dir, file, plan, resolved, save } = openPlan(projects, slug);
   const k = resolved.shots.findIndex((s) => Math.abs(s.start - from) < 0.02);
   if (k < 0) throw Object.assign(new Error("nothing follows this clip to move; it runs to the end"), { code: 409 });
   if (k === 0) throw Object.assign(new Error("the first shot always starts the video"), { code: 409 });
@@ -119,7 +124,7 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
   const video = [k - 1, k].map((j) => planIndex(plan.shots, resolved.shots, j)).filter((p) => p >= 0 && (plan.shots[p] as { visual?: { kind?: string } }).visual?.kind === "video");
   plan.shots[target] = { ...plan.shots[target], at };
   if (video.length) {
-    writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
+    writeJson(file, plan);
     const moved = resolveProject(projects, slug).resolved;
     for (const p of video) {
       const shot = plan.shots[p] as Shot & { visual: { src: string; start?: number; rate?: number } };
@@ -132,25 +137,14 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
       if (rate >= 1) delete shot.visual.rate;
     }
   }
-  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
-  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
-  const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
-  if (fresh.length) {
-    writeFileSync(join(dir, "edit.json"), before);
-    resolveProject(projects, slug);
-    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
-  }
+  save();
 }
 
 // A change made in the inspector to the graphic that starts at timeline time `start`: `shot`
 // replaces its shot in the plan, `remove` takes the graphic off (and the shots that keep it), so the
 // picture plays as cut. Like any insert, a change that adds an error is put back and the reason returned.
 export function editShot(projects: string, slug: string, start: number, change: { shot?: Shot; remove?: boolean }) {
-  const dir = join(projects, slug);
-  const before = readFileSync(join(dir, "edit.json"), "utf8");
-  const plan = JSON.parse(before) as { shots: Shot[] };
-  const { resolved, issues } = resolveProject(projects, slug);
-  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  const { plan, resolved, save } = openPlan(projects, slug);
   // The shot starting nearest `start`, a few frames either way (a shot leads its word slightly).
   const k = resolved.shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(resolved.shots[best].start - start)) ? i : best), -1);
   const target = planIndex(plan.shots, resolved.shots, k);
@@ -163,15 +157,7 @@ export function editShot(projects: string, slug: string, start: number, change: 
     if (!change.shot.at || !change.shot.layout) throw Object.assign(new Error("a shot needs its words (at) and a layout"), { code: 400 });
     plan.shots[target] = change.shot;
   }
-  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
-  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
-  const after = resolveProject(projects, slug);
-  const fresh = after.issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
-  if (fresh.length) {
-    writeFileSync(join(dir, "edit.json"), before);
-    resolveProject(projects, slug);
-    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
-  }
+  save();
 }
 
 // A library card at the playhead: its sample, without the sample's own anchors, on plain picture
@@ -196,32 +182,20 @@ export function placeCard(projects: string, slug: string, cardId: string, at: nu
 // word left to start on (the graphic should run to the end), a plain shot after it is taken out, so
 // the graphic runs on to the shot after that.
 export function moveShotEnd(projects: string, slug: string, start: number, to: number) {
-  const { resolved, issues } = resolveProject(projects, slug);
-  if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+  const { dir, plan, resolved, save } = openPlan(projects, slug);
   const shots = resolved.shots;
   const k = shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(shots[best].start - start)) ? i : best), -1);
   if (k < 0) throw Object.assign(new Error("no graphic starts there"), { code: 404 });
-  let last = k;
-  while (shots[last + 1]?.keep) last++;
+  const last = lastKept(shots, k);
   const next = shots[last + 1];
   if (!next) throw Object.assign(new Error("this graphic already runs to the end"), { code: 409 });
-  const words = timeline(join(projects, slug)).words;
+  const words = timeline(dir).words;
   const after = shots[last + 2]?.start ?? resolved.duration;
   const word = words[wordAt(words, to)];
   if (word && word.start < after - 0.3) return moveShotStart(projects, slug, next.start, to);
   if (next.visual) throw Object.assign(new Error("the shot after this one has its own graphic; end before it"), { code: 409 });
-  const dir = join(projects, slug);
-  const before = readFileSync(join(dir, "edit.json"), "utf8");
-  const plan = JSON.parse(before) as { shots: Shot[] };
   const target = planIndex(plan.shots, shots, last + 1);
   if (target < 0) throw Object.assign(new Error("no shot to take out after this graphic"), { code: 409 });
   plan.shots.splice(target, 1);
-  writeFileSync(join(dir, "edit.json"), JSON.stringify(plan, null, 2) + "\n");
-  const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
-  const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
-  if (fresh.length) {
-    writeFileSync(join(dir, "edit.json"), before);
-    resolveProject(projects, slug);
-    throw Object.assign(new Error(fresh.map((i) => i.message).join("; ")), { code: 409 });
-  }
+  save();
 }

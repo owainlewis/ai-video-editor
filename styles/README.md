@@ -2,27 +2,21 @@
 
 ## Overview
 
-The house style and its catalog of cards. Ivory is the only registered style. Blueprint is the
+The house style and its catalog of cards. Ivory is the house style. Blueprint is the
 catalog Ivory is built from, not a look you can render. The structure follows herk-edit-kit's
 `style-library/`: one folder per style, a design spec, tokens, a card catalog with tiers, purposes
-and typed slots, and a generated registry.
+and typed slots.
 
 ```
 styles/
   catalog.ts       the shared shape: StyleTokens, Card, Slot (maxChars, minItems, maxItems), StyleDef, slot checks
-  index.ts         the registered styles, and the registry an editor queries
-  registry.json    every style's cards, slots and limits (no sample content)
-  lab.ts           builds one-shot plans from a card's sample
   blueprint/       style 01, the card catalog Ivory is built from
     tokens.ts      palette, type, spacing, grid, motion (StyleTokens)
     style.ts       the card catalog, with sample content (StyleDef)
-    style.json     style.ts as JSON
     DESIGN.md      the spec, card picking table, what not to do
     samples.ts     inline, clearly labelled stand-ins for captures, logos and thumbnails
   ivory/           style 02, the house style
     tokens.ts      palette, type, spacing, motion, look switches (StyleTokens)
-    style.ts       Blueprint's cards under Ivory ids (StyleDef)
-    style.json     a snapshot of style.ts, out of date
     DESIGN.md      the spec
 ```
 
@@ -37,24 +31,10 @@ From `catalog.ts`:
 - `slotIssuesIn(cards, visual)`: messages for slots past their limits.
 - `atMax(card)`: the card's sample with every text slot filled to its limit.
 
-From `index.ts`:
-
-- `styles`: the registered styles. It holds `ivory` only.
-- `styleById(id)`: one registered style. `styleById("blueprint")` is `undefined`.
-- `registry()`: every registered style and its cards, without sample content.
-
-From `lab.ts` (used only by `tests/catalog.test.ts` in the root package):
-
-- `labViews(card)`: the sizes and tones a card previews in.
-- `labResolved(card, size, tone, text)`: a one-shot `Resolved` plan for a card.
-- `LAB_FPS`, and the types `LabSize`, `LabTone`, `LabText`.
-
 Styles:
 
 - [Blueprint](./blueprint/README.md): the card catalog, `cards` and `slotIssues`.
 - [Ivory](./ivory/README.md): the active tokens, `tokens`, `GRAPHITE` and `BLACK`.
-
-Most callers import from the style folders directly, not from `index.ts`.
 
 ## Invariants
 
@@ -63,17 +43,11 @@ Set in code:
 - `maxChars` does not count the asterisks that mark an accent.
 - `slotIssuesIn` returns no issues when no card matches the visual.
 - `atMax` clones the sample and leaves the card unchanged. It returns `undefined` for a card with no sample. Number slots with a `maxChars` fill with nines. Slots with no `maxChars` keep their sample values, and so do image, enum and anchor slots.
-- `registry()` drops `sample` and `noSample` from each card and adds `preview`, true when the card has a sample.
-- `labResolved` returns `null` for a card with no sample. Reveals start at 0.5 s and land 0.55 s apart. A plan lasts at least 4.5 s.
-- `labViews` gives an `overlay` card one view, wide and dark. Every other card gets split and full, each light and dark.
 
 Enforced by `tests/catalog.test.ts`:
 
-- `registry.json` equals `registry()`.
-- Every registered style's folder holds `tokens.ts`, `style.ts`, `style.json` and `DESIGN.md`.
 - `effects/cards.tsx`, `effects/elements.tsx`, `effects/soft.tsx` and `effects/house.tsx` contain no literal colours.
 
-No root command writes `registry.json` or the `style.json` files, so a catalog change must update them by other means. The test fails when `registry.json` or `blueprint/style.json` drifts. Nothing compares `ivory/style.json` with the code.
 
 ## Side Effects
 
@@ -143,7 +117,7 @@ the root package make the new folder by hand from Blueprint's files.
 1. `npm run reel -- styles new <id>` (in `reels/`) copies Blueprint's tokens, catalog and samples under the new id and the DESIGN.md skeleton.
 2. Write `DESIGN.md` from references, then change `tokens.ts` to match it.
 3. Keep, drop or add cards in `style.ts`. A new kind needs a schema entry, a component that reads tokens, anchors in `engine/resolve.ts` `visualAnchors`, and a geometry case in `cardGeom` (`effects/cards.tsx`), tested in `tests/catalog.test.ts`.
-4. Register it in `styles/index.ts`, update `style.json` and `registry.json` (`styles --write` writes only `reels/styles/`), and review it in the style lab.
+4. Review it in the style lab.
 
 Rendering reads the active style from `effects/style.ts` (`reels/src/style.ts` in `reels/`), so one
 style renders at a time. Point that import at the new folder to see it in the lab and in reels.

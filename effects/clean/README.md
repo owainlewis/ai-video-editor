@@ -52,7 +52,7 @@ The clean reel style (`"style": "clean"`). `Clean.tsx` draws a resolved reel pla
 
 ## Side Effects
 
-- `Clean` plays `r.audio` and, with a cut, `CutAudio`. It loads `<slug>/<picture.src>` through `staticFile` for each shot with a `picture`. The public folder is `projects` (`remotion.config.ts`).
+- `Clean` plays `Soundtrack`. It loads `<slug>/<picture.src>` through `staticFile` for each shot with a `picture`. The public folder is `projects` (`remotion.config.ts`).
 - The samples play `voice` and optional looped `music` through `staticFile`. `House` and `Hybrid` load `<slug>/assets/broll/<id>.mp4`, muted, looped and at half speed. `Hybrid` also plays `<slug>/assets/sfx/<name>`: `.mp3` for `typing`, `.wav` for the rest.
 - `anchors` throws on a missing phrase, which fails the render of a sample.
 - No file writes, network calls or storage.

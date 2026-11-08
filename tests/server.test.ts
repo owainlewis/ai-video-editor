@@ -157,6 +157,48 @@ describe("YouTube export", () => {
   });
 });
 
+describe("a plan change that adds an error", () => {
+  // The plan is spaced oddly on purpose: putting it back must restore these exact bytes.
+  const setup = () => {
+    const projects = mkdtempSync(join(tmpdir(), "studio-"));
+    const dir = join(projects, "p");
+    mkdirSync(dir);
+    const text = "one two three four five six seven eight nine ten".split(" ").map((t, i) => ({ text: t, start: i * 0.4, end: i * 0.4 + 0.3 }));
+    writeFileSync(join(dir, "project.json"), JSON.stringify({ slug: "p", size: [1080, 1920], duration: 4 }));
+    writeFileSync(join(dir, "transcript.json"), JSON.stringify(text));
+    const plan = JSON.stringify({ title: "t", face: { x: 0.5, y: 0.3, h: 0.2 }, music: false, shots: [{ at: "one two", layout: "full" }, { at: "five six", layout: "split", visual: { kind: "title", text: "Five" } }] }, null, 7);
+    writeFileSync(join(dir, "edit.json"), plan);
+    return { projects, file: join(dir, "edit.json"), plan };
+  };
+  it("puts an edited shot back, byte for byte, and says why", async () => {
+    const { editShot } = await import("../server/insert.ts");
+    const { projects, file, plan } = setup();
+    expect(() => editShot(projects, "p", 1.6, { shot: { at: "five six", layout: "cutaway" } })).toThrow(expect.objectContaining({ code: 409, message: expect.stringContaining("cutaway") }));
+    expect(readFileSync(file, "utf8")).toBe(plan);
+  });
+  it("puts the plan back when an inserted shot adds an error", async () => {
+    const { insertAt } = await import("../server/insert.ts");
+    const { projects, file, plan } = setup();
+    expect(() => insertAt(projects, "p", [{ start: 0.8, shot: { at: "", layout: "cutaway" } }])).toThrow(expect.objectContaining({ code: 409 }));
+    expect(readFileSync(file, "utf8")).toBe(plan);
+  });
+  it("keeps a change that adds no error", async () => {
+    const { editShot } = await import("../server/insert.ts");
+    const { projects, file } = setup();
+    editShot(projects, "p", 1.6, { remove: true });
+    const text = readFileSync(file, "utf8");
+    expect(JSON.parse(text).shots[1]).toEqual({ at: "five six", layout: "full" });
+    expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2) + "\n");
+  });
+  it("refuses to change a plan that already has errors", async () => {
+    const { moveShotEnd } = await import("../server/insert.ts");
+    const { projects, file } = setup();
+    writeFileSync(file, "{}");
+    expect(() => moveShotEnd(projects, "p", 1.6, 2)).toThrow(expect.objectContaining({ code: 409 }));
+    expect(readFileSync(file, "utf8")).toBe("{}");
+  });
+});
+
 describe("inserting shots at a time", () => {
   const w = (texts: string[]) => texts.map((text, i) => ({ text, start: i, end: i + 0.9 }));
   it("finds a phrase that the in-order search lands on, growing it past repeats", async () => {

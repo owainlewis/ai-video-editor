@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contrast, longestStill, type Measure, qcLayout, qcPlan, saidTwice, visualText } from "../engine/qc.ts";
-import { zoomAt } from "../engine/resolve.ts";
+import { zoomAt, zoomClashes } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 
 const size: [number, number] = [1920, 1080];
@@ -140,9 +140,26 @@ describe("recorded screens", () => {
   });
   it("eases a zoom in and holds it", () => {
     const zooms = [{ t: 1, x: 0.2, y: 0.4, s: 1.5, ms: 400 }];
-    expect(zoomAt(zooms, 0.5).s).toBe(1);
-    expect(zoomAt(zooms, 0.5).y).toBe(0);
+    expect(zoomAt(zooms, 0.5)).toEqual({ s: 1, tx: 0, ty: 0 });
     expect(zoomAt(zooms, 1.2).s).toBeCloseTo(1.25);
-    expect(zoomAt(zooms, 3)).toEqual({ x: 0.2, y: 0.4, s: 1.5 });
+    expect(zoomAt(zooms, 3).s).toBe(1.5);
+    expect(zoomAt(zooms, 3).tx).toBe(0);
+    expect(zoomAt(zooms, 3).ty).toBeCloseTo(-0.1);
+  });
+  it("moves a zoom in one straight line, without a wobble or a lurch", () => {
+    const zooms = [{ t: 0, x: 0.26, y: 0.301, s: 2, ms: 450 }];
+    const end = zoomAt(zooms, 1);
+    for (let i = 0; i < 15; i++) {
+      // The offsets advance in step with the scale, so the camera never reverses or sticks.
+      const z = zoomAt(zooms, i / 30);
+      expect(z.tx).toBeCloseTo(end.tx * (z.s - 1), 6);
+      expect(z.ty).toBeCloseTo(end.ty * (z.s - 1), 6);
+    }
+  });
+  it("flags a zoom reversed before it settles, but not one ended by a hard cut", () => {
+    const zoom = { t: 1, x: 0.5, y: 0.4, s: 1.5, ms: 600 };
+    expect(zoomClashes([zoom, { t: 1.4, x: 0.5, y: 0, s: 1, ms: 300 }])).toEqual([zoom]);
+    expect(zoomClashes([zoom, { t: 1.4, x: 0.5, y: 0, s: 1, ms: 0 }])).toEqual([]);
+    expect(zoomClashes([zoom, { t: 2, x: 0.5, y: 0, s: 1, ms: 500 }])).toEqual([]);
   });
 });

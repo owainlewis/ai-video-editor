@@ -36,7 +36,7 @@ The look is a named style with a card catalog, modelled on herk-edit-kit's style
 
 - `tokens.ts`: palette, type, spacing, grid and motion in one place. Components read them through `src/style.ts`; swapping a style is swapping that module.
 - `DESIGN.md`: the spec, how to pick a card for a line, and what not to do.
-- `style.ts` and `style.json`: every visual kind as a card (`blueprint.t1.stat`, `blueprint.t2.kpi`, `blueprint.overlay.lower`), with its tier, purpose, layouts, duration and typed slot limits (`maxChars`, `maxItems`). `t1` is a full-frame scene, `t2` sits beside the speaker, `overlay` sits over the picture.
+- `style.ts`: every visual kind as a card (`blueprint.t1.stat`, `blueprint.t2.kpi`, `blueprint.overlay.lower`), with its tier, purpose, layouts, duration and typed slot limits (`maxChars`, `maxItems`). `t1` is a full-frame scene, `t2` sits beside the speaker, `overlay` sits over the picture.
 - The style lab on the review board plays every card live, light and dark, split and scene, with Approve / Change and a note per card (`styles/blueprint/review.json`, printed by `npm run reel -- styles feedback`).
 
 Pick graphics from the catalog and keep slots under their max. New in Blueprint: `agenda`, `beforeafter`, `kpi`, `matrix`, `timeline`, `levels`, `checklist`, `quote`, `logowall`, `bento`, `ring`, `meter`, `waffle`. More styles go in their own folders; see `styles/README.md`.
@@ -104,7 +104,7 @@ Targets from studying top creator reels: shots average 1.1 to 1.6 s and none run
 1. The user's own b-roll (`broll/` library) or footage of the real thing. B-roll sets mood; it never stands in for evidence.
 2. A real capture of the page, repo or product, framed tight on the part being discussed, with a highlight sweep on the spoken words. Articles and pages go in a browser window (`frame: "browser"` with the real `url`, `title` and favicon `icon`); a repo opens on its name and description and moves to the README line that backs the claim; several sources at once are `windows`.
 3. Official logos, on white tiles, each landing on its spoken name.
-4. Designed graphics, from the card catalog (`styles/blueprint/style.json`): `steps`, `list`, `compare`, `stat`, `terminal`, `prompt`, `title`, `cta`, and the Blueprint cards (`kpi`, `timeline`, `levels`, `matrix`, `bento` and the rest). Each must have an action (items arrive on their words, a line draws, the old way is struck through). No title card that just sits there.
+4. Designed graphics, from the card catalog (`styles/blueprint/style.ts`): `steps`, `list`, `compare`, `stat`, `terminal`, `prompt`, `title`, `cta`, and the Blueprint cards (`kpi`, `timeline`, `levels`, `matrix`, `bento` and the rest). Each must have an action (items arrive on their words, a line draws, the old way is struck through). No title card that just sits there.
 
 Data and structure, not only text: when a line has numbers, use `chart` (bar for a few categories, line for change over time; the end value labelled big, a `source` line always); when it has a sequence, use `pipeline` (stages light as they are named) or `steps`; when one thing feeds several, use `flow` with `root`. When the point is a bottleneck (theory of constraints), use `constraint`: stages as circles, work flowing as dots, the slow stage narrowing on its word and a queue building in front of it. A figure that is only an upper bound is a dashed bar (`bound: true`). Give each graphic room: one per panel, generous margins, nothing touching the seam.
 

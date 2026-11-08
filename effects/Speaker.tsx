@@ -2,7 +2,7 @@ import React from "react";
 import { Video } from "@remotion/media";
 import { staticFile } from "remotion";
 import { cameraProgress } from "./camera";
-import { H, splitGeom, W, type Box } from "./theme";
+import { gradeFilter, H, splitGeom, W, type Box } from "./theme";
 import type { Resolved, ResolvedShot } from "../engine/schema";
 import { CutVideo } from "./cut";
 
@@ -98,7 +98,7 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
       {r.cut ? (
         <CutVideo
           r={r}
-          style={{ left: x, top: y, width: vw, height: vh, filter: `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})` }}
+          style={{ left: x, top: y, width: vw, height: vh, filter: gradeFilter(r.grade) }}
         />
       ) : r.video ? (
         <Video
@@ -110,7 +110,7 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
             top: y,
             width: vw,
             height: vh,
-            filter: `brightness(${r.grade.brightness}) contrast(${r.grade.contrast}) saturate(${r.grade.saturate})`,
+            filter: gradeFilter(r.grade),
           }}
         />
       ) : (

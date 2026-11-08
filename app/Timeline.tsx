@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Beat } from "../engine/beats";
 import { cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
+import { lastKept } from "../engine/resolve";
 import { type BinClip, clock, type Suggestion } from "./api";
 
 export type Range = { start: number; end: number; label?: string };
@@ -185,8 +186,7 @@ export const Timeline: React.FC<{
     const out: { shot: ResolvedShot; end: number }[] = [];
     r.shots.forEach((s, i) => {
       if (s.keep) return;
-      let last = i;
-      while (r.shots[last + 1]?.keep) last++;
+      const last = lastKept(r.shots, i);
       out.push({ shot: s, end: r.shots[last].end });
     });
     return out;

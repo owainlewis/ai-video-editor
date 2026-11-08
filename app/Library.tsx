@@ -61,49 +61,26 @@ export const Library: React.FC<{
     return api.events((e) => e.type === "library" && load());
   }, []);
   const shown = clips.filter((c) => !query.trim() || query.toLowerCase().split(/\s+/).every((w) => `${c.id} ${c.description} ${c.tags.join(" ")}`.toLowerCase().includes(w)));
-  const addToLibrary = async (files: FileList | null) => {
+  const uploadTo = (url: string) => async (files: FileList | null) => {
     setError("");
     for (const f of Array.from(files ?? [])) {
       setUploading(f.name);
       try {
-        await api.upload(f, () => {}, "/api/library");
+        await api.upload(f, () => {}, url);
       } catch (e) {
         setError(String((e as Error).message));
       }
     }
     setUploading(null);
   };
+  const addToLibrary = uploadTo("/api/library");
+  const add = uploadTo(`/api/projects/${slug}/assets`);
+  const addClips = uploadTo(`/api/projects/${slug}/clips`);
 
   // A clip dragged onto the timeline carries what it is and how long it runs.
   const drag = (e: React.DragEvent, ref: string, length: number) => {
     e.dataTransfer.setData(CLIP, JSON.stringify({ ref, length }));
     e.dataTransfer.effectAllowed = "copy";
-  };
-
-  const add = async (files: FileList | null) => {
-    setError("");
-    for (const f of Array.from(files ?? [])) {
-      setUploading(f.name);
-      try {
-        await api.upload(f, () => {}, `/api/projects/${slug}/assets`);
-      } catch (e) {
-        setError(String((e as Error).message));
-      }
-    }
-    setUploading(null);
-  };
-
-  const addClips = async (files: FileList | null) => {
-    setError("");
-    for (const f of Array.from(files ?? [])) {
-      setUploading(f.name);
-      try {
-        await api.upload(f, () => {}, `/api/projects/${slug}/clips`);
-      } catch (e) {
-        setError(String((e as Error).message));
-      }
-    }
-    setUploading(null);
   };
 
   return (

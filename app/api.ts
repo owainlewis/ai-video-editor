@@ -1,7 +1,8 @@
 // The editor's view of the server API (server/index.ts).
+import type { Issue } from "../engine/resolve";
 import type { CutPlan, Resolved, Word } from "../engine/schema";
 
-export type Issue = { level: "error" | "warn"; message: string };
+export type { Issue };
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
 export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };

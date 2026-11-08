@@ -360,7 +360,8 @@ export const Drift: React.FC<CustomProps> = (p) => {
   );
 };
 
-const seeded = (i: number) => {
+// A fixed scatter: irregular, but every render is identical.
+export const seeded = (i: number) => {
   const x = Math.sin(i * 12.9898) * 43758.5453;
   return x - Math.floor(x);
 };

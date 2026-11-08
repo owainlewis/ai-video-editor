@@ -4,7 +4,6 @@
 import { tokens as ivory } from "../styles/ivory/tokens";
 import type { StyleTokens, ToneTokens } from "../styles/catalog";
 
-export const STYLE_IDS = ["ivory"];
 export const style: StyleTokens = ivory;
 export const look = { captions: "chunk", chapter: "glow", chart: "framed", ...style.look } as Required<NonNullable<StyleTokens["look"]>>;
 export const ACCENT = style.color.light.accent;

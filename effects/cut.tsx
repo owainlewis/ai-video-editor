@@ -24,7 +24,7 @@ export const CutVideo: React.FC<{ r: Resolved; from?: number; style: React.CSSPr
 );
 
 // What is said, segment by segment, from each clip's preview audio.
-export const CutAudio: React.FC<{ r: Resolved }> = ({ r }) => (
+const CutAudio: React.FC<{ r: Resolved }> = ({ r }) => (
   <>
     {frames(r).map((s, i) =>
       s.audio ? (
@@ -33,5 +33,13 @@ export const CutAudio: React.FC<{ r: Resolved }> = ({ r }) => (
         </Sequence>
       ) : null,
     )}
+  </>
+);
+
+// The sound of the video: the finished mix, or what is said in the editor. A transparent export has none.
+export const Soundtrack: React.FC<{ r: Resolved }> = ({ r }) => (
+  <>
+    {r.audio && !r.alpha && <Audio src={staticFile(r.audio)} />}
+    {r.cut && !r.alpha && <CutAudio r={r} />}
   </>
 );

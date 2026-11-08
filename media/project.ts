@@ -4,19 +4,17 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { type ScreenZoom, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents } from "../engine/resolve.ts";
+import { type Issue, type ScreenZoom, zoomClashes, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents, shotLabel } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
 import { cards, slotIssues } from "../styles/blueprint/style.ts";
 import { stripAnchors } from "../engine/insert.ts";
 import { BROLL, useClip } from "./broll.ts";
-import { clipLevels, clipPath, clips, timeline } from "./bin.ts";
-import { clippedWords, joins, loudJoins, mapRanges, mapTimes, placed } from "../engine/cut.ts";
+import { cameraOnTimeline, clipLevels, clipPath, clips, timeline } from "./bin.ts";
+import { clippedWords, joins, loudJoins, mapTimes, placed } from "../engine/cut.ts";
 import { MAIN } from "../engine/schema.ts";
-import { FPS, imageSize, probeDuration, probeSize, readJson, ROOT, speechEnd, writeJson } from "./tools.ts";
-
-export type Issue = { level: "error" | "warn"; message: string };
+import { FPS, imageSize, mediaProbe, readJson, ROOT, writeJson } from "./tools.ts";
 
 // Where the placeholder speaker's face sits in its 1080x1920 frame (see effects/Speaker.tsx).
 const PLACEHOLDER_FACE = { x: 0.5, y: 0.3, h: 0.17 };
@@ -41,6 +39,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const face = meta.script ? PLACEHOLDER_FACE : (plan.face ?? (youtube ? { x: 0.5, y: 0.38, h: 0.3 } : undefined));
   if (!face) return { issues: [{ level: "error", message: 'edit.json needs "face": measure it on checks/frame.jpg' }] };
 
+  const probe = mediaProbe(dir);
   const { shots, issues } = resolveShots(plan, words, meta.duration, FPS, explicit);
   if (explicit) {
     // The words can be a tenth of a second off; the sound says whether a join cuts into speech.
@@ -56,9 +55,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
   const clean = plan.style === "clean" && !youtube;
   issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script) : lintShots(shots, meta.duration, plan.format, plan.canvas)));
-  const scanned = join(dir, "build/camera.json");
-  // The scan is in the main clip's own time; added clips have none, so they count as off camera.
-  if (youtube && existsSync(scanned)) issues.push(...lintOnCamera(shots, explicit ? mapRanges(cut, MAIN, readJson<{ ranges: [number, number][] }>(scanned).ranges) : readJson<{ ranges: [number, number][] }>(scanned).ranges));
+  const onCamera = youtube ? cameraOnTimeline(dir, cut) : undefined;
+  if (onCamera) issues.push(...lintOnCamera(shots, onCamera));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
   if (youtube) issues.push(...lintLeave(shots, plan.leave));
   // A removed stretch must start and end between words, and must not cut through a graphic.
@@ -66,7 +64,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const cut = words.find((w) => (w.start < a && w.end > a + 0.02) || (w.start < b - 0.02 && w.end > b));
     if (cut) issues.push({ level: "error", message: `removing ${a}-${b}s cuts through the word "${cut.text}" (${cut.start.toFixed(2)}-${cut.end.toFixed(2)}s)` });
     shots.forEach((s, i) => {
-      if (s.layout !== "full" && s.start < b && s.end > a) issues.push({ level: "error", message: `removing ${a}-${b}s cuts through shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")` });
+      if (s.layout !== "full" && s.start < b && s.end > a) issues.push({ level: "error", message: `removing ${a}-${b}s cuts through ${shotLabel(s, i)}` });
     });
   }
   if (youtube && meta.size && meta.size[0] < meta.size[1]) issues.push({ level: "error", message: "youtube canvas needs landscape footage" });
@@ -95,7 +93,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     // 2026-11-08: "some of it was 1s loops").
     const file = join(dir, s.picture.src);
     if (existsSync(file)) {
-      const plays = (probeDuration(file) - s.picture.start) / s.picture.rate;
+      const plays = (probe.duration(file) - s.picture.start) / s.picture.rate;
       if (s.end - s.start > plays + 0.05) issues.push({ level: "error", message: `picture ${s.picture.src} at "${s.anchor}" plays ${plays.toFixed(1)}s but the shot holds ${(s.end - s.start).toFixed(1)}s, so it loops; use a longer shot or cut the shot sooner` });
     }
   }
@@ -131,12 +129,16 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
       const moves = join(dir, v.src.replace(/\.\w+$/, ".json"));
-      s.visual = { ...v, size: probeSize(join(dir, v.src)), ...(v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[] }>(moves) : {}) };
+      s.visual = { ...v, size: probe.size(join(dir, v.src)), ...(v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[] }>(moves) : {}) };
+      for (const z of v.sync && s.visual.kind === "video" ? zoomClashes(s.visual.zooms ?? []) : []) {
+        const message = `the zoom at ${z.t.toFixed(2)}s has not settled when the next one starts; hold it longer, or make the next a hard cut`;
+        if (!issues.some((i) => i.message === message)) issues.push({ level: "warn", message });
+      }
       // A recording is timed to the cut it was made for; it does not follow a re-cut as the anchors do.
       const cutFile = join(dir, "cut.json");
       if (v.sync && !s.keep && existsSync(cutFile) && statSync(cutFile).mtimeMs > statSync(join(dir, v.src)).mtimeMs) issues.push({ level: "warn", message: `"${s.anchor}": cut.json changed after ${v.src} was made, so the screen may be out of step with the words` });
       // A slowed clip lasts longer on screen.
-      const left = (probeDuration(join(dir, v.src)) - (v.sync ? s.start : v.start)) / (v.rate ?? 1);
+      const left = (probe.duration(join(dir, v.src)) - (v.sync ? s.start : v.start)) / (v.rate ?? 1);
       if (!v.loop && s.end - s.start > left + 0.04) issues.push({ level: "error", message: `"${s.anchor}": shot is ${(s.end - s.start).toFixed(2)}s but ${v.src} has ${left.toFixed(2)}s from start ${v.start}` });
     }
     // A kept shot carries on the same clip; that is one use, not two.
@@ -151,7 +153,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music"}; the video will have no bed` });
   }
   if (!explicit && existsSync(join(dir, "source/voice.wav"))) {
-    const tail = meta.duration - speechEnd(join(dir, "source/voice.wav"));
+    const tail = meta.duration - probe.speechEnd(join(dir, "source/voice.wav"));
     if (tail < 0.5) issues.push({ level: "warn", message: `speech ends ${tail.toFixed(2)}s before the end; it will feel cut off` });
   }
   const spoken = words.map((w) => w.text.toLowerCase()).join(" ");
@@ -184,14 +186,14 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       ? { cut: placed(cut).map((s) => ({ video: `${clipPath(slug, s.src)}/build/preview.mp4`, audio: `${clipPath(slug, s.src)}/build/preview.m4a`, start: s.start, end: s.end, in: s.in })) }
       : {}),
     shots,
-    chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...(explicit ? joins(cut) : [])].sort((a, b) => a - b), FPS),
+    chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...joins(cut)].sort((a, b) => a - b), FPS),
     sfx: clean ? cleanSfx(shots) : sfxEvents(shots),
   };
   // Plan checks from QC (engine/qc.ts): pacing, reading time, cuts in the footage, numbers on screen.
   const cutsFile = join(dir, "build/cuts.json");
   const found = existsSync(cutsFile) ? readJson<{ cuts: number[] }>(cutsFile).cuts : [];
   // Cuts found in the main clip, moved through the cut, plus every join in the cut itself.
-  const cuts = explicit ? [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b) : found;
+  const cuts = [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b);
   issues.push(...qcPlan(resolved, words, plan.shots.map((s) => s.note), cuts));
   if (youtube) issues.push(...saidTwice(words, plan.remove));
   // A card put in from the library starts with its sample words, which this video never says.
@@ -200,6 +202,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (sample && JSON.stringify(stripAnchors(s.visual)) === JSON.stringify(stripAnchors(sample)))
       issues.push({ level: "warn", message: `"${s.at}": the ${s.visual!.kind} still shows the library's sample words; put in what is said here` });
   });
+  probe.save();
   // An export of a cut writes its own files: the editor re-resolves the plan whenever it reloads,
   // and must not swap the flattened cut out from under a running export.
   const name = exportCut ? "export" : "resolved";

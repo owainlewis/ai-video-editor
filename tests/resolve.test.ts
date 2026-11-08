@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
 import { isKeyword } from "../effects/Captions.tsx";
-import { cameraRanges, chunkWords, estimateWords, findPhrase, lintOnCamera, lintShots, resolveShots, syncWords } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, findPhrase, lintOnCamera, lintShots, resolveShots, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -129,18 +129,6 @@ describe("scenes across shots", () => {
   it("rejects keep across a layout change", () => {
     const { issues } = resolveShots(plan([{ at: "If", layout: "media", visual: flow }, { at: "having", layout: "split", keep: true }]), words, 5);
     expect(issues.some((i) => i.level === "error")).toBe(true);
-  });
-});
-
-describe("estimateWords", () => {
-  it("paces a script near 165 words a minute, with pauses at full stops", () => {
-    const script = Array.from({ length: 33 }, () => "Agents plan work.").join(" ");
-    const est = estimateWords(script);
-    expect(est).toHaveLength(99);
-    const minutes = est[est.length - 1].end / 60;
-    expect(99 / minutes).toBeGreaterThan(110);
-    expect(99 / minutes).toBeLessThan(175);
-    expect(est[3].start - est[2].end).toBeGreaterThan(est[2].start - est[1].end);
   });
 });
 

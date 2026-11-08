@@ -486,7 +486,6 @@ export type VisualSpec = z.infer<typeof Visual>;
 export type Word = { text: string; start: number; end: number };
 
 // Everything below is computed by `reel validate`.
-export type ResolvedItem = { text: string; t: number };
 // `zooms` and `ticks`: from a recorded screen (media/record.ts), on the timeline.
 export type ResolvedVisual = VisualSpec & { times?: number[]; size?: [number, number]; zooms?: { t: number; x: number; y: number; s: number; ms: number }[]; ticks?: number[] };
 export type ResolvedShot = {

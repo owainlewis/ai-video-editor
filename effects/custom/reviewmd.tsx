@@ -1,16 +1,10 @@
 // "REVIEW.md" (projects/review-md and review-md-short, 2026-11-08), in the clean style. Labels are the
 // words Owain says. Split diagrams stay above y 830; the full-screen one above y 1400.
 import React from "react";
-import { C, Doc, k, Label, Line, Rect, Ring } from "../clean/kit";
+import { at, C, Doc, k, Label, Line, Rect, Ring, Stage } from "../clean/kit";
 import { MONO } from "../clean/text";
 import type { CustomProps } from "./index";
 
-const Stage: React.FC<{ width: number; height: number; children: React.ReactNode }> = ({ width, height, children }) => (
-  <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-    {children}
-  </svg>
-);
-const at = (times: number[], i: number, fallback: number) => times[i] ?? fallback;
 const FileName: React.FC<{ x: number; y: number; size: number; opacity: number }> = ({ x, y, size, opacity }) => (
   <text x={x} y={y} textAnchor="middle" fill={C.sage} fontFamily={MONO} fontSize={size} opacity={opacity}>REVIEW.md</text>
 );

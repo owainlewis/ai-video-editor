@@ -2,6 +2,7 @@
 // wherever something on screen changes (a shot, a reveal, a hit, a chip, a title), and a stretch with
 // nothing new is split so no beat runs much past 2 s. Pure, over the resolved shots, so the beats
 // follow the same times the player shows.
+import { snap } from "./resolve.ts";
 import type { ResolvedShot, Word } from "./schema.ts";
 
 export type Beat = {
@@ -29,8 +30,6 @@ const BEFORE = 0.3;
 const SETTLE = 0.7;
 
 type Change = { t: number; what: string };
-
-const snap = (t: number, fps: number) => Math.round(t * fps) / fps;
 
 // Everything that lands on screen in one shot, at its resolved time.
 const changesIn = (s: ResolvedShot): Change[] => {

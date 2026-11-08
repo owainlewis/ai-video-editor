@@ -1,7 +1,7 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -74,6 +74,56 @@ export function speechEnd(file: string): number {
   if (k < 0 || (ends.length === starts.length && ends[k] < total - 0.05)) return total;
   while (k > 0 && starts[k] - ends[k - 1] < 0.05) k--;
   return starts[k];
+}
+
+type Probed = { stamp: string; duration?: number; size?: [number, number]; speechEnd?: number };
+
+// A project's media measurements, kept in build/probe.json until a file's time or size changes, so
+// resolving a plan does not measure the same files on every save. `save` swaps the file in whole:
+// the editor and an export can resolve the same project at once.
+export function mediaProbe(dir: string) {
+  const store = join(dir, "build/probe.json");
+  let saved: Record<string, Probed> = {};
+  try {
+    saved = readJson(store);
+  } catch {
+    // None yet, or unreadable: measure again.
+  }
+  let changed = false;
+  const entry = (file: string) => {
+    const { mtimeMs, size } = statSync(file);
+    const stamp = `${mtimeMs}:${size}`;
+    const key = relative(dir, file);
+    if (saved[key]?.stamp !== stamp) (saved[key] = { stamp }), (changed = true);
+    return saved[key];
+  };
+  const measure = (file: string, e: Probed) => {
+    const j = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", file], { encoding: "utf8" }));
+    e.duration = parseFloat(j.format.duration);
+    if (j.streams[0]) e.size = [j.streams[0].width, j.streams[0].height];
+    changed = true;
+  };
+  const filled = (file: string) => {
+    const e = entry(file);
+    if (e.duration === undefined) measure(file, e);
+    return e;
+  };
+  return {
+    duration: (file: string) => filled(file).duration!,
+    size: (file: string) => filled(file).size!,
+    speechEnd: (file: string) => {
+      const e = entry(file);
+      if (e.speechEnd === undefined) (e.speechEnd = speechEnd(file)), (changed = true);
+      return e.speechEnd;
+    },
+    save: () => {
+      if (!changed) return;
+      const next = `${store}.${process.pid}`;
+      writeJson(next, saved);
+      renameSync(next, store);
+      changed = false;
+    },
+  };
 }
 
 // Pixel size of a PNG or JPEG, so the renderer can frame captures exactly.

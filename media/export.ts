@@ -7,11 +7,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
-import type { Issue } from "../engine/resolve.ts";
+import { type Issue, lastKept } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
-import { mixAudio } from "./render.ts";
-import { hasCut, renderCut } from "./cutrender.ts";
-import { resolveProject } from "./project.ts";
+import { prepareExport } from "./render.ts";
 import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
 export type Section = { start: number; end: number; alpha: boolean };
@@ -23,8 +21,7 @@ export function sections(r: Resolved): Section[] {
   const out: Section[] = [];
   r.shots.forEach((s, i) => {
     if (s.keep || s.layout === "full") return;
-    let last = i;
-    while (r.shots[last + 1]?.keep) last++;
+    const last = lastKept(r.shots, i);
     const next = { start: s.start, end: r.shots[last].end, alpha: s.layout === "over" };
     const prev = out[out.length - 1];
     if (prev && next.start - prev.end < 0.05 && prev.alpha === next.alpha) prev.end = next.end;
@@ -35,16 +32,7 @@ export function sections(r: Resolved): Section[] {
 
 export async function exportOverOriginal(projects: string, slug: string, onStage: (stage: string) => void, log?: Log): Promise<string> {
   const dir = join(projects, slug);
-  const first = resolveProject(projects, slug);
-  if (!first.resolved || first.issues.some((i) => i.level === "error")) throw new Error(first.issues.filter((i) => i.level === "error").map((i) => i.message).join("\n"));
-  // A project with a cut is flattened to one picture and one voice from the originals first; from
-  // there the export is the same as for a single finished clip.
-  const flat = hasCut(projects, slug) ? await renderCut(projects, slug, onStage, log) : undefined;
-  if (flat) resolveProject(projects, slug, flat);
-  onStage("Mixing audio");
-  mixAudio(projects, slug, log, flat);
-  const { resolved } = resolveProject(projects, slug, flat);
-  const r = resolved!;
+  const { flat, resolved: r } = await prepareExport(projects, slug, onStage, log);
   const meta = readJson<{ original: string }>(join(dir, "project.json"));
   const original = flat?.picture ?? meta.original;
   const [num, den] = probeRate(original);

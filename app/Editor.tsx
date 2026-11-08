@@ -1,13 +1,12 @@
 import { Player, type PlayerRef } from "@remotion/player";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { compositionFor } from "../effects/canvas";
-import { Reel } from "../effects/Reel";
-import { Wide } from "../effects/Wide";
 import { beatAt, reelBeats } from "../engine/beats";
 import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot } from "../engine/schema";
 import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
 import { BeatBar } from "./Beats";
+import { component } from "./Gallery";
 import { Inspector } from "./Inspector";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
@@ -260,7 +259,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           <div className="screen">
           <Player
             ref={player}
-            component={(r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>}
+            component={component(r)}
             inputProps={r}
             durationInFrames={Math.max(1, Math.round(r.duration * r.fps))}
             fps={r.fps}

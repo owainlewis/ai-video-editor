@@ -45,3 +45,4 @@ export const MEDIA = { panelTop: 200, panelBottom: 1260, caption: 1400 };
 
 export const ease = Easing.bezier(...style.motion.ease);
 export const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+export const gradeFilter = (g: { brightness: number; contrast: number; saturate: number }, dim = 1) => `brightness(${g.brightness * dim}) contrast(${g.contrast}) saturate(${g.saturate})`;

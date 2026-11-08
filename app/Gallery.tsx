@@ -146,7 +146,7 @@ export const Gallery: React.FC = () => {
   );
 };
 
-const component = (r: Resolved) => (r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>;
+export const component = (r: Resolved) => (r.canvas === "youtube" ? Wide : Reel) as React.FC<Resolved>;
 const frames = (r: Resolved) => Math.max(1, Math.round(r.duration * r.fps));
 const Broken = ({ error }: { error: Error }) => <div className="broken">{error?.message || String(error)}</div>;
 

@@ -6,17 +6,17 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 
 ## Interface
 
-- `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY` and type `Issue`.
+- `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`.
 - `ingest.ts`: `ingest(projects, file, slug, log?, choices?)`, `addClip(projects, slug, file, id, log?, name?)`, `transcribe`, `cleanWords`, `starterPlan`, `slugFor`, `projectMeta`, `setStatus`, `liveStatus`, types `Status` and `Choices`.
-- `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
-- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
+- `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `cameraOnTimeline(dir, cut)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
+- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?)`, `prepareExport(projects, slug, onStage, log?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
 - `cutrender.ts`: `renderCut(projects, slug, onStage, log?)` returns `FlatCut`. Also `hasCut`, `segmentFrames`, `XFADE`.
 - `export.ts`: `exportOverOriginal(projects, slug, onStage, log?)`, `sections(r)`, `verifyExport(original, out, files, remove?)`, type `Section`.
 - `qc.ts`: `runQc(projects, slug, log?, onStage?, at?)` and `runLibraryQc(opts, log?, onStage?)` return `QcResult`. Also `footageCuts`, `libraryVariants`, `LIBRARY_QC`.
 - `broll.ts`: `loadLibrary`, `indexLibrary`, `describeLibrary`, `searchLibrary`, `useClip(projectDir, id)`, `BROLL`, type `Clip` (a library shot, not the same as the bin `Clip`).
 - `auphonic.ts`: `cleanVoice(dir, title, log?)`, `cleanProject(projects, slug, log?)`, `ALGORITHMS`, `OUTPUTS`.
 - `scan.ts`: `frameSheets(dir, every = 15, log?)`, `scanCamera(dir, refs)`.
-- `tools.ts`: `run`, `ffmpeg`, `ffmpegProgress`, `hasHardwareH264`, `probeDuration`, `probeSize`, `probeRate`, `speechEnd`, `imageSize`, `readJson`, `writeJson`, `ROOT`, `FPS` (30), type `Log`.
+- `tools.ts`: `run`, `ffmpeg`, `ffmpegProgress`, `hasHardwareH264`, `probeDuration`, `probeSize`, `mediaProbe(dir)`, `probeRate`, `speechEnd`, `imageSize`, `readJson`, `writeJson`, `ROOT`, `FPS` (30), type `Log`.
 
 ## Invariants
 
