@@ -1,5 +1,7 @@
 # AI Reel Editor
 
+## Overview
+
 Turn a talking head clip into an edited Instagram reel: real screen captures and logos framed on the words you say, motion graphics that land on their cue, word-timed captions, a music bed and sound design, mixed to platform loudness.
 
 Claude Code is the editor. It researches what you talk about, captures the real pages, plans every shot against your transcript, reviews its own stills and renders. A small CLI does the mechanical work. Every note you give on a draft becomes a rule or a check, so the editor gets better with each reel.
@@ -15,7 +17,7 @@ your clip ──> new ──> transcribe ──> research + capture ──> edit
 
 - **Footage stays exact.** The speaker plays as one continuous video, so lip sync never drifts. Layouts only change its framing.
 - **Everything is anchored to speech.** A shot, a list item, a logo or a highlight starts on a phrase from the transcript, not on a hand-typed time.
-- **Real evidence first.** Pages are captured with Chrome and framed tight on the sentence being said. Logos come from official sources. Every asset is logged with its source in `assets/ledger.json`.
+- **Real evidence first.** Pages are captured with Chrome and framed tight on the sentence being said. Logos come from official sources. Every capture, download and `new --broll` clip is logged with its source in `assets/ledger.json`. Clips from the b-roll library are not.
 - **Checked like an editor would.** `validate` lints the house rules (shot length, readability of captures, layout variety). `check` makes frame strips across every cut, measures loudness and re-transcribes the render.
 
 ## Setup
@@ -28,7 +30,8 @@ npm test
 ```
 
 Fonts are read from the machine: Helvetica Neue and [Signifier](https://klim.co.nz/retail-fonts/signifier/) (licensed, not included).
-Sound effects and music go in `sounds/` and `music/` (git-ignored, see their READMEs). Anything missing is synthesised.
+Sound effects and music go in `sounds/` and `music/` (git-ignored, see their READMEs). A sound with no file is left silent, and with no tracks the reel has no music bed.
+Reels from a script use macOS `say`. The Kokoro voice (`--engine kokoro`) also needs `brew install espeak-ng`.
 
 ## Use it
 
@@ -78,7 +81,7 @@ npm run reel -- feedback ig1
 
 `edit.json` is the whole edit. The schema is `src/schema.ts`. Two complete plans for the same clip: `examples/opencodereview-react.edit.json` (the tool-drop format) and `examples/opencodereview-mixed.edit.json`.
 
-`format` is `react` (the default, for tool drops: your face stays on screen while the top panel walks through the source) or `mixed` (every layout, b-roll cutaways). `validate` checks the rules for each; see `docs/STYLE.md`.
+`format` is `react` (the default, for tool drops: your face stays on screen while the top panel walks through the source), `mixed` (every layout, b-roll cutaways) or `film` (full-frame scenes that build across shots, light and dark alternating). `validate` checks the rules for each; see `docs/STYLE.md`.
 
 ```json
 {
@@ -97,7 +100,9 @@ npm run reel -- feedback ig1
 }
 ```
 
-Layouts: `split`, `full`, `punch`, `media`, `cutaway`. Visuals: `image` (with camera move and highlight), `video`, `logos`, `title`, `list`, `steps`, `compare`, `stat`, `terminal`.
+Layouts: `split`, `full`, `punch`, `media`, `cutaway`, `scene`, and on YouTube (`"canvas": "youtube"`) `side` and `over`.
+
+Visuals: `image` (with camera move and highlight), `video`, `logos`, `title`, `list`, `steps`, `compare`, `stat`, `prompt`, `cta`, `terminal`, `chart`, `constraint`, `pipeline`, `lower`, `chapter`, `flow`, `grid`, `funnel`, `windows`, `agenda`, `beforeafter`, `kpi`, `matrix`, `timeline`, `levels`, `checklist`, `quote`, `logowall`, `bento`, `ring`, `meter`, `waffle`, `type`.
 
 ## Layout
 
@@ -107,11 +112,51 @@ docs/STYLE.md               house look, pacing, captions, sound
 docs/RULES.md               notes turned into rules, newest first
 src/                        Remotion composition (React)
 tools/                      the reel CLI and the timing resolver
-audio/                      mix, music bed and sound effect synthesis (Python, run with uv)
+audio/                      mix, music bed and sound effects from sounds/ (Python, run with uv)
+review/                     the review board and style lab
+styles/                     the style library and card catalog
 examples/                   reference edit plans
 broll/                      your b-roll library and its index (git-ignored)
 projects/<slug>/            one folder per reel: source, assets, plan, renders, checks (git-ignored)
 ```
+
+## Interface
+
+- `npm run reel -- <command>`: every command and flag is listed in [tools](./tools/README.md), including `script`, `scan`, `tighten`, `export`, `audio` and `styles`, which are not shown above.
+- `npm run studio`: Remotion Studio on `src/index.ts`.
+- `edit.json`: the plan, validated by `Edit` in `src/schema.ts`.
+- `remotion.config.ts`: JPEG frames at quality 95, h264, CRF 17 unless `REEL_PRORES` is set, and `projects/` as the public dir.
+- `vitest.config.ts`: leaves `.claude/**` out of test runs, so session worktrees do not run twice.
+
+Parts:
+
+- [src](./src/README.md): the compositions and the plan schema.
+- [tools](./tools/README.md): the CLI, resolver and b-roll library.
+- [audio](./audio/README.md): the mix.
+- [review](./review/README.md): the review board and style lab.
+- [styles](./styles/README.md): the style library, with [ivory](./styles/ivory/README.md) and [blueprint](./styles/blueprint/README.md).
+
+## Invariants
+
+- Claude writes `edit.json`. `validate` turns it into `build/edit.resolved.json`, and that file is the only thing the compositions render.
+- Shots and reveals anchor to spoken words, in order. An anchor not found is an error.
+- A new visual kind has to touch `src/schema.ts`, `VisualView` in `src/Visuals.tsx`, `visualAnchors` in `tools/resolve.ts`, and the card catalog in `styles/blueprint/style.ts`.
+- Ivory is the only style that renders. `src/style.ts` picks it.
+- Reels run at 30 fps. Only `export` uses the source's frame rate.
+- `projects/`, `broll/`, `sounds/`, `music/` and `references/` are git-ignored apart from their READMEs. `styles/*/checks/` and `.cache` are git-ignored too.
+
+## Side Effects
+
+- Files: each project reads and writes under `projects/<slug>/`. The library commands write `broll/` and `styles/`. The mix, run by `audio` and `render`, writes `.cache/audio/`. Details are in each part's contract.
+- Network: `capture` and `fetch`, images with remote URLs at render, and the first run of the Kokoro voice. `uvx mlx_whisper` (`transcribe`, `script`, `check`) names a hosted model and `uv run --with` resolves packages, so both can download on first use.
+- Subprocesses: `ffmpeg`, `ffprobe`, `uv`, `uvx`, `npx remotion`, macOS `say` and `open`, `mv`, `rm`, `git`, and Chrome through puppeteer-core.
+- The review board serves on `127.0.0.1`, port 4317 or the next free one.
+
+## Verification
+
+- Run: `cd reels && npm test`
+- Run: `cd reels && npm run typecheck`
+- The Python in `audio/` and `tools/kokoro.py` has no automated tests.
 
 ## Licence notes
 

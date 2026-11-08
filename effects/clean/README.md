@@ -1,0 +1,63 @@
+# effects/clean
+
+## Overview
+
+The clean reel style (`"style": "clean"`). `Clean.tsx` draws a resolved reel plan in this style: split, card, diagram, over and full layouts, with one text treatment at a time. `kit.tsx` and `text.tsx` are the parts it is built from, and the parts that custom diagrams in `../custom` draw with. `Minimal.tsx`, `House.tsx` and `Hybrid.tsx` are the three sample reels the style was chosen from. They are separate compositions and do not read a plan.
+
+## Interface
+
+**Renderer (`Clean.tsx`)**
+
+- `Clean: React.FC<Resolved>`: `../Reel.tsx` renders it when `r.style === "clean"`.
+- `SEAM` (960), `CHIP_Y` (120), `GLASS` (the glass panel box).
+- `box(layout)`: the box a layout draws its visual in, in frame pixels.
+
+**Drawing kit (`kit.tsx`)**
+
+- Frame and look: `W`, `H`, `CX`, `C` (palette), `SANS`, `SERIF`.
+- Speeds and timing: `REVEAL` (0.12), `MOVE` (0.6), `k`, `move`, `lerp`, `live`, and `at(times, i, fallback)` (the time of a diagram's nth word, or the fallback when the plan names fewer).
+- Words: `Word`, `anchors(words, phrases)`, `wordAt(words, t)`, `clean(s)`.
+- SVG parts that draw on as `p` goes 0 to 1: `Line`, `Ring`, `Rect`, `Doc`, `Dots`. Also `Stage` (the svg a diagram draws in), `Label` (text placed by its centre) and `rand(seed)` (seeded noise).
+
+**Text kit (`text.tsx`)**
+
+- Colours and type: `CREAM`, `GREEN`, `MONO`.
+- Parts: `Typed`, `blurIn`, `Center`, `Chip`.
+- Captions: `CleanChunk`, `chunkClean(words)`.
+
+**Sample compositions**
+
+- `Minimal` and `SampleProps` and `useSample` (`Minimal.tsx`), `House` and `Overlay` (`House.tsx`), `Hybrid` (`Hybrid.tsx`).
+- `../Root.tsx` registers them as `CleanMinimal`, `CleanHouse` and `CleanHybrid`. Their comment there says props come from `projects/<slug>/clean.json`.
+
+`media/qc.ts` imports `C` and `GREEN`.
+
+## Invariants
+
+- This file set must not contain a `Kit.tsx`. macOS file names ignore case, so it would clash with `kit.tsx` (comment in `kit.tsx`).
+- `Clean` treats a plan as faceless when `!r.video && !r.cut && !r.standIn`. Otherwise it keeps one `Speaker` mounted for the whole reel and only changes its layout. It always passes `split: "half"`.
+- A shot with `keep` draws no new visual. The shot it continues runs to the end of the last kept shot.
+- On a `card` layout no visual is drawn in a box. Cards show `beats` and `list` as text instead.
+- The caption is hidden while a `hit`, a card beat or a card list is on screen. Caption text is set in lower case.
+- A `custom` visual gets the whole layout box and keeps its own margins, with `panel` false only on `diagram`. Other kinds on a split sit in a panel from y 100 to y 790, below Instagram's top bar and above the seam caption.
+- `Clean` calls `CUSTOM[v.name]` directly, so `STILL` and the slow push in `../ui.tsx` do not apply here. A name that is not in `CUSTOM` falls through to `VisualView`, which throws.
+- `Picture` trims `picture.start` at a fixed 30 fps, not `r.fps`.
+- Shots hard cut. Easing lives only inside a graphic, plus the opening push on the first picture, 1.3x to 1x (`Clean.tsx`).
+- A caption ends at the next chunk's start or 0.5 s after its last word, whichever comes first (`Clean.tsx`, `Hybrid.tsx`).
+- `anchors` searches phrases in key order, each after the last match. It throws when a phrase is not found.
+- `useSample` anchors the fixed `PHRASES` of one script (`projects/egm-clean/script.txt`). All three samples use it, so their `words` must contain those phrases.
+- In `House` and `Hybrid`, a b-roll id must be a key of `CLIPS`. Any other id makes the loop length NaN.
+- `Line`, `Ring` and `Rect` carry `data-qc="edge"` and `Label` carries `data-qc="label"`. `app/qc.tsx` reads these attributes to check diagrams.
+- `Chip` is drawn on a solid colour so QC reads the colour the text really sits on (comment in `text.tsx`).
+
+## Side Effects
+
+- `Clean` plays `r.audio` and, with a cut, `CutAudio`. It loads `<slug>/<picture.src>` through `staticFile` for each shot with a `picture`. The public folder is `projects` (`remotion.config.ts`).
+- The samples play `voice` and optional looped `music` through `staticFile`. `House` and `Hybrid` load `<slug>/assets/broll/<id>.mp4`, muted, looped and at half speed. `Hybrid` also plays `<slug>/assets/sfx/<name>`: `.mp3` for `typing`, `.wav` for the rest.
+- `anchors` throws on a missing phrase, which fails the render of a sample.
+- No file writes, network calls or storage.
+
+## Verification
+
+- Run from the repo root: `npm test` and `npm run typecheck`.
+- After a visual change: `npm run studio -- qc --library`.
