@@ -3,7 +3,7 @@
 // footage, numbers that were never said. Layout checks read measurements of real frames, taken in a
 // headless browser by `studio qc` (media/qc.ts): safe area, collisions, orphans, type size, contrast,
 // balance. Errors stop an export; warnings are reported.
-import { type Issue, isGraphic as graphic, lastKept, shotLabel as label } from "./resolve.ts";
+import { type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
 import type { Resolved, Word } from "./schema.ts";
 
 // ---------- plan checks ----------
@@ -132,6 +132,31 @@ export const longestStill = (diffs: number[], fps: number, moving: (t: number) =
   });
   return best;
 };
+
+// A recorded screen's take, measured as it is filmed (media/record.ts). A zoom can crop text on purpose,
+// but a scrap of the next column at the frame's side looks like a mistake: a line cut by one side with
+// under a quarter of it showing.
+export type PageLine = { text: string; left: number; right: number; top: number; bottom: number };
+export const zoomSlivers = (lines: PageLine[], z: ScreenZoom, page: { width: number; height: number }, limit = 0.25) => {
+  const { s, tx, ty } = zoomAt([{ ...z, ms: 0 }], z.t);
+  const [left, right] = [(-tx / s) * page.width, ((1 - tx) / s) * page.width];
+  const [top, bottom] = [(-ty / s) * page.height, ((1 - ty) / s) * page.height];
+  return lines.filter((l) => {
+    if (l.bottom <= top || l.top >= bottom || (l.left < left && l.right > right)) return false;
+    if (!(l.left < left && l.right > left) && !(l.left < right && l.right > right)) return false;
+    return (Math.min(l.right, right) - Math.max(l.left, left)) / (l.right - l.left) < limit;
+  });
+};
+// `frames`: when each frame arrived. `moves`: when the page itself moved. The biggest hole in each move's
+// middle, if over `limit`: its slow first and last moments may rightly not change a pixel for a few frames.
+export const droppedFrames = (frames: number[], moves: [number, number][], limit = 0.1) =>
+  moves.flatMap(([from, to]) => {
+    const [a, b] = [from + (to - from) * 0.2, to - (to - from) * 0.2];
+    const times = [a, ...frames.filter((t) => t > a && t < b), b];
+    const gaps = times.slice(1).map((t, i) => ({ t: times[i], secs: t - times[i] }));
+    const worst = gaps.reduce((x, y) => (y.secs > x.secs ? y : x));
+    return worst.secs > limit ? [worst] : [];
+  });
 
 // The frame's safe area: clear of the edges, and higher clearance at the bottom, where YouTube's
 // player controls and Instagram's caption sit.

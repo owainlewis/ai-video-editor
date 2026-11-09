@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contrast, longestStill, type Measure, qcLayout, qcPlan, saidTwice, visualText } from "../engine/qc.ts";
+import { contrast, droppedFrames, longestStill, type Measure, qcLayout, qcPlan, saidTwice, visualText, zoomSlivers } from "../engine/qc.ts";
 import { zoomAt, zoomClashes } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 
@@ -155,6 +155,22 @@ describe("recorded screens", () => {
       expect(z.tx).toBeCloseTo(end.tx * (z.s - 1), 6);
       expect(z.ty).toBeCloseTo(end.ty * (z.s - 1), 6);
     }
+  });
+  it("flags a scrap of text at the side of a zoom's frame, and nothing it crops on purpose", () => {
+    const zoom = { t: 0, x: 0.75, y: 0.4, s: 2, ms: 0 }; // Shows x 400 to 800 and y 107 to 462.
+    const page = { width: 800, height: 711 };
+    const line = (text: string, left: number, right: number, top = 200) => ({ text, left, right, top, bottom: top + 20 });
+    const lines = [line("scrap", 320, 420), line("half", 350, 450), line("inside", 500, 700), line("above", 320, 420, 10), line("both sides", 300, 810)];
+    expect(zoomSlivers(lines, zoom, page).map((l) => l.text)).toEqual(["scrap"]);
+  });
+  it("finds a hole in the frames while the page moves, but not in a move's slow ends", () => {
+    const every = (from: number, to: number) => Array.from({ length: Math.round((to - from) * 60) }, (_, i) => from + i / 60);
+    expect(droppedFrames(every(1, 2), [[1, 2]])).toEqual([]);
+    const hole = droppedFrames([...every(1, 1.4), ...every(1.6, 2)], [[1, 2]]);
+    expect(hole).toHaveLength(1);
+    expect(hole[0].secs).toBeGreaterThan(0.2);
+    expect(droppedFrames(every(1, 1.85), [[1, 2]])).toEqual([]);
+    expect(droppedFrames([], [[1, 2]])[0].secs).toBeCloseTo(0.6);
   });
   it("flags a zoom reversed before it settles, but not one ended by a hard cut", () => {
     const zoom = { t: 1, x: 0.5, y: 0.4, s: 1.5, ms: 600 };

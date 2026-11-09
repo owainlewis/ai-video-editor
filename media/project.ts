@@ -129,11 +129,10 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
       const moves = join(dir, v.src.replace(/\.\w+$/, ".json"));
-      s.visual = { ...v, size: probe.size(join(dir, v.src)), ...(v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[] }>(moves) : {}) };
-      for (const z of v.sync && s.visual.kind === "video" ? zoomClashes(s.visual.zooms ?? []) : []) {
-        const message = `the zoom at ${z.t.toFixed(2)}s has not settled when the next one starts; hold it longer, or make the next a hard cut`;
-        if (!issues.some((i) => i.message === message)) issues.push({ level: "warn", message });
-      }
+      const screen = v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[]; warnings?: string[] }>(moves) : undefined;
+      s.visual = { ...v, size: probe.size(join(dir, v.src)), ...(screen && { zooms: screen.zooms, ticks: screen.ticks }) };
+      const clashes = zoomClashes(screen?.zooms ?? []).map((z) => `the zoom at ${z.t.toFixed(2)}s has not settled when the next one starts; hold it longer, or make the next a hard cut`);
+      for (const message of [...(screen?.warnings ?? []), ...clashes]) if (!issues.some((i) => i.message === message)) issues.push({ level: "warn", message });
       // A recording is timed to the cut it was made for; it does not follow a re-cut as the anchors do.
       const cutFile = join(dir, "cut.json");
       if (v.sync && !s.keep && existsSync(cutFile) && statSync(cutFile).mtimeMs > statSync(join(dir, v.src)).mtimeMs) issues.push({ level: "warn", message: `"${s.anchor}": cut.json changed after ${v.src} was made, so the screen may be out of step with the words` });

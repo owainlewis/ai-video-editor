@@ -2,13 +2,15 @@
 // Each scene is one page over a stretch of the cut; its actions (move, click, scroll, mark, zoom,
 // type) land on spoken words, so the screen moves with the voice. Writes assets/screen.mp4, as long
 // as the cut, for `{ "kind": "video", "src": "assets/screen.mp4", "sync": true }`, and
-// assets/screen.json: the zooms (drawn by Remotion, so the page stays sharp) and the clicks (for sound).
+// assets/screen.json: the zooms (drawn by Remotion, so the page stays sharp), the clicks (for sound)
+// and warnings about the take, which `check` reports.
 // The pages are real and so are the words marked on them: a mark on text that is not there is an error.
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { droppedFrames, type PageLine, zoomSlivers } from "../engine/qc.ts";
 import { CUT_LEAD, findPhrase, type ScreenZoom } from "../engine/resolve.ts";
 import type { Word } from "../engine/schema.ts";
 import { timeline } from "./bin.ts";
@@ -82,6 +84,16 @@ const HELPERS = String.raw`(() => {
       return true;
     },
     clear: () => { marks.forEach((d) => d.remove()); marks = []; },
+    lines: () => {
+      const out = [], r = document.createRange(), walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = walk.nextNode());) {
+        const text = n.data.trim();
+        if (!text || getComputedStyle(n.parentElement).visibility === 'hidden') continue;
+        r.selectNodeContents(n);
+        for (const b of r.getClientRects()) if (b.width > 1) out.push({ text: text.slice(0, 40), left: b.left, right: b.right, top: b.top, bottom: b.bottom });
+      }
+      return out;
+    },
   };
 })()`;
 
@@ -152,6 +164,7 @@ export async function record(projects: string, slug: string, log?: Log) {
   const browser = new Browser(join(work, "profile"));
   const zooms: ScreenZoom[] = [];
   const ticks: number[] = [];
+  const warnings: string[] = [];
   const clips: { start: number; end: number; frames: { file: string; t: number }[] }[] = [];
   await browser.open();
   try {
@@ -195,11 +208,14 @@ export async function record(projects: string, slug: string, log?: Log) {
         return p as { x: number; y: number; l: number; t: number };
       };
       let zoomed = false;
+      const moves: [number, number][] = []; // When the page itself moves, on this clip's clock.
+      const moved = (t: number, ms: number) => moves.push([t - start, t - start + ms / 1000]);
       const perform = async (a: Act, t: number) => {
         const on = a.on ?? "";
         if (a.act === "move") {
           const p = await place(on);
           const x = Math.min(p.x, p.l + 110);
+          moved(t, a.ms ?? 420);
           await browser.js(`__rec.move(${x}, ${p.y + 8}, ${a.ms ?? 420})`);
           await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y: p.y });
         } else if (a.act === "click") {
@@ -210,6 +226,7 @@ export async function record(projects: string, slug: string, log?: Log) {
         } else if (a.act === "scroll") {
           const p = await place(on);
           const y = await browser.js<number>("scrollY");
+          if (Math.abs(p.t - (a.top ?? scene.top)) >= 1) moved(t, a.ms ?? 650); // A scroll that goes nowhere paints nothing.
           await browser.js(`__rec.scrollTo(${y + p.t - (a.top ?? scene.top)}, ${a.ms ?? 650})`);
         } else if (a.act === "mark") {
           if (!(await browser.js(`__rec.mark(${JSON.stringify(on)}, ${a.ms ?? 300})`))) throw new Error(`record.json: "${on}" is not on ${scene.url}`);
@@ -218,7 +235,10 @@ export async function record(projects: string, slug: string, log?: Log) {
           await browser.js("__rec.clear()");
         } else if (a.act === "zoom") {
           const p = await place(on);
-          zooms.push({ t, x: a.x ?? p.x / VIEW.width, y: a.y ?? p.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 600 });
+          const zoom = { t, x: a.x ?? p.x / VIEW.width, y: a.y ?? p.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 600 };
+          zooms.push(zoom);
+          const [cut] = zoomSlivers(await browser.js<PageLine[]>("__rec.lines()"), zoom, VIEW);
+          if (cut) warnings.push(`the zoom at ${t.toFixed(2)}s leaves a sliver of "${cut.text}" at the edge of the frame; move its centre or zoom in less`);
           zoomed = true;
         } else if (a.act === "reset") {
           zooms.push({ t, x: 0.5, y: 0, s: 1, ms: a.ms ?? 500 });
@@ -242,6 +262,7 @@ export async function record(projects: string, slug: string, log?: Log) {
       await Promise.all(running);
       await browser.send("Page.stopScreencast");
       browser.onFrame = undefined;
+      for (const g of droppedFrames(frames.map((f) => f.t), moves)) warnings.push(`the recording dropped ${Math.round(g.secs * 1000)} ms of frames at ${(start + g.t).toFixed(2)}s while the page moved; record it again`);
       if (zoomed) zooms.push({ t: end, x: 0.5, y: 0, s: 1, ms: 0 });
       clips.push({ start, end, frames });
     }
@@ -266,7 +287,8 @@ export async function record(projects: string, slug: string, log?: Log) {
     mkdirSync(join(dir, "assets"), { recursive: true });
     const out = join(dir, "assets/screen.mp4");
     ffmpeg(["-f", "concat", "-safe", "0", "-i", list, "-vf", "fps=30,scale=1620:-2", "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p", "-t", duration.toFixed(3), out], log);
-    writeJson(join(dir, "assets/screen.json"), { zooms: zooms.sort((a, b) => a.t - b.t), ticks: ticks.sort((a, b) => a - b) });
+    writeJson(join(dir, "assets/screen.json"), { zooms: zooms.sort((a, b) => a.t - b.t), ticks: ticks.sort((a, b) => a - b), warnings });
+    warnings.forEach((w) => log?.(`warn: ${w}`));
     return out;
   } finally {
     browser.close();
