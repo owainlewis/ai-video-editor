@@ -424,6 +424,10 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "words")
       issues.push({ level: "error", message: `${label}: over takes words, a title or a lower third` });
+    // A full-frame card that waits for its first word is a blank screen (Owain, 2026-11-09).
+    const v = s.layout === "media" ? s.visual : undefined;
+    const first = v && "times" in v ? v.times?.[0] : v && "words" in v && Array.isArray(v.words) ? (v.words[0] as number | undefined) : undefined;
+    if (first !== undefined && first - s.start > 1) issues.push({ level: "warn", message: `${label}: the card is blank for ${(first - s.start).toFixed(1)}s; start the shot on its first word` });
     // Owain does not like lower thirds (2026-10-24): only when he asks for one.
     if (s.visual?.kind === "lower") issues.push({ level: "warn", message: `${label}: a lower third; Owain does not like them, so use one only when he asks` });
     // A punch-in re-renders the whole picture from the working copy, which shifts its colour and

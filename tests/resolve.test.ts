@@ -195,6 +195,16 @@ describe("youtube canvas", () => {
     expect(lintShots(bad.shots, 5, "react", "youtube").some((i) => i.level === "error")).toBe(true);
   });
 
+  it("warns when a full-frame youtube card waits for its first word", () => {
+    const card = (first: number) => [{ start: 10, end: 20, layout: "media", anchor: "a", visual: { kind: "shift", from: { text: "x" }, to: { text: "y" }, times: [first, 15] } }] as never;
+    expect(lintShots(card(13), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(true);
+    expect(lintShots(card(10.3), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(false);
+    // A title timed to the words waits for its first one too ("Really tear this code apart", 2026-11-10).
+    const title = (first: number) => [{ start: 10, end: 20, layout: "media", anchor: "a", visual: { kind: "title", text: "x y", sync: true, words: [first, 15] } }] as never;
+    expect(lintShots(title(11.8), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(true);
+    expect(lintShots(title(10.2), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(false);
+  });
+
   it("rejects youtube layouts on a reel", () => {
     const { shots } = resolveShots(plan([{ at: "If", layout: "side", visual: { kind: "title", text: "x" } }]), words, 5);
     expect(lintShots(shots, 5).some((i) => i.level === "error" && i.message.includes("youtube"))).toBe(true);
