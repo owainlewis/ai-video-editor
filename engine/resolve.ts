@@ -624,6 +624,9 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
     // Split is the main view (Owain, 2026-11-06: "the split screen should be the primary view").
     const split = timeIn(shots, (s) => s.layout === "split") / duration;
     if (split < 0.45) issues.push({ level: "warn", message: `split is ${Math.round(split * 100)}% of the reel; it is the main view, so aim for half or more` });
+    // Owain, 2026-11-11: "we end the reel with my face in an unflattering shot. Stop on a blank screen or text card."
+    const last = shots[shots.length - 1];
+    if (last && last.layout === "full" && !faceless) issues.push({ level: "warn", message: `the reel ends on ${shotLabel(last, shots.length - 1)}, full frame on the face; end on a card` });
     // A full-screen diagram only now and then, where it adds value.
     const diagram = timeIn(shots, (s) => s.layout === "diagram") / duration;
     if (diagram > 0.2) issues.push({ level: "warn", message: `diagrams fill ${Math.round(diagram * 100)}% of the reel; use one only now and then` });

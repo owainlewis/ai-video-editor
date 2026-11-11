@@ -34,6 +34,15 @@ describe("clean plans", () => {
     expect(issues.map((i) => i.message).join()).toMatch(/hit "tool"/);
   });
 
+  it("warns when a reel ends full frame on the face", () => {
+    const ends = (last: unknown) => {
+      const { shots } = resolveShots(plan([{ at: "If", layout: "split", visual: { kind: "custom", name: "x" } }, last]), words, 5);
+      return lintClean(shots, 5, false).some((i) => /ends on/.test(i.message));
+    };
+    expect(ends({ at: "having", layout: "full" })).toBe(true);
+    expect(ends({ at: "having", layout: "card", bg: "paper", visual: { kind: "beats", items: [{ text: "CODE", at: "code" }] } })).toBe(false);
+  });
+
   it("rejects a hit word too wide for the frame", () => {
     const { shots } = resolveShots(plan([{ at: "If", layout: "full", hit: { text: "PROFESSIONAL", at: "AI" } }]), words, 5);
     expect(lintClean(shots, 5, false).some((i) => i.level === "error" && /too wide/.test(i.message))).toBe(true);

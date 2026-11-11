@@ -18,7 +18,7 @@ import { Points } from "./points";
 import { Skills } from "./skills";
 import { AutoFlood, AutoMorning } from "./automations";
 import { SlowDeep, SlowEager, SlowFeedback, SlowGoldfish, SlowTradeoffs, SlowTwo } from "./egmslow";
-import { NatAngles, NatFull, NatGoldfish, NatTwo } from "./egmnatural";
+import { NatAngles, NatFull, NatGoldfish, NatKnows, NatReview, NatTwo } from "./egmnatural";
 import { RmdFile, RmdLoop, RmdRepo, RmdRules } from "./reviewmd";
 import { SubAlive, SubLife, SubReopen, SubSame, SubZero } from "./subtasks";
 import { Drain, Drift, Gaps, Lens, Scale, Surge, Thread, Wall } from "./stage";
@@ -82,6 +82,8 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   "nat-full": NatFull,
   "nat-goldfish": NatGoldfish,
   "nat-angles": NatAngles,
+  "nat-review": NatReview,
+  "nat-knows": NatKnows,
   // EGM, "it forces you to slow down" (2026-11-08).
   "slow-two": SlowTwo,
   "slow-deep": SlowDeep,
