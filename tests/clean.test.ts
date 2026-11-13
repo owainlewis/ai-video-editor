@@ -125,7 +125,7 @@ describe("clean plans", () => {
       plan([
         { at: "If", layout: "split", visual: { kind: "logos", items: [{ src: "a.png", at: "AI" }] } },
         { at: "having", layout: "full", hit: { text: "CODE", at: "code" } },
-        { at: "tool is", layout: "split", visual: { kind: "claudecode", lines: [{ text: "/egm-review a.md", style: "prompt" }] } },
+        { at: "tool is", layout: "split", visual: { kind: "cli", steps: [{ type: "prompt", text: "/egm-review a.md" }] } },
       ]),
       words,
       5,

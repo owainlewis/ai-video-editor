@@ -34,3 +34,7 @@ export const cameraProgress = (start: number, end: number, time: number, hold = 
   if (end <= a) return time >= end ? 1 : 0;
   return cameraEase(Math.min(1, Math.max(0, (time - a) / (end - a))));
 };
+
+// A capture's camera after the plan resolves: words on a page (`{ phrase }`) are turned into rects
+// then, so a renderer only ever draws rects; anything else counts as no rect.
+export const rectOf = (r: unknown): Rect | undefined => (Array.isArray(r) && r.length === 4 ? (r as Rect) : undefined);

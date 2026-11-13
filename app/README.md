@@ -21,7 +21,7 @@ Routes are read from the hash in `main.tsx`:
 | --- | --- |
 | `api.projects()` | GET `/api/projects` |
 | `api.library()` | GET `/api/library` |
-| `api.effects(canvas, style?)` | GET `/api/effects` |
+| `api.effects(canvas)` | GET `/api/effects` |
 | `api.gallery()` | GET `/api/gallery` |
 | `api.project(slug, have?)` | GET `/api/projects/<slug>`, with `?have=<wordsKey>` to leave the words out when they have not changed |
 | `api.upload(file, onProgress, to?, params?)` | POST by XHR, default `/api/upload` |

@@ -33,16 +33,11 @@ export const darkIsGraphite = (on: boolean, isBlack = false, neutralDark = isBla
 export const isBlack = () => black;
 export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : neutral ? NEUTRAL : graphite ? GRAPHITE : style.color.dark) : style.color.light);
 
-// Scene geometry: the headline on top, the visual below, captions low.
-export const SCENE = { headTop: 96, headHeight: 340, top: 470, bottom: 1600, caption: 1752 };
-// Headlines are large: 150 px for a short line, 126 px when it needs two.
-export const headlineSize = (text: string) => (text.replace(/\*/g, "").length > 12 ? 126 : 150);
-
 export type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };
 export type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
 export type Box = { x: number; y: number; w: number; h: number; r: number };
 
-// Project files, web URLs, or inline data (the style lab's illustrative samples).
+// Project files, web URLs, or inline data (the library's illustrative samples).
 export const src = (slug: string, p: string) => (/^(https?|data):/.test(p) ? p : staticFile(`${slug}/${p}`));
 export const prog = (time: number, at: number, dur = 0.25) => interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease });
 
@@ -203,8 +198,6 @@ const gridGeom = (v: V<"grid">, w: number, h: number) => {
   const box = (i: number): Box => ({ x: (i % v.cols) * (tile + gap), y: top + Math.floor(i / v.cols) * (tileH + gap), w: tile, h: tileH, r: 14 });
   return { head, box };
 };
-export const gridTileBox = (v: ResolvedVisual, w: number, h: number, i: number): Box | undefined =>
-  v.kind === "grid" ? gridGeom(v as V<"grid">, w, h).box(i) : undefined;
 
 // A library that fills in with its real thumbnails. Tiles arrive in a wave from the top left, the
 // count rolls up, and each group lights its tiles on its word while the rest step back.
@@ -317,8 +310,6 @@ const funnelGeom = (v: V<"funnel">, w: number, h: number) => {
   return { n, chipW, chipH, card, chips, solo, rowH, pad, kickerH, titleH, listGap };
 };
 export const funnelLayout = (v: ResolvedVisual, w: number, h: number) => (v.kind === "funnel" ? funnelGeom(v as V<"funnel">, w, h) : undefined);
-export const funnelCardBox = (v: ResolvedVisual, w: number, h: number): Box | undefined =>
-  v.kind === "funnel" ? funnelGeom(v as V<"funnel">, w, h).card : undefined;
 
 // Many sources into one result. Chips of plain words land, lines draw from each into the result
 // card, dots travel down them, and the card's rows land on their words. No items: the card alone.
@@ -401,14 +392,12 @@ export const FunnelVisual: React.FC<Props & { v: V<"funnel"> }> = ({ shot, time,
   );
 };
 
-// Kinetic typing geometry, shared with a transition that grows the input.
+// Kinetic typing geometry.
 const typeGeom = (v: V<"type">, w: number, h: number) => {
   const inputH = 170 + (v.chips.length ? 100 : 0);
   const inputTop = h / 2 - inputH / 2 + 60;
-  return { inputH, inputTop, input: { x: 0, y: inputTop, w, h: inputH, r: 46 } as Box };
+  return { inputH, inputTop };
 };
-export const typeInputBox = (v: ResolvedVisual, w: number, h: number): Box | undefined =>
-  v.kind === "type" ? typeGeom(v as V<"type">, w, h).input : undefined;
 
 // Kinetic typing. The text types itself huge across the frame, then on `settle` shrinks toward a
 // plain input and dissolves as the same words resolve inside it; pasted chips pop in after.

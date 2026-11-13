@@ -9,6 +9,28 @@ const m = (texts: Measure["texts"], extra: Partial<Measure> = {}): Measure => ({
 const msgs = (issues: { message: string }[]) => issues.map((i) => i.message).join("\n");
 
 describe("qcLayout", () => {
+  const reel: [number, number] = [1080, 1920];
+  const panel: [number, number, number, number] = [0, 0, 1080, 864];
+
+  it("warns when a label crowds a line in its diagram, and errors when it sits on one", () => {
+    const label = text("own email", [600, 300, 200, 40], { label: true });
+    const crowded = m([label], { edges: [{ points: [[592, 320]], opacity: 1 }] });
+    expect(msgs(qcLayout(crowded, reel, "s"))).toMatch(/crowds a line/);
+    const on = m([label], { edges: [{ points: [[598, 320]], opacity: 1 }] });
+    expect(msgs(qcLayout(on, reel, "s"))).toMatch(/sits on a line/);
+    const clear = m([label], { edges: [{ points: [[560, 320]], opacity: 1 }] });
+    expect(msgs(qcLayout(clear, reel, "s"))).not.toMatch(/line/);
+  });
+
+  it("warns when a split's graphic huddles at the top of its panel", () => {
+    const top = m([text("own email", [600, 140, 200, 40])], { edges: [{ points: [[300, 160], [800, 420]], opacity: 1 }] });
+    const issues = msgs(qcLayout(top, reel, "s", undefined, false, panel));
+    expect(issues).toMatch(/above the middle of its panel/);
+    expect(issues).toMatch(/fills \d+% of its panel/);
+    const filled = m([text("own email", [600, 120, 200, 40])], { edges: [{ points: [[300, 140], [800, 760]], opacity: 1 }] });
+    expect(msgs(qcLayout(filled, reel, "s", undefined, false, panel))).not.toMatch(/panel/);
+  });
+
   it("passes a centred, clear card", () => {
     expect(qcLayout(m([text("Title", [860, 500, 200, 48])]), size, "s", "#1B1B1A", true)).toEqual([]);
   });

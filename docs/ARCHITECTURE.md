@@ -23,9 +23,9 @@ That keeps feedback cheap on long videos: a note costs seconds, not a re-render.
 | Folder | What | Depends on |
 |---|---|---|
 | `engine/` | Plan schema, word anchoring, shot timing, lints. Pure. | nothing |
-| `effects/` | Remotion compositions (`Reel` 9:16, `Wide` 16:9) and every visual. | engine, styles |
-| `styles/` | Ivory tokens and the card catalog with typed slot limits. | engine |
-| `media/` | Import, project resolution, stills, render. Files and ffmpeg. | engine, effects, styles |
+| `effects/` | Remotion compositions (`Reel` 9:16, `Wide` 16:9) and every visual. The reel kit is `effects/apps/` (app windows) and `effects/clean/` (the clean reel, its text and diagram parts). | engine, styles |
+| `styles/` | Ivory tokens (the YouTube look) and the card catalog with typed slot limits. | engine |
+| `media/` | Import, project resolution, the b-roll library, page recording (`record`), stills, render. Files and ffmpeg. | engine, effects, styles |
 | `audio/` | The mix: voice untouched, music bed, sound effects, loudness. Python. | |
 | `server/` | Local HTTP API, file serving, the plan watcher, versions, the chat bridge. | media |
 | `app/` | The editor: projects, player, timeline, chat. | engine, effects |
@@ -34,5 +34,5 @@ That keeps feedback cheap on long videos: a note costs seconds, not a re-render.
 
 ## Not yet
 
-- No b-roll library or search yet; captures and clips are added to a project by hand.
-- Export renders every frame. A segment export (graphics only, laid over the original) and FCPXML come next for long videos.
+- No FCPXML: graphics are laid over the original in Studio's export, not handed to Final Cut as a timeline.
+- The reel kit is small. Growing it is the next work (`docs/ROADMAP.md`).

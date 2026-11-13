@@ -23,7 +23,9 @@ const length = (kind: AppKind, s: { type: string; text?: string; items?: string[
     case "user": return typeTime(chars) + 0.35;
     case "think": return 1.1;
     case "tool": return kind === "cli" ? 1.2 : 0.6;
-    case "text": return kind === "cli" ? 0.5 : Math.min(1.6, 0.25 + (s.text ?? "").split(/\s+/).length * 0.035);
+    // A reply streams in quickly, as the apps stream one: whole within 0.8 s, so the frame QC calls
+    // settled shows it complete.
+    case "text": return kind === "cli" ? 0.5 : Math.min(0.75, 0.2 + (s.text ?? "").split(/\s+/).length * 0.02);
     case "list":
     case "todo": return 0.3 + (s.items?.length ?? 0) * 0.35;
     case "folder": return 1.3;

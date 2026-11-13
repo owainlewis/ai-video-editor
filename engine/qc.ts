@@ -8,7 +8,7 @@ import type { Resolved, Word } from "./schema.ts";
 
 // ---------- plan checks ----------
 
-const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of"]);
+const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of", "icon", "shape", "diff", "lang", "marks"]);
 
 // Every piece of text a visual puts on screen.
 export const visualText = (v: unknown): string[] => {
@@ -28,10 +28,12 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     const v = s.visual!;
     const text = visualText(v).join(" ");
     const len = s.end - s.start;
-    // Reading time: about a second to take in a card, plus a quarter of a second a word.
+    // Reading time: about a second to take in a card, plus a quarter of a second a word. A reel moves
+    // faster (something changes every 2 s), so there it is a little under that, with a tenth of a
+    // second's grace for rounding.
     const n = text.split(/\s+/).filter(Boolean).length;
-    const need = 1 + 0.22 * n;
-    if (s.layout !== "side" && len < need && v.kind !== "chapter" && v.kind !== "stat")
+    const need = r.canvas === "reel" ? 0.6 + 0.2 * n : 1 + 0.22 * n;
+    if (s.layout !== "side" && len < need - 0.1 && v.kind !== "chapter" && v.kind !== "stat")
       issues.push({ level: "warn", message: `${label(s, i)}: ${n} words on screen for ${len.toFixed(1)}s; about ${need.toFixed(1)}s to read` });
     // Lingering: once the last part has landed, a graphic has made its point. Hold about two seconds,
     // then cut back (Owain, 2026-10-25: "sometimes the graphics linger a bit too long").
@@ -165,6 +167,8 @@ export const droppedFrames = (frames: number[], moves: [number, number][], limit
 // player controls and Instagram's caption sit.
 export const SAFE = { x: 0.05, top: 0.05, bottom: 0.085 };
 const MIN_GAP = 6;
+// The air a label needs round any line or shape in its diagram.
+const CLEAR = 12;
 const MAX_LABELS = 5;
 const visible = (o: number) => o >= 0.3;
 
@@ -189,7 +193,7 @@ export const contrast = (fg: number[], bg: number[], alpha = 1) => {
 };
 
 // `bg` is the card's background (hex) for designed frames; on footage contrast is not checked.
-export const qcLayout = (m: Measure, size: [number, number], where: string, bg?: string, full = false): Issue[] => {
+export const qcLayout = (m: Measure, size: [number, number], where: string, bg?: string, full = false, panel?: Box): Issue[] => {
   const [W, H] = size;
   const issues: Issue[] = [];
   const texts = m.texts.filter((t) => visible(t.opacity));
@@ -212,8 +216,12 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     for (const k of m.marks.filter((q) => visible(q.opacity)))
       if (gap(t.box, k.box) < MIN_GAP) err(`"${short(t.text)}" touches a line or dot (${gap(t.box, k.box).toFixed(0)}px)`);
     // Labels are welcome until they clutter or sit on the drawing (Owain, 2026-11-06).
-    const on = ([px, py]: number[]) => px > x - 4 && px < x + w + 4 && py > y - 4 && py < y + h + 4;
-    if ((m.edges ?? []).some((e) => visible(e.opacity) && e.points.some(on))) err(`"${short(t.text)}" sits on a line or shape in the diagram`);
+    const near = (pad: number) => ([px, py]: number[]) => px > x - pad && px < x + w + pad && py > y - pad && py < y + h + pad;
+    const edges = (m.edges ?? []).filter((e) => visible(e.opacity));
+    if (edges.some((e) => e.points.some(near(4)))) err(`"${short(t.text)}" sits on a line or shape in the diagram`);
+    // A label needs air round it, not just to miss the line (Owain, 2026-11-13: "overlapping - no
+    // spacing - badly positioned", the "own email" label jammed against its envelope).
+    else if (edges.some((e) => e.points.some(near(CLEAR)))) warn(`"${short(t.text)}" crowds a line or shape; give it ${CLEAR}px or more`);
     if (t.label && t.text.split(/\s+/).length > 3) warn(`label "${short(t.text)}" is over three words`);
   }
   const labels = texts.filter((t) => t.label).length;
@@ -245,6 +253,19 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     const last = tops.filter((t) => Math.abs(t - lines[lines.length - 1]) <= h * 0.6).length;
     const owner = m.texts.find((t) => t.block === block);
     if (last === 1 && owner && visible(owner.opacity)) warn(`a line ends with one word on its own ("${short(owner.text)}...")`);
+  }
+  // A drawn graphic on a split should fill its panel and sit near its middle, not huddle at the top
+  // with a dead band under it (Owain, 2026-11-13, the Grok Bot accounts diagram).
+  if (panel) {
+    const [, pt, , ph] = panel;
+    const inPanel = (b: Box) => b[1] >= pt - 4 && b[1] + b[3] <= pt + ph + 4;
+    const all = [...texts.map((t) => t.box), ...m.marks.filter((q) => visible(q.opacity)).map((q) => q.box), ...(m.paint ?? []), ...(m.edges ?? []).filter((e) => visible(e.opacity)).flatMap((e) => e.points.map(([px, py]) => [px, py, 0, 0] as Box))].filter(inPanel);
+    if (all.length) {
+      const t = Math.min(...all.map((b) => b[1])), b = Math.max(...all.map((b) => b[1] + b[3]));
+      const dy = (t + b) / 2 - (pt + ph / 2);
+      if (Math.abs(dy) > ph * 0.12) warn(`the graphic sits ${Math.round(Math.abs(dy))}px ${dy > 0 ? "below" : "above"} the middle of its panel; centre it`);
+      if (b - t < ph * 0.45) warn(`the graphic fills ${Math.round(((b - t) / ph) * 100)}% of its panel's height; make it bigger`);
+    }
   }
   // A full-frame card should sit near the middle of the frame.
   if (full && texts.length) {

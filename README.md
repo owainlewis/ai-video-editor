@@ -23,7 +23,6 @@ The packages sit in layers:
 - `effects/` and `styles/` draw the picture.
 - `media/` and `audio/` do the work on disk.
 - `server/` and `app/` are the editor.
-- `reels/` is a second tool with its own code. It shares no imports with the rest.
 
 ## Local Interface & Invariants
 
@@ -74,11 +73,10 @@ Side effects in `cli.ts`:
 - `effects`: [./effects/README.md](./effects/README.md) - The Remotion compositions and every visual.
 - `engine`: [./engine/README.md](./engine/README.md) - The plan schema, word-anchored timing, cut maths and checks. No side effects.
 - `media`: [./media/README.md](./media/README.md) - Import, transcription, plan resolution, stills, export, QC, the b-roll library and Auphonic.
-- `reels`: [./reels/README.md](./reels/README.md) - The separate reel tool: mock-ups, review board and styles.
 - `server`: [./server/README.md](./server/README.md) - The local API: project files, plan watching, versions, jobs and headless Claude.
 - `styles`: [./styles/README.md](./styles/README.md) - The style tokens and card catalog.
 
-Not covered by a contract: `docs`, `research`, `library` and `projects`, which hold no code of their own, and `hyperframes`, whose only code is GSAP scripts inside its HTML compositions. The tests are in `tests` and `reels/tests`.
+Not covered by a contract: `docs`, `research`, `library` and `projects`, which hold no code of their own, and `hyperframes`, whose only code is GSAP scripts inside its HTML compositions. The tests are in `tests`.
 
 ## Global Invariants
 
@@ -86,16 +84,15 @@ Not covered by a contract: `docs`, `research`, `library` and `projects`, which h
 - Shots and reveals anchor to spoken words, not seconds (`engine/resolve.ts:resolveShots`). A missing shot anchor is an error and drops the shot. A missing reveal anchor is an error, keeps the shot and shows the reveal at the shot's start. With a cut, both are warnings: the shot is left out, or the reveal shows at the start.
 - `engine/` imports only `zod` and its own files, so it stays free of disk and process access.
 - The editor and the export use the same compositions in `effects/`.
-- `reels/` and the root packages do not import each other. A change to one's schema, resolver or styles does not reach the other.
 
 ## Global Side Effects
 
 - Files: `media/` and `server/` read and write under `projects/<slug>/`. They also write `library/broll/` and `library/qc/`. `server/` also writes uploads to `projects/.uploads/` and moves deleted projects to `projects/.trash/`.
-- Child processes: `ffmpeg`, `ffprobe`, `npx remotion`, `npx tsx cli.ts` (the server's long jobs, run detached), `uvx mlx_whisper`, `uv run python -m audio.mix`, `claude -p`, and headless Chrome for QC. The reel tool adds macOS `say` and `open`, `uv run` of `tools/kokoro.py`, and Chrome through puppeteer for `capture`.
-- Network: Auphonic, at `https://auphonic.com/api`, with `AUPHONIC_API_KEY`. Render can also load image paths that start with `http` or `https`. The reel tool's `fetch` and `capture` commands use the network too.
-- Local servers, all on `127.0.0.1`: the editor on 4747 or one of the next 20 ports, a QC server on a random port during QC, and the reels review board on 4317 or one of the next 20 ports.
+- Child processes: `ffmpeg`, `ffprobe`, `npx remotion`, `npx tsx cli.ts` (the server's long jobs, run detached), `uvx mlx_whisper`, `uv run python -m audio.mix`, `claude -p`, and headless Chrome for QC.
+- Network: Auphonic, at `https://auphonic.com/api`, with `AUPHONIC_API_KEY`. Render can also load image paths that start with `http` or `https`.
+- Local servers, all on `127.0.0.1`: the editor on 4747 or one of the next 20 ports, and a QC server on a random port during QC.
 
 ## System Verification
 
-- Run: `npm test` (runs `tests/` and `reels/tests/`)
-- Run: `npm run typecheck` (root packages), and `cd reels && npm run typecheck` for the reel tool
+- Run: `npm test`
+- Run: `npm run typecheck`

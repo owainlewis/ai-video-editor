@@ -27,7 +27,9 @@ const W_ = 1080;
 export const W = W_;
 export const H = 1920;
 
-// Split layout: visual panel on top, caption on the seam, speaker below.
+// Split layout, 45 / 10 / 45 (Owain, 2026-11-13): the visual panel on top (0 to 864), a caption band
+// (864 to 1056), the speaker below (1056 to 1920), so a caption never sits on dark footage.
+export const BAND = { top: 864, height: 192 };
 // "half" is a clean 50/50: visual on the top half, speaker edge to edge on the bottom half,
 // captions low on the speaker. "inset" gives the visual about 60% of the frame and puts the
 // speaker in a rounded window with a margin, captions on the seam.
@@ -36,7 +38,7 @@ export type Box = { left: number; top: number; width: number; height: number; ra
 export const splitGeom = (mode: SplitMode) =>
   mode === "inset"
     ? { panelTop: 200, panelBottom: 1090, seam: 1165, speaker: { left: 60, top: 1240, width: W_ - 120, height: 620, radius: 40 } as Box }
-    : { panelTop: 200, panelBottom: 920, seam: 1790, speaker: { left: 0, top: 960, width: W_, height: 960, radius: 0 } as Box };
+    : { panelTop: 200, panelBottom: 920, seam: 1790, speaker: { left: 0, top: BAND.top + BAND.height, width: W_, height: 1920 - BAND.top - BAND.height, radius: 0 } as Box };
 // The persistent header sits above the panel on split and media shots. Without a header
 // the panel starts 50 px higher.
 export const HEADER = { top: 64, height: 120 };

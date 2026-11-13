@@ -2,8 +2,8 @@
 
 The house look for Owain's reels and YouTube graphics, picked from his notes in October 2026.
 `docs/RULES.md` wins over anything here. The numbers live in `tokens.ts`; the cards live in
-`style.ts`. Review every card live in the style lab:
-`npm run reel -- review`, then "Blueprint style lab".
+`style.ts`. Review every card live in the editor's gallery (`#/gallery`) and measure them with
+`npm run studio -- qc --library`.
 
 ## Style prompt
 

@@ -3,7 +3,7 @@ import React from "react";
 import { Video } from "@remotion/media";
 import { UiVisual } from "./ui";
 import { Img, interpolate } from "remotion";
-import { cameraProgress, frameRect, TRANSITION } from "./camera";
+import { cameraProgress, frameRect, rectOf } from "./camera";
 import { zoomAt } from "../engine/resolve";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
@@ -14,6 +14,9 @@ import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
 import { AgendaCard, BeforeAfterCard, BentoCard, ChecklistCard, KpiCard, LevelsCard, LogowallCard, MatrixCard, MeterCard, QuoteCard, RingCard, TimelineCard, WaffleCard } from "./cards";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
+import { CodeView } from "./clean/code";
+import { FlowView } from "./clean/flow";
+import { PALETTES, PaletteContext } from "./clean/kit";
 
 type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number; filter?: string; bleed?: boolean };
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[]; size?: [number, number] };
@@ -46,17 +49,18 @@ export const Accented: React.FC<{ text: string; color?: string; lift?: number }>
 // from one region to another and a marker that sweeps across what is being said.
 const ImageVisual: React.FC<Props & { v: V<"image"> }> = (props) => {
   const { w, h, v, shot } = props;
+  const vFrom = rectOf(v.from), vTo = rectOf(v.to);
   // On a scene or split the card is only as tall as the region being shown, so the words under discussion
   // are large and nothing unrelated from the page sits around them.
   // Split panels too (Owain, 2026-10-25: "the text positioning is really off"): a paragraph card
   // shows that paragraph, not half-lines of the page cut off above and below it.
-  if ((shot.layout === "scene" || shot.layout === "split") && v.from && (v.mat || v.label || v.lift)) return <MattedImage {...props} />;
-  if ((shot.layout === "scene" || shot.layout === "split") && v.from) {
+  if ((shot.layout === "scene" || shot.layout === "split") && vFrom && (v.mat || v.label || v.lift)) return <MattedImage {...props} />;
+  if ((shot.layout === "scene" || shot.layout === "split") && vFrom) {
     const [iw, ih] = v.size ?? [1600, 1000];
     const tall = (r: number[]) => (w * r[3] * ih) / (r[2] * iw);
     // A browser keeps a window's shape (at least 62% of the panel) with its bar on top; the page
     // around the region fills the rest, so it reads as the site, not a strip cut from it.
-    const region = Math.max(tall(v.from), tall(v.to ?? v.from));
+    const region = Math.max(tall(vFrom), tall(vTo ?? vFrom));
     const cardH = v.frame === "browser" ? Math.min(h, Math.max(h * 0.62, region + chromeHeight(w))) : Math.min(h, Math.max(260, region));
     return (
       <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -76,7 +80,8 @@ const MattedImage: React.FC<Props & { v: V<"image"> }> = (props) => {
   const labelH = v.label ? Math.round(w * 0.11) : 0;
   const cw = w - pad * 2;
   const tall = (r: number[]) => (cw * r[3] * ih) / (r[2] * iw);
-  const cardH = Math.min(h - pad * 2 - labelH, Math.max(240, tall(v.from!), tall(v.to ?? v.from!)));
+  const vFrom = rectOf(v.from)!, vTo = rectOf(v.to);
+  const cardH = Math.min(h - pad * 2 - labelH, Math.max(240, tall(vFrom), tall(vTo ?? vFrom)));
   const fs = Math.round(w * 0.042);
   // The lift: the element grows out of its place on the card to fill the mat's width.
   const liftAt = v.lift ? (v.times?.[v.highlight.length] ?? shot.start + 0.6) : Infinity;
@@ -110,11 +115,11 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
   const vh = h - chrome - pad * 2;
   // Default camera: the top of the image at full width, easing slightly closer.
   const topRect: [number, number, number, number] = [0, 0, 1, Math.min(1, (vh / vw) * (iw / ih))];
-  const from = v.from ?? topRect;
-  const to = v.to ?? [from[0] + from[2] * 0.03, from[1] + from[3] * 0.03, from[2] * 0.94, from[3] * 0.94];
-  // One camera move: the rect eases from `from` to `to` on the shared camera curve, and holds
-  // while a shared-element transition is landing. The card itself never moves.
-  const p = cameraProgress(shot.start, shot.end, time, shot.enter ? TRANSITION : 0);
+  const from = rectOf(v.from) ?? topRect;
+  const to = rectOf(v.to) ?? [from[0] + from[2] * 0.03, from[1] + from[3] * 0.03, from[2] * 0.94, from[3] * 0.94];
+  // One camera move: the rect eases from `from` to `to` on the shared camera curve. The card itself
+  // never moves.
+  const p = cameraProgress(shot.start, shot.end, time);
   const rect = from.map((a, i) => a + (to[i] - a) * p) as [number, number, number, number];
   // The rect must stay visible; the camera fills the rest of the panel with the page around it.
   const { k, left, top } = frameRect(rect, iw, ih, vw, vh);
@@ -138,6 +143,7 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
         <div style={{ position: "absolute", left, top, width: iw * k, height: ih * k }}>
           <Img src={src(slug, v.src)} style={{ width: "100%", height: "100%", display: "block" }} />
           {v.highlight.map((hl, i) => {
+            if (!hl.rect) return null;
             const at = v.times?.[i] ?? shot.start + 0.3;
             const sweep = prog(time, at, 0.35);
             return (
@@ -163,7 +169,7 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
           })}
           {/* Callouts: a label above the highlighted region, joined by a short line. */}
           {v.highlight.map((hl, i) => {
-            if (!hl.label) return null;
+            if (!hl.label || !hl.rect) return null;
             const at = (v.times?.[i] ?? shot.start + 0.3) + 0.15;
             const p = prog(time, at, 0.35);
             return (
@@ -542,68 +548,6 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
   );
 };
 
-// A terminal that types each line on its spoken word.
-const TerminalVisual: React.FC<Props & { v: V<"terminal"> }> = ({ shot, time, w, h, v }) => {
-  const times = v.times ?? v.lines.map((_, i) => shot.start + 0.2 + i * 0.6);
-  const enter = prog(time, shot.start, 0.35);
-  // Commands never wrap: the type shrinks until the longest line (with its prompt) fits.
-  const fs = Math.min(46, (w - 96) / ((Math.max(...v.lines.map((l) => l.text.length)) + 2) * 0.61));
-  return (
-    <div style={{ width: w, minHeight: h * 0.5, borderRadius: 26, background: t.terminal, boxShadow: t.shadow, overflow: "hidden", translate: `0 ${(1 - enter) * 30}px` }}>
-      <div style={{ height: 66, display: "flex", alignItems: "center", gap: 12, padding: "0 28px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-          <div key={c} style={{ width: 16, height: 16, borderRadius: 8, background: c, opacity: 0.85 }} />
-        ))}
-        {v.title && <div style={{ marginLeft: 16, fontFamily: t.sans, fontSize: 24, color: "rgba(255,255,255,0.5)" }}>{v.title}</div>}
-      </div>
-      <div style={{ padding: "44px 48px", display: "flex", flexDirection: "column", gap: 34 }}>
-        {v.lines.map((ln, i) => {
-          const at = times[i];
-          const typed = Math.floor(Math.max(0, (time - at) * 38));
-          if (time < at) return null;
-          const out = ln.text.startsWith(">");
-          // A line after one ending in "\\" continues that command, so it has no prompt.
-          const cont = i > 0 && v.lines[i - 1].text.trimEnd().endsWith("\\");
-          const text = out ? ln.text.slice(1).trim() : ln.text;
-          const shown = out ? text : text.slice(0, typed);
-          const cursor = !out && typed < text.length + 8 && Math.floor(time * 2.5) % 2 === 0;
-          return (
-            <div key={i} style={{ fontFamily: t.mono, fontSize: fs, lineHeight: 1.28, color: out ? "rgba(255,255,255,0.55)" : "#F4F2EE", whiteSpace: "pre", marginTop: cont ? -26 : 0 }}>
-              {!out && <span style={{ color: "#8FA8E8" }}>{cont ? "  " : "$ "}</span>}
-              {shown}
-              {cursor && <span style={{ background: "#F4F2EE", color: "transparent" }}>_</span>}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-// A chat input where a prompt types itself out, like the real app.
-const PromptVisual: React.FC<Props & { v: V<"prompt"> }> = ({ shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
-  const at = v.times?.[0] ?? shot.start + 0.2;
-  const typed = Math.floor(Math.max(0, (time - at) * 32));
-  const shown = v.text.slice(0, typed);
-  const done = typed >= v.text.length;
-  const enter = prog(time, shot.start, 0.35);
-  return (
-    <div style={{ width: w, height: h, display: "flex", flexDirection: "column", justifyContent: "center", gap: 36, translate: `0 ${(1 - enter) * 30}px` }}>
-      <div style={{ fontFamily: t.serif, fontSize: 64, color: c.ink, textAlign: "center" }}>{v.app}</div>
-      <div style={{ borderRadius: 32, background: c.card, border: `1.5px solid ${c.line}`, boxShadow: c.shadow, padding: "36px 40px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
-        <div style={{ minHeight: 120, fontFamily: t.sans, fontSize: 46, lineHeight: 1.3, color: c.ink, whiteSpace: "pre-wrap" }}>
-          {shown || <span style={{ color: c.muted }}>Reply to {v.app}...</span>}
-          {!done && Math.floor(time * 2.5) % 2 === 0 && <span style={{ borderLeft: `3px solid ${c.ink}`, marginLeft: 2 }} />}
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ width: 64, height: 64, borderRadius: 18, background: done ? c.accent : c.faint, color: done ? c.bg : c.ink, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.sans, fontWeight: 700, fontSize: 36 }}>↑</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // The end card: what to comment, what they get, and the resource itself when there is one.
 const CtaVisual: React.FC<Props & { v: V<"cta"> }> = ({ slug, shot, time, w, h, v }) => {
   const c = surface(shot.tone);
@@ -820,193 +764,24 @@ const ChapterGlow: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h, 
   );
 };
 
-type Pt = { x: number; y: number };
-// A point on a cubic curve, so a dot and a chip can ride along an edge as it draws.
-const bezier = (a: Pt, b: Pt, c: Pt, d: Pt, u: number): Pt => {
-  const m = 1 - u;
-  return {
-    x: m * m * m * a.x + 3 * m * m * u * b.x + 3 * m * u * u * c.x + u * u * u * d.x,
-    y: m * m * m * a.y + 3 * m * m * u * b.y + 3 * m * u * u * c.y + u * u * u * d.y,
-  };
-};
-
-// How parts talk: cards land on their words, then the lines between them draw, a dot leading
-// each line and a chip (what is passed) riding along it. The card a line reaches takes the accent.
-const FlowVisual: React.FC<Props & { v: V<"flow"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
-  const n = v.nodes.length;
-  const times = v.times ?? [...v.nodes.map((_, i) => shot.start + i * 0.15), ...v.edges.map((_, i) => shot.start + 0.5 + i * 0.5)];
-  const row = v.root ? v.nodes.slice(1) : v.nodes;
-  const gap = 44;
-  // On a full-frame scene, two or three nodes stack top to bottom, large, to use the tall frame.
-  const stack = shot.layout === "scene" && !v.root && n <= 3;
-  const cw = stack ? Math.min(780, w) : Math.min(v.root ? 440 : 520, (w - gap * (row.length - 1)) / row.length);
-  const title = stack ? 64 : Math.max(38, Math.min(52, cw * 0.1));
-  const line = stack ? 38 : Math.max(28, Math.min(34, cw * 0.07));
-  const vgap = 190;
-  const cardH = (nodes: typeof v.nodes) => 92 + title * 1.3 + Math.max(0, ...nodes.map((nd) => nd.lines.length)) * line * 1.9 + 36;
-  const dip = 190;
-  const rootW = Math.min(560, w * 0.6);
-  const rootH = v.root ? cardH(v.nodes.slice(0, 1)) : 0;
-  const rowH = cardH(row);
-  const total = v.root ? rootH + 210 + rowH : rowH + dip;
-  const top0 = Math.max(0, (h - total) / 2);
-  const rowTop = v.root ? top0 + rootH + 210 : top0;
-  const rowLeft = (w - (cw * row.length + gap * (row.length - 1))) / 2;
-  const stackTop = Math.max(0, (h - (rowH * n + vgap * (n - 1))) / 2);
-  const boxes = v.nodes.map((_, i) => {
-    if (stack) return { x: (w - cw) / 2, y: stackTop + i * (rowH + vgap), w: cw, h: rowH };
-    if (v.root && i === 0) return { x: (w - rootW) / 2, y: top0, w: rootW, h: rootH };
-    const k = v.root ? i - 1 : i;
-    return { x: rowLeft + k * (cw + gap), y: rowTop, w: cw, h: rowH };
-  });
-  const curve = (from: number, to: number): [Pt, Pt, Pt, Pt] => {
-    const a = boxes[from];
-    const b = boxes[to];
-    if (v.root || stack) {
-      const down = a.y < b.y;
-      const p0 = { x: a.x + a.w / 2, y: down ? a.y + a.h : a.y };
-      const p3 = { x: b.x + b.w / 2, y: down ? b.y : b.y + b.h };
-      const s = down ? 1 : -1;
-      return [p0, { x: p0.x, y: p0.y + s * 110 }, { x: p3.x, y: p3.y - s * 110 }, p3];
-    }
-    const p0 = { x: a.x + a.w / 2, y: a.y + a.h };
-    const p3 = { x: b.x + b.w / 2, y: b.y + b.h };
-    return [p0, { x: p0.x, y: p0.y + dip }, { x: p3.x, y: p3.y + dip }, p3];
-  };
-  const edges = v.edges.map((e, j) => {
-    const at = times[n + j];
-    const draw = prog(time, at, 0.7);
-    return { e, at, draw, pts: curve(e.from, e.to) };
-  });
-
-  return (
+// The kit's laid-out kinds (effects/clean/code.tsx, flow.tsx) draw in the reel palette's colours; off
+// a clean reel they take the shot's tone: forest on dark, the light palette otherwise.
+const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> }> = ({ slug, shot, time, w, h, v }) => (
+  <PaletteContext.Provider value={PALETTES[shot.tone === "dark" ? "forest" : "light"]}>
     <div style={{ position: "relative", width: w, height: h }}>
-      <svg width={w} height={h} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-        {edges.map(({ draw, pts: [a, b, q, d] }, j) =>
-          draw <= 0 ? null : (
-            <path
-              key={j}
-              d={`M${a.x} ${a.y} C${b.x} ${b.y} ${q.x} ${q.y} ${d.x} ${d.y}`}
-              pathLength={1}
-              fill="none"
-              stroke={c.accent}
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeDasharray="1 1"
-              strokeDashoffset={1 - draw}
-            />
-          ),
-        )}
-      </svg>
-      {v.nodes.map((nd, i) => {
-        const b = boxes[i];
-        const p = prog(time, times[i], 0.5);
-        // A card takes the accent once a line reaches it.
-        const reached = Math.max(0, ...edges.filter((x) => x.e.to === i).map((x) => prog(time, x.at + 0.6, 0.3)));
-        return (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: b.x,
-              top: b.y,
-              width: b.w,
-              height: b.h,
-              borderRadius: 28,
-              background: c.card,
-              border: `${1.5 + reached * 1.5}px solid ${reached > 0.5 ? c.accent : c.line}`,
-              boxShadow: c.shadow,
-              padding: "22px 30px",
-              boxSizing: "border-box",
-              opacity: p,
-              filter: `blur(${(1 - p) * 8}px)`,
-              translate: `0 ${(1 - p) * 40}px`,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 9, height: 30 }}>
-              {[0, 1, 2].map((k) => (
-                <div key={k} style={{ width: 11, height: 11, borderRadius: 6, background: c.faint }} />
-              ))}
-              {nd.kicker && <div style={{ marginLeft: 12, fontFamily: t.sans, fontWeight: 500, fontSize: 22, letterSpacing: 3, textTransform: "uppercase", color: c.muted }}>{nd.kicker}</div>}
-            </div>
-            <div style={{ marginTop: 22, fontFamily: t.sans, fontWeight: 700, fontSize: title, letterSpacing: -title * 0.03, lineHeight: 1.2, color: c.ink }}>
-              <SoftAccented text={nd.title} c={c} />
-            </div>
-            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: line * 0.7 }}>
-              {nd.lines.map((ln, k) => {
-                const q = prog(time, times[i] + 0.25 + k * 0.22, 0.4);
-                return (
-                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 16, opacity: q, translate: `${(1 - q) * 24}px 0` }}>
-                    <div style={{ flex: "none", width: line * 0.9, height: line * 0.9, borderRadius: line, background: c.chip, color: c.accent, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: t.sans, fontWeight: 700, fontSize: line * 0.55 }}>✓</div>
-                    <div style={{ fontFamily: t.sans, fontWeight: 500, fontSize: line, letterSpacing: -0.3, lineHeight: 1.2, color: c.ink }}>{ln}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-      {edges.map(({ e, at, draw, pts }, j) => {
-        if (draw <= 0) return null;
-        // The dot leads the line as it draws, then rests where it landed.
-        const head = bezier(...pts, draw);
-        const ride = e.chip ? prog(time, at + 0.6, 1.2) : 0;
-        const chip = bezier(...pts, 0.2 + 0.6 * ride);
-        return (
-          <React.Fragment key={`e${j}`}>
-            {/* Once drawn, small dots keep travelling down the line: work moving between the parts. */}
-            {draw >= 1 &&
-              [0, 0.5].map((off) => {
-                const u = (((time - at - 0.7) / 1.4 + off) % 1 + 1) % 1;
-                const q = bezier(...pts, u);
-                return <div key={off} style={{ position: "absolute", left: q.x - 6, top: q.y - 6, width: 12, height: 12, borderRadius: 6, background: c.accent, opacity: 0.8 * Math.sin(u * Math.PI) }} />;
-              })}
-            <div style={{ position: "absolute", left: head.x - 13, top: head.y - 13, width: 26, height: 26, borderRadius: 13, background: c.accent, border: `5px solid ${c.card}`, boxShadow: c.shadow }} />
-            {e.chip && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: chip.x,
-                  top: chip.y,
-                  translate: "-50% -50%",
-                  padding: "12px 24px",
-                  borderRadius: 16,
-                  background: c.card,
-                  border: `1px solid ${c.line}`,
-                  boxShadow: c.shadow,
-                  fontFamily: t.mono,
-                  fontSize: 30,
-                  color: c.ink,
-                  whiteSpace: "nowrap",
-                  opacity: prog(time, at + 0.5, 0.3),
-                }}
-              >
-                {e.chip}
-              </div>
-            )}
-          </React.Fragment>
-        );
-      })}
+      {v.kind === "code" ? <CodeView v={v} time={time} start={shot.start} w={w} h={h} /> : <FlowView v={v} time={time} start={shot.start} w={w} h={h} slug={slug} />}
     </div>
-  );
-};
+  </PaletteContext.Provider>
+);
 
 export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
   const v = p.v;
   switch (v.kind) {
     case "image": return <ImageVisual {...p} v={v} />;
     case "custom":
-    case "claudecode":
     case "cli":
     case "claudeapp":
     case "grokbot":
-    case "search":
-    case "tiers":
-    case "compose":
-    case "divisions":
-    case "chips":
-    case "runs":
       return <div style={{ position: "relative", width: p.w, height: p.h, overflow: "hidden" }}><UiVisual shot={p.shot} time={p.time} box={{ width: p.w, height: p.h }} /></div>;
     case "video": return <VideoVisual {...p} v={v} />;
     case "logos": return <LogosVisual {...p} v={v} />;
@@ -1016,11 +791,11 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
     case "compare": return <CompareVisual {...p} v={v} />;
     case "stat": return <StatVisual {...p} v={v} />;
     case "journey": return <JourneyVisual {...p} v={v} />;
-    case "terminal": return <TerminalVisual {...p} v={v} />;
-    case "prompt": return <PromptVisual {...p} v={v} />;
     case "cta": return <CtaVisual {...p} v={v} />;
     case "chapter": return <ChapterVisual {...p} v={v} />;
-    case "flow": return <FlowVisual {...p} v={v} />;
+    case "flow":
+    case "code":
+      return <Laid {...p} v={v} />;
     case "grid": return <GridVisual {...p} v={v} />;
     case "funnel": return <FunnelVisual {...p} v={v} />;
     case "type": return <TypeVisual {...p} v={v} />;

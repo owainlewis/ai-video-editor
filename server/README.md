@@ -35,7 +35,7 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | POST | `/api/upload?name&title&canvas` | Saves a source video, starts an ingest job, returns `{ slug }`. |
 | POST | `/api/library?name` | Saves a b-roll clip, starts `broll index`, returns `{ ok }`. |
 | any other | `/api/library` | Returns `{ busy, clips }`. |
-| any | `/api/effects?canvas&style` | Returns the library cards from `effectList`. |
+| any | `/api/effects?canvas` | Returns the library cards from `effectList`: the house look on YouTube, the clean kit on reels. |
 | any | `/api/gallery` | Projects with a resolved plan and at least one visual, newest first, captions emptied. |
 | any | `/api/projects` | Project summaries, newest first: `slug`, `title`, `canvas`, `duration`, `status`, `modified`, `thumb`, `exported`, `review` (`approved` and `total` from `review.json` as it is). |
 | POST | `/api/projects/<slug>/delete` | Moves the project to `projects/.trash/`. |

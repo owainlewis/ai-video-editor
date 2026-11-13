@@ -1,4 +1,4 @@
-// Illustrative assets for the style lab, drawn inline so the catalog needs no files. Each one says
+// Illustrative assets for the library samples, drawn inline so the catalog needs no files. Each one says
 // it is a sample on its face: these stand in for real captures, thumbnails and logos, which a
 // real reel always takes from the source (see docs/STYLE.md).
 

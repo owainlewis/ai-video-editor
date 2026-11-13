@@ -106,15 +106,6 @@ describe("import", () => {
   });
 });
 
-describe("plan checks", () => {
-  it("warns when a pipeline shows stages that are never named", async () => {
-    const { lintShots } = await import("../engine/resolve.ts");
-    const shot = (stages: { label?: string }[]) => ({ start: 0, end: 2, layout: "split" as const, anchor: "a", visual: { kind: "pipeline", stages } as never });
-    expect(lintShots([shot([{ label: "A" }, {}])], 2, "mixed").map((i) => i.message).join()).toMatch(/unnamed stages/);
-    expect(lintShots([shot([{ label: "A" }, { label: "B" }])], 2, "mixed").map((i) => i.message).join()).not.toMatch(/unnamed stages/);
-  });
-});
-
 describe("deleting a project", () => {
   const setup = (status?: object) => {
     const projects = mkdtempSync(join(tmpdir(), "studio-"));

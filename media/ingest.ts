@@ -146,8 +146,7 @@ export function starterPlan(slug: string, words: Word[], size: [number, number],
   return {
     title: choices.title?.trim() || slug.replace(/-/g, " "),
     canvas: youtube ? "youtube" : "reel",
-    style: "ivory",
-    format: "mixed",
+    ...(youtube ? {} : { style: "clean" }),
     split: "half",
     // A first guess at where the face is; refine it from checks/frame.jpg.
     face: size[0] > size[1] ? { x: 0.5, y: 0.3, h: 0.36 } : { x: 0.5, y: 0.3, h: 0.2 },

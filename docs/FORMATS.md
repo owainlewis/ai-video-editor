@@ -1,6 +1,6 @@
 # Reel formats
 
-Owain (2026-10-26): "AI News works because it's repeatable. I think practical stuff. How to… Steps to… Breakdown a new thing." Three formats, each a fixed skeleton: the beats never change, the topic, facts and graphics do. Every script starts from one of these. Hooks follow `HOOKS.md`; graphics are still designed per video (`CLAUDE.md`, "Design per video"), but each format has its signature picture so a series is recognisable.
+Owain (2026-10-26): "AI News works because it's repeatable. I think practical stuff. How to… Steps to… Breakdown a new thing." Three formats, each a fixed skeleton: the beats never change, the topic, facts and graphics do. Every script starts from one of these. Hooks follow `HOOKS.md`; graphics come from the reel kit first (`CLAUDE.md`, "Reels"), and each format has its signature picture so a series is recognisable.
 
 All three: 35 to 55 seconds, one idea, a concrete outcome in the first line, every fact checked against its source, a keyword CTA at the end.
 
@@ -78,7 +78,7 @@ A new tool, repo or release, explained by an engineer: what it is, how it works,
 | What it is | 3 to 8 s | one sentence, plus the analogy a builder knows | analogy picture |
 | Why it exists | 8 to 15 s | the problem it solves, the viewer's own pain | the problem drawn |
 | How it works | 15 to 35 s | two to four parts, in the source's own terms | one diagram that builds part by part |
-| Verdict | 35 to 45 s | Owain's take: who should use it, what's risky or early | Owain on camera, punch-in |
+| Verdict | 35 to 45 s | Owain's take: who should use it, what's risky or early | Owain on camera |
 | CTA | last 3 s | keyword for the repo or guide | keyword card |
 
 The verdict is the beat nobody else has. Never skip it.

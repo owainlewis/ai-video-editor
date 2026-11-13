@@ -3,14 +3,9 @@ import { Composition } from "remotion";
 import { blank } from "./canvas";
 import { Reel } from "./Reel";
 import { Wide, WH, WW } from "./Wide";
-import { Lab, type LabProps } from "./Lab";
 import type { Resolved } from "../engine/schema";
-import { Minimal, type SampleProps } from "./clean/Minimal";
-import { House } from "./clean/House";
-import { Hybrid } from "./clean/Hybrid";
 
-// Props come from projects/<slug>/build/edit.resolved.json (see `reel render`).
-// In the Studio, pass them with: npx remotion studio src/index.ts --props=<that file>
+// Props come from projects/<slug>/build/edit.resolved.json (written by `npm run studio -- check`).
 const empty: Resolved = { ...blank("reel"), title: "Empty", duration: 3, shots: [] };
 
 const metadata = ({ props }: { props: Resolved }) => ({ durationInFrames: Math.max(1, Math.round(props.duration * props.fps)), fps: props.fps });
@@ -19,11 +14,6 @@ const metadata = ({ props }: { props: Resolved }) => ({ durationInFrames: Math.m
 export const Root: React.FC = () => (
   <>
     <Composition id="Reel" component={Reel} width={1080} height={1920} fps={30} durationInFrames={90} defaultProps={empty} calculateMetadata={metadata} />
-    <Composition id="Lab" component={Lab} width={WW} height={WH} fps={30} durationInFrames={90} defaultProps={{ idea: "chapter", from: 0, dur: 3, video: "", t: {} } as LabProps} calculateMetadata={({ props }: { props: LabProps }) => ({ durationInFrames: Math.round(props.dur * 30) })} />
-    {/* The clean reel samples (effects/clean): props from projects/<slug>/clean.json. */}
-    <Composition id="CleanMinimal" component={Minimal} width={1080} height={1920} fps={30} durationInFrames={90} defaultProps={{ slug: "", duration: 3, words: [], voice: "" } as SampleProps} calculateMetadata={({ props }: { props: SampleProps }) => ({ durationInFrames: Math.round(props.duration * 30) })} />
-    <Composition id="CleanHouse" component={House} width={1080} height={1920} fps={30} durationInFrames={90} defaultProps={{ slug: "", duration: 3, words: [], voice: "" } as SampleProps} calculateMetadata={({ props }: { props: SampleProps }) => ({ durationInFrames: Math.round(props.duration * 30) })} />
-    <Composition id="CleanHybrid" component={Hybrid} width={1080} height={1920} fps={30} durationInFrames={90} defaultProps={{ slug: "", duration: 3, words: [], voice: "" } as SampleProps} calculateMetadata={({ props }: { props: SampleProps }) => ({ durationInFrames: Math.round(props.duration * 30) })} />
     <Composition id="Wide" component={Wide} width={WW} height={WH} fps={30} durationInFrames={90} defaultProps={{ ...empty, canvas: "youtube", captions: false }} calculateMetadata={metadata} />
   </>
 );

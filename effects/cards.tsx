@@ -906,7 +906,7 @@ export const WaffleCard: React.FC<Props & { v: V<"waffle"> }> = ({ shot, time, w
   );
 };
 
-// The layout of any Blueprint card kind, for tests and the style lab.
+// The layout of any Blueprint card kind, for tests.
 // The constraint diagram's layout (drawn in src/elements.tsx): circles in a row, labels under
 // them, all centred in the panel, and a queue capped to the space in front of the bottleneck.
 export const constraintGeom = (v: V<"constraint">, w: number, h: number) => {

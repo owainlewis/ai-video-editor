@@ -54,7 +54,8 @@ export const BrowserChrome: React.FC<{ slug: string; w: number; tone?: Tone; url
         </div>
       )}
       {url && (
-        <div style={{ flex: 1, minWidth: 0, height: field, borderRadius: field / 2, background: k.field, display: "flex", alignItems: "center", gap: Math.round(h * 0.12), padding: `0 ${Math.round(h * 0.28)}px`, fontFamily: style.font.sans, fontSize: font, whiteSpace: "nowrap", overflow: "hidden" }}>
+        // One address: QC reads the site and the path as one block of text, meant to touch.
+        <div data-qc-group style={{ flex: 1, minWidth: 0, height: field, borderRadius: field / 2, background: k.field, display: "flex", alignItems: "center", gap: Math.round(h * 0.12), padding: `0 ${Math.round(h * 0.28)}px`, fontFamily: style.font.sans, fontSize: font, whiteSpace: "nowrap", overflow: "hidden" }}>
           <svg width={font * 0.8} height={font * 0.8} viewBox="0 0 24 24" fill="none" stroke={c.muted} strokeWidth={2.4} strokeLinecap="round" style={{ flex: "none" }}>
             <rect x="5" y="11" width="14" height="10" rx="2" />
             <path d="M8 11V8a4 4 0 0 1 8 0v3" />

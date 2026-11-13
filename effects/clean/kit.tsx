@@ -1,5 +1,5 @@
-// The clean reel system, v1 (research/reels/STUDY.md, 2026-11-06). Shared by the sample reels in
-// this folder: the palette, the type, the word clock and the line-drawing parts.
+// The clean reel system, v1 (research/reels/STUDY.md, 2026-11-06). Shared by Clean.tsx and the custom
+// diagrams: the palette, the type, the clock and the line-drawing parts.
 //   One centre line (x = 540). Two colours and one accent. One caption, one word at a time, with
 //   nothing behind it. Hard cuts between layouts; easing lives only inside a diagram, at two speeds.
 // Named kit.tsx: macOS file names ignore case, so no other file here may be called Kit.tsx.
@@ -28,7 +28,7 @@ export const C = {
 export type Palette = { name: "forest" | "light"; stage: string; diagram: string; card: string; text: string; line: string; accent: string; dim: string; faint: string };
 export const PALETTES: Record<Palette["name"], Palette> = {
   forest: { name: "forest", stage: C.ink, diagram: "#1D3832", card: C.ink, text: "#FFFFFF", line: C.white, accent: C.sage, dim: C.dim, faint: C.faint },
-  light: { name: "light", stage: "#F6F6F3", diagram: "#F6F6F3", card: C.black, text: "#123A2E", line: "#123A2E", accent: "#3D8A62", dim: "rgba(18,58,46,0.42)", faint: "rgba(18,58,46,0.14)" },
+  light: { name: "light", stage: "#F6F6F3", diagram: "#F6F6F3", card: C.black, text: "#123A2E", line: "#123A2E", accent: "#2F7550", dim: "rgba(18,58,46,0.42)", faint: "rgba(18,58,46,0.14)" },
 };
 export const PaletteContext = React.createContext<Palette>(PALETTES.forest);
 export const usePalette = () => React.useContext(PaletteContext);
@@ -50,31 +50,6 @@ export const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
 export const live = (t: number, a: number, b = Infinity, d = 0.25) => Math.min(k(t, a, d), isFinite(b) ? 1 - k(t, b - d, d) : 1);
 
 export type { Word };
-
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9']/g, "");
-
-// The time each phrase starts, found in order through the transcript: anchors are words, never seconds.
-export function anchors<K extends string>(words: Word[], phrases: Record<K, string>): Record<K, number> {
-  const out = {} as Record<K, number>;
-  let from = 0;
-  for (const key of Object.keys(phrases) as K[]) {
-    const want = phrases[key].split(/\s+/).map(norm);
-    let hit = -1;
-    for (let i = from; i <= words.length - want.length && hit < 0; i++) if (want.every((w, j) => norm(words[i + j].text) === w)) hit = i;
-    if (hit < 0) throw new Error(`anchor not found after word ${from}: "${phrases[key]}"`);
-    out[key] = words[hit].start;
-    from = hit + 1;
-  }
-  return out;
-}
-
-// The word being said at t, held through the pause after it.
-export const wordAt = (words: Word[], t: number) => {
-  let w: Word | undefined;
-  for (const x of words) if (x.start <= t + 0.02) w = x;
-  return w && t < w.end + 0.6 ? w : undefined;
-};
-export const clean = (s: string) => s.replace(/^[^\w']+|[^\w'%]+$/g, "");
 
 // A thin line drawn on from a to b as p goes 0 to 1, with an optional head.
 export const Line: React.FC<{ a: [number, number]; b: [number, number]; p: number; w?: number; color?: string; head?: boolean; opacity?: number; dash?: boolean }> = ({ a, b, p, w = 3, color: c = C.white, head, opacity = 1, dash }) => {

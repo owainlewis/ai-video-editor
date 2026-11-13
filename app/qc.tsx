@@ -77,6 +77,9 @@ const textColor = (el: Element) => (el instanceof SVGElement ? getComputedStyle(
 // The block a word belongs to: the nearest ancestor laid out as a block or flex box. Kinetic titles
 // set each word in its own inline-block span, so their lines are read from the flex box around them.
 const blockOf = (el: Element): Element => {
+  // A group (the browser's address: site and path in two spans) is one block, meant to touch.
+  const group = el.closest("[data-qc-group]");
+  if (group) return group;
   for (let e: Element | null = el; e; e = e.parentElement) {
     const d = getComputedStyle(e).display;
     if (d === "block" || d === "list-item" || d === "flex" || d === "grid") return e;

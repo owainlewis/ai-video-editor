@@ -6,8 +6,16 @@ import { style } from "../effects/style.ts";
 import { cards, slotIssues, slotValues } from "../styles/blueprint/style.ts";
 import { atMax } from "../styles/catalog.ts";
 import { cardPlan, effectList } from "../effects/preview.ts";
+import { APPROVED } from "../styles/approved.ts";
 
 const kinds = Visual.options.map((o) => o.shape.kind.value);
+
+describe("the approved cards", () => {
+  it("name real cards, so a typo never hides one", () => {
+    const ids = new Set(cards.map((c) => c.id));
+    expect([...APPROVED].filter((id) => !ids.has(id))).toEqual([]);
+  });
+});
 
 describe("the Blueprint catalog", () => {
   it("has a card for every visual kind", () => {
@@ -144,13 +152,13 @@ describe("tokens only", () => {
 
 // Owain chose the Ivory he loved (2026-10-22): bold Helvetica headlines with one Signifier italic
 // accent word. The italic is applied only through the accent helpers, never set inline in the
-// reel's header or captions, so the voice stays one token.
+// compositions' headers or captions, so the voice stays one token.
 describe("type voice", () => {
   it("sets headlines in bold Helvetica with an italic accent from the tokens", () => {
     // Ivory: bold Helvetica headlines with one Signifier italic accent word (Owain, 2026-10-22).
     expect(style.type.display.family).toBe(style.font.sans);
     expect(style.type.display.weight).toBe(700);
     expect(style.type.accent).toBe("italic");
-    for (const f of ["../effects/Reel.tsx", "../effects/Captions.tsx"]) expect(readFileSync(new URL(f, import.meta.url), "utf8"), f).not.toMatch(/fontStyle: [^,]*"italic"/);
+    for (const f of ["../effects/Wide.tsx", "../effects/clean/Clean.tsx"]) expect(readFileSync(new URL(f, import.meta.url), "utf8"), f).not.toMatch(/fontStyle: [^,]*"italic"/);
   });
 });

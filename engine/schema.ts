@@ -2,7 +2,6 @@
 // resolves every spoken anchor to a time and writes `build/edit.resolved.json`,
 // which is what the Remotion composition renders.
 import { z } from "zod";
-import { reviewLine } from "./reviewmd";
 
 // A phrase the speaker says. Shots and reveals land on its first word.
 // Each anchor must come after the previous shot's anchor in the transcript.
@@ -10,6 +9,9 @@ const Anchor = z.string().min(1);
 
 // A rectangle in normalised image coordinates: [x, y, width, height], each 0 to 1.
 const Rect = z.tuple([z.number(), z.number(), z.number(), z.number()]);
+// A capture's camera: a rect, or words on a captured page (see the `image` visual).
+const PhraseFrame = z.object({ phrase: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), pad: z.number().min(0).max(0.5).optional(), block: z.boolean().optional(), nth: z.number().int().min(1).optional() });
+const CameraRect = z.union([Rect, PhraseFrame]);
 
 const Item = z.object({ text: z.string(), at: Anchor.optional() });
 
@@ -55,11 +57,15 @@ const GrokStep = z.object({
 export const Visual = z.discriminatedUnion("kind", [
   // A real capture (web page, screenshot, photo). The camera moves from `from` to `to`.
   // `highlight` draws a marker over a region when `at` is spoken.
+  // On a page from `capture` (assets/pages/<name>.png with its .json), name words instead of rects:
+  // a marker `{ "phrase": "Create address", "at": ... }`, a camera `{ "phrase": "...", "pad": 0.1 }`
+  // (`phrase` may list several; `block: true` frames the paragraph it sits in; `nth` picks a later
+  // match). The plan's resolve fills in the rects (engine/page.ts).
   z.object({
     kind: z.literal("image"),
     src: z.string(),
-    from: Rect.optional(),
-    to: Rect.optional(),
+    from: CameraRect.optional(),
+    to: CameraRect.optional(),
     // "browser" puts the capture in a browser window: `url` in the address bar (the site in ink, the
     // path muted), and `title` and `icon` (the page's real title and favicon) on its tab.
     frame: z.enum(["none", "browser", "card"]).default("card"),
@@ -67,7 +73,13 @@ export const Visual = z.discriminatedUnion("kind", [
     title: z.string().optional(),
     icon: z.string().optional(),
     // A marker over a region, swept in on `at`. `label` adds a callout tag pointing at it.
-    highlight: z.array(z.object({ rect: Rect, at: Anchor.optional(), label: z.string().optional() })).default([]),
+    highlight: z
+      .array(
+        z
+          .object({ rect: Rect.optional(), phrase: z.string().optional(), nth: z.number().int().min(1).optional(), at: Anchor.optional(), label: z.string().optional() })
+          .refine((h) => !!h.rect !== !!h.phrase, { message: "a highlight needs a rect or a phrase, not both" }),
+      )
+      .default([]),
     // A dark capture: the marker is sage, because a multiplied one disappears on a dark page.
     dark: z.boolean().optional(),
     // On a split, the card sits on a coloured `mat` (a colour from the subject's own brand), with the
@@ -108,12 +120,8 @@ export const Visual = z.discriminatedUnion("kind", [
   // `hit`: lands complete on the cut (no count-up, label already there), for a short full-frame
   // hero number. A count-up flashes numbers that were never said.
   z.object({ kind: z.literal("stat"), value: z.string(), label: z.string(), hit: z.boolean().optional() }),
-  // A chat input (e.g. Claude) where a prompt types itself out on `at`.
-  z.object({ kind: z.literal("prompt"), app: z.string().default("Claude"), text: z.string(), at: Anchor.optional() }),
   // The end card: "Comment KEYWORD" and what they get. Only when there is a real resource to send.
   z.object({ kind: z.literal("cta"), keyword: z.string(), text: z.string(), src: z.string().optional() }),
-  // A terminal that types each line when it is spoken.
-  z.object({ kind: z.literal("terminal"), title: z.string().optional(), lines: z.array(Item).min(1) }),
   // A bar or line chart whose points arrive on their words. `source` is printed under it: the page the
   // numbers come from, or "Illustration" when they only show a shape. Never invent the values.
   z.object({
@@ -162,22 +170,6 @@ export const Visual = z.discriminatedUnion("kind", [
     from: Anchor.optional(),
     to: Anchor.optional(),
   }),
-  // The docs' example REVIEW.md in a browser over the Graphite stage. Each mark highlights one line
-  // of it (by its exact text, see engine/reviewmd.ts) as `at` is said.
-  z.object({
-    kind: z.literal("reviewmd"),
-    marks: z.array(z.object({ line: z.string().refine((l) => reviewLine(l) >= 0, "not a line of the docs' REVIEW.md"), at: Anchor })).max(4).default([]),
-  }),
-  // Product moments drawn clean, full frame, in depth (effects/ui.tsx). Words come from the real
-  // source: a Claude Code session from a demo, a search for the real page, the article's own tiers.
-  z.object({
-    kind: z.literal("claudecode"),
-    title: z.string().optional(),
-    // Shown in Claude Code's working colour from the first prompt until the first output line.
-    status: z.string().optional(),
-    lines: z.array(z.object({ text: z.string(), style: z.enum(["prompt", "out", "head", "item", "dim", "ok"]).default("out"), at: Anchor.optional() })).min(1).max(12),
-    mark: z.object({ line: z.number().int().min(0), phrase: z.string(), at: Anchor.optional() }).optional(),
-  }),
   // Claude Code or Codex running in a terminal, as the real CLI draws it (captured 2026-11-13): the
   // welcome header, the history, the working line, the input and its footer. The terminal keeps the
   // newest rows, as a real one scrolls.
@@ -215,48 +207,6 @@ export const Visual = z.discriminatedUnion("kind", [
     bots: z.array(z.object({ name: z.string(), preview: z.string().default(""), color: BotColor, shape: BotShape.optional(), group: z.string().optional(), unread: z.boolean().optional(), at: Anchor.optional() })).max(7).default([]),
     tasks: z.array(z.object({ name: z.string(), when: z.string(), on: z.boolean().default(true), at: Anchor.optional() })).max(5).default([]),
   }),
-  z.object({
-    kind: z.literal("search"),
-    text: z.string(),
-    at: Anchor.optional(),
-    cps: z.number().positive().optional(),
-    result: z.object({ site: z.string(), title: z.string(), text: z.string().optional(), at: Anchor.optional() }).optional(),
-  }),
-  // An email typing itself out, from an agent (the agent's own example text).
-  z.object({
-    kind: z.literal("compose"),
-    from: z.string(),
-    emoji: z.string().optional(),
-    subject: z.string(),
-    body: z.array(z.string()).min(1).max(3),
-    file: z.string().optional(),
-    lines: z.number().int().optional(),
-    cps: z.number().positive().optional(),
-    at: Anchor.optional(),
-    send: Anchor.optional(),
-  }),
-  // Labelled pills in their own colours (a repo's divisions); each named one lights on its word.
-  // `focus` lights some from the start; `count` lands a big number over the grid.
-  z.object({
-    kind: z.literal("divisions"),
-    items: z.array(z.object({ label: z.string(), color: z.string(), at: Anchor.optional() })).min(2).max(24),
-    focus: z.array(z.number().int()).optional(),
-    count: z.object({ value: z.string(), label: z.string(), at: Anchor.optional() }).optional(),
-  }),
-  // Rows of real names drifting past in opposite directions, a count landing over them on `count.at`.
-  z.object({
-    kind: z.literal("chips"),
-    rows: z.array(z.array(z.string()).min(2)).min(1).max(5),
-    count: z.object({ value: z.string(), label: z.string(), at: Anchor.optional() }).optional(),
-  }),
-  // An agent's pipeline: steps queued, running on their word, passed when the next one starts.
-  z.object({
-    kind: z.literal("runs"),
-    title: z.string(),
-    emoji: z.string().optional(),
-    steps: z.array(z.object({ label: z.string(), agent: z.string().optional(), at: Anchor.optional() })).min(2).max(6),
-    done: Anchor.optional(),
-  }),
   // A one-off motion graphic designed for this reel (Owain, 2026-10-25: "creative freedom to come up
   // with new interesting motion graphics per reel"). `name` picks a component in effects/custom/;
   // `props` is its content; `at` lists its spoken beats in order, passed to it as times.
@@ -266,24 +216,53 @@ export const Visual = z.discriminatedUnion("kind", [
     props: z.record(z.string(), z.unknown()).default({}),
     at: z.array(Anchor).default([]),
   }),
-  z.object({
-    kind: z.literal("tiers"),
-    title: z.string().optional(),
-    items: z.array(z.object({ label: z.string(), rule: z.string(), examples: z.string(), at: Anchor.optional(), markAt: Anchor.optional() })).min(2).max(4),
-  }),
   // The route of the video: a title over a track of numbered stops that pop in on `at` ("the six levels").
   z.object({ kind: z.literal("journey"), title: z.string(), of: z.number().int().min(2).max(12), at: Anchor.optional() }),
   // `of`: how many sections there are; a hit card then shows a progress row, one mark per section
   // (done in ink, this one in the accent, the rest faint).
   z.object({ kind: z.literal("chapter"), number: z.string(), label: z.string(), hit: z.boolean().optional(), of: z.number().int().min(2).max(12).optional() }),
-  // A diagram of how parts talk: cards joined by lines that draw on `at`. `chip` rides along an edge
-  // (what is passed, e.g. "plan.md"). Two or three nodes sit in a row; with `root`, the first node
-  // sits on top and the rest branch below it. A diagram, never a stand-in for real UI.
+  // A diagram with real layout (engine/flow.ts): nodes as cards, laid out by `shape` with equal gaps
+  // and arrows between them, sized to fill the panel and centred. No coordinates: the layout engine
+  // places everything. row and column: each node to the next. fan-out: the first node to every other.
+  // fan-in: every node to the last. before-after: two nodes; the first is struck as the second lands.
+  // versus: two nodes as columns, their `items` in rows compared across.
+  // A node: `label` (the real name), `sub` (a short line under it), `icon` ("logo:<name>" for a real
+  // logo, or a line icon: file, folder, terminal, browser, database, server, cloud, user, agent, chat,
+  // mail, code, branch, lock, check, gear), `accent` on the one node that matters, `at` its word.
+  // `arrow`: the arrow into this node (on a fan-in, out of it): `label` (what is passed, "plan.md")
+  // and `at`; left out, the arrow draws as the node it joins lands. A diagram, never stand-in UI.
   z.object({
     kind: z.literal("flow"),
-    root: z.boolean().default(false),
-    nodes: z.array(z.object({ title: z.string(), kicker: z.string().optional(), lines: z.array(z.string()).default([]), at: Anchor.optional() })).min(2).max(4),
-    edges: z.array(z.object({ from: z.number(), to: z.number(), chip: z.string().optional(), at: Anchor.optional() })).default([]),
+    shape: z.enum(["row", "column", "fan-out", "fan-in", "before-after", "versus"]).default("row"),
+    nodes: z
+      .array(
+        z.object({
+          label: z.string().min(1),
+          sub: z.string().optional(),
+          icon: z.string().optional(),
+          accent: z.boolean().optional(),
+          at: Anchor.optional(),
+          arrow: z.object({ label: z.string().optional(), at: Anchor.optional() }).optional(),
+          items: z.array(Item).max(4).default([]),
+        }),
+      )
+      .min(2)
+      .max(6),
+  }),
+  // An editor window (engine/code.ts): the file's tab, line numbers, syntax colours in a light theme.
+  // Lines type on, each on its word (`at`), or straight after the line above. Any line with `diff`
+  // makes it a diff: the file shows as it was, a `del` line is struck red on its word and an `add`
+  // line slides in green. `marks` light a line or a range (`from`, `to`: lines counted from 1 in
+  // `lines`) on a word. `start`: the first line's number. `typed: false` shows the file at once (a
+  // line with its own `at` still appears on its word). The plan supplies every line, never invented.
+  z.object({
+    kind: z.literal("code"),
+    file: z.string().min(1),
+    lang: z.enum(["ts", "js", "py", "json", "bash", "text"]).optional(),
+    start: z.number().int().min(1).default(1),
+    typed: z.boolean().default(true),
+    lines: z.array(z.object({ text: z.string(), diff: z.enum(["add", "del"]).optional(), at: Anchor.optional() })).min(1).max(16),
+    marks: z.array(z.object({ from: z.number().int().min(1), to: z.number().int().min(1).optional(), at: Anchor })).max(4).default([]),
   }),
   // A library that fills in: real thumbnails (`items`, captured from the source's own site) arrive in
   // a wave and `count` rolls up like an odometer on `at`. `groups` light a set of tiles on their words,
@@ -470,9 +449,6 @@ export const Shot = z.object({
   // Scene colour: light (warm white) or dark (near-black with a soft accent glow). Alternate them
   // for rhythm. A kept shot carries the tone of the shot it keeps.
   tone: z.enum(["light", "dark"]).optional(),
-  // A shared-element transition from the previous scene: an element of it (a grid tile, the result
-  // card, the typed input, or any frame rect [x, y, w, h] in 0 to 1) grows to become this shot.
-  enter: z.object({ from: z.enum(["tile", "card", "input", "rect"]), index: z.number().default(0), rect: Rect.optional() }).optional(),
   // ---- The clean style (style "clean") ----
   picture: Picture.optional(),
   // A card's colour.
@@ -492,10 +468,11 @@ export const Edit = z.object({
   // reel: 9:16, 1080x1920. youtube: 16:9, 1920x1080, for a rough cut edited by hand: the plan only
   // lays graphics and text over it, sparsely, and never re-cuts the picture.
   canvas: z.enum(["reel", "youtube"]).default("reel"),
-  // The house style. "ivory" (every older plan) or "clean": the reel system locked on 2026-11-06
-  // (research/reels/STUDY.md): split first, text cards and cinematic shots, a full-screen diagram
-  // now and then, the glass overlay, and the text kit. Drawn by effects/clean/Clean.tsx.
-  style: z.string().default("ivory"),
+  // Every reel is in the clean style, the reel system locked on 2026-11-06 (research/reels/STUDY.md):
+  // split first, text cards and cinematic shots, a full-screen diagram now and then, the glass
+  // overlay, and the text kit. Drawn by effects/clean/Clean.tsx. The older Ivory reel look was retired
+  // on 2026-11-13. YouTube keeps the house look (effects/Wide.tsx) whatever this says.
+  style: z.string().default("clean"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
   // Black (Owain, 2026-10-30: "classier - maybe black"): pure black cards, white type, no sage.
   // On YouTube a dark shot in a light video (`tone: "dark"`) also takes the Black colours.
@@ -503,7 +480,7 @@ export const Edit = z.object({
   // The clean style's colours: "forest" (deep green stage, white type, sage) or "light" (Owain,
   // 2026-11-13: "the green is very muddy... light background + deep green text + occasional black
   // screens"): a near-white stage, deep green type and lines, black cards.
-  palette: z.enum(["forest", "light"]).default("forest"),
+  palette: z.enum(["forest", "light"]).default("light"),
   // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
   leave: z.array(z.tuple([z.number(), z.number()])).default([]),
   // YouTube: stretches of the original to cut out of the export, [start, end] in seconds (a section
@@ -511,12 +488,6 @@ export const Edit = z.object({
   remove: z.array(z.tuple([z.number(), z.number()])).default([]),
   // Word captions. Reels have them; YouTube does not unless asked.
   captions: z.boolean().optional(),
-  // react: the default for tool drops. The speaker stays on screen in a split while the
-  //   top panel walks through the source, a highlight on each claim as it is said.
-  // mixed: for how-it-works and setup reels. Every layout, b-roll cutaways, faster cuts.
-  // film: soft tech product film. Full-frame scenes that build across shots, light and dark
-  //   alternating, the speaker as punctuation. Something changes on screen at least every 3.6 s.
-  format: z.enum(["react", "mixed", "film"]).default("react"),
   // half: speaker fills the bottom half. inset: the visual gets about 60% and the speaker sits in a rounded window.
   split: z.enum(["half", "inset"]).default("half"),
   // The reel's title. It lands large in frame 1 (the on-screen hook) and then docks as a small
@@ -598,7 +569,6 @@ export type ResolvedShot = {
   anchor: string;
   keep?: boolean;
   tone?: "light" | "dark";
-  enter?: { from: "tile" | "card" | "input" | "rect"; index: number; rect?: [number, number, number, number] };
   // The clean style: times are resolved from the anchors.
   picture?: { src: string; start: number; rate: number };
   bg?: "ink" | "paper" | "green";

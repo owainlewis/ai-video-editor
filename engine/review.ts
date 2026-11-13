@@ -86,7 +86,7 @@ export const itemHash = (r: Resolved, index: number, said: string) => {
     return o;
   };
   const run = r.shots.slice(index, lastKept(r.shots, index) + 1).map((s) => ({
-    anchor: s.anchor, layout: s.layout, header: s.header, keep: s.keep, sfx: s.sfx, zoom: s.zoom, tone: s.tone, enter: s.enter, bg: s.bg, inside: s.inside,
+    anchor: s.anchor, layout: s.layout, header: s.header, keep: s.keep, sfx: s.sfx, zoom: s.zoom, tone: s.tone, bg: s.bg, inside: s.inside,
     picture: s.picture,
     frames: rel(s.end) - rel(s.start),
     hit: s.hit && { ...s.hit, at: rel(s.hit.at), until: rel(s.hit.until) },

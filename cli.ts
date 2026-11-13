@@ -11,6 +11,8 @@
 //   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
 //   npm run studio -- mix <slug>                   mix the sound as the export will, for the editor to play (build/preview-mix.m4a)
 //   npm run studio -- record <slug>                film the real pages in record.json, timed to the spoken words
+//   npm run studio -- capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--scale 3] [--width 900] [--height 1400]
+//                                                  a live page's section as a crisp PNG and its words' boxes, to assets/pages/
 //   npm run studio -- auphonic <slug>              clean the voice with Auphonic (timing unchanged; key in .env)
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 //   npm run studio -- render <slug> --part <name>  the same for one part only, to renders/part-<name>.mp4
@@ -22,6 +24,7 @@ import { cleanProject } from "./media/auphonic.ts";
 import { pickPreview } from "./engine/parts.ts";
 import { resolveProject } from "./media/project.ts";
 import { record } from "./media/record.ts";
+import { capture } from "./media/capture.ts";
 import { previewMix } from "./media/previewmix.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
@@ -133,6 +136,14 @@ async function main() {
       console.log(`Wrote ${await record(projects, need(target), log)}`);
       return;
     }
+    case "capture": {
+      const url = args[2];
+      if (!url || url.startsWith("--")) throw new Error("capture needs a URL: npm run studio -- capture <slug> <url>");
+      const num = (n: string) => (flag(n) ? Number(flag(n)) : undefined);
+      const { png, json } = await capture(projects, need(target), url, { name: flag("name"), from: flag("from"), to: flag("to"), dark: args.includes("--dark"), scale: num("scale"), width: num("width"), height: num("height") }, log);
+      console.log(`Wrote ${png}\n      ${json}`);
+      return;
+    }
     case "stills": {
       const times = (flag("at") ?? "").split(",").map(Number).filter((n) => !Number.isNaN(n));
       if (!times.length) throw new Error("stills needs --at with seconds, e.g. --at 3.2,8");
@@ -242,7 +253,7 @@ async function main() {
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--part <name> | --from <s> --to <s>] [--force]");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, capture <slug> <url>, render <slug> [--part <name> | --from <s> --to <s>] [--force]");
   }
 }
 

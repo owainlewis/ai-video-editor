@@ -202,13 +202,14 @@ export function editShot(projects: string, slug: string, ref: ShotRef, change: {
 export function placeCard(projects: string, slug: string, cardId: string, at: number) {
   const card = cards.find((c) => c.id === cardId);
   if (!card?.sample) throw Object.assign(new Error(`no library card ${cardId}`), { code: 404 });
-  const plan = readJson<{ canvas?: string; style?: string }>(join(projects, slug, "edit.json"));
+  const plan = readJson<{ canvas?: string }>(join(projects, slug, "edit.json"));
   const canvas = plan.canvas === "youtube" ? "youtube" : "reel";
-  const clean = canvas === "reel" && plan.style === "clean";
-  const layout = cardLayout(card, canvas, plan.style);
+  // Every reel is a clean reel.
+  const clean = canvas === "reel";
+  const layout = cardLayout(card, canvas);
   const visual = stripAnchors(card.sample.visual) as Shot["visual"];
   // A clean reel has no headers; its cards sit on ink and its panels draw light on ink.
-  const look = clean ? (layout === "card" ? { bg: "ink" } : { tone: "dark" }) : canvas === "reel" && card.sample.header ? { header: card.sample.header } : {};
+  const look = clean ? (layout === "card" ? { bg: "ink" } : { tone: "dark" }) : {};
   const from = placeOver(projects, slug, { at: "", layout, visual, ...look }, at, 4, 1.6);
   // Where the new shot really starts: a shot leads its word by a few frames.
   const shots = resolveProject(projects, slug).resolved?.shots ?? [];

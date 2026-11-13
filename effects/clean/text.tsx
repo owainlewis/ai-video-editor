@@ -1,10 +1,9 @@
 // The clean style's text kit (research/reels/STUDY.md, "The text kit", after Tom Noske): the parts
-// every treatment is made of. Shared by the Studio renderer (Clean.tsx) and the samples.
+// every treatment is made of. Used by the renderer (Clean.tsx) and the hook (hook.tsx).
 import React from "react";
 import { t as type } from "../theme";
 import { C, k, SANS, type Word } from "./kit";
 
-export const CREAM = "#EADCCB"; // the old samples only
 export const WHITE = "#FFFFFF"; // all type over footage and dark stages
 export const GREEN = "#1D3832"; // diagrams, and type on paper
 export const MONO = type.mono; // code only: commands, skills, file names

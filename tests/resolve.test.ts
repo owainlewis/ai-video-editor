@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
-import { isKeyword } from "../effects/Captions.tsx";
-import { cameraRanges, chunkWords, findPhrase, lintOnCamera, lintShots, resolveShots, syncWords } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, findPhrase, lintClean, lintOnCamera, lintWide, resolveShots, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -67,45 +66,10 @@ describe("chunkWords", () => {
   });
 });
 
-describe("lintShots", () => {
-  const img = { kind: "image" as const, src: "a.png", frame: "card" as const, highlight: [] };
-  const shot = (start: number, end: number, layout: "split" | "full" | "punch" | "media" | "cutaway", visual?: typeof img) =>
-    ({ start, end, layout, anchor: `${start}`, visual });
-
-  it("mixed: flags long holds, a split without a visual and three in a row", () => {
-    const issues = lintShots([shot(0, 4, "split"), shot(4, 5, "full"), shot(5, 6, "full"), shot(6, 7, "full")], 7, "mixed");
-    const text = issues.map((i) => i.message).join("\n");
-    expect(issues.some((i) => i.level === "error" && /no visual/.test(i.message))).toBe(true);
-    expect(text).toMatch(/nothing changes for 4.0s/);
-    expect(text).toMatch(/third full shot in a row/);
-  });
-
-  it("react: allows runs of splits", () => {
-    const issues = lintShots([shot(0, 2, "split", img), shot(2, 4, "split", img), shot(4, 5, "punch"), shot(5, 7, "split", img)], 7, "react");
-    expect(issues).toEqual([]);
-  });
-
-  it("allows a long shot while its reveals keep landing, and flags a still stretch over 2 s", () => {
-    const chart = (times: number[]) => ({ kind: "chart", points: [], times }) as never;
-    const ok = lintShots([{ ...shot(0, 6, "split"), visual: chart([2, 4]) }, shot(6, 7, "full")], 7, "mixed");
-    expect(ok.map((i) => i.message).join("\n")).not.toMatch(/nothing changes/);
-    const bad = lintShots([{ ...shot(0, 6, "split"), visual: chart([1]) }, shot(6, 7, "full")], 7, "mixed");
-    expect(bad.map((i) => i.message).join("\n")).toMatch(/nothing changes for 5.0s/);
-  });
-
-  it("react: warns when the speaker leaves or the source is missing", () => {
-    const issues = lintShots([shot(0, 2, "split", img), shot(2, 4, "cutaway", img), shot(4, 5, "full"), shot(5, 6, "punch")], 6, "react");
-    const text = issues.map((i) => i.message).join("\n");
-    expect(text).toMatch(/hides the speaker/);
-    expect(text).toMatch(/two face-only shots in a row/);
-    expect(text).toMatch(/split is 33%/);
-  });
-});
-
 describe("scenes across shots", () => {
-  const flow = { kind: "flow", nodes: [{ title: "A", at: "building" }, { title: "B", at: "good" }], edges: [{ from: 0, to: 1, at: "review" }] };
+  const flow = { kind: "flow", nodes: [{ label: "A", at: "building" }, { label: "B", at: "good", arrow: { at: "review" } }] };
 
-  it("lands flow nodes and edges on their words", () => {
+  it("lands flow nodes and arrows on their words", () => {
     const { shots, issues } = resolveShots(plan([{ at: "If", layout: "media", visual: flow }]), words, 5);
     expect(issues).toEqual([]);
     [2, 8, 10].forEach((w, k) => expect(shots[0].visual?.times?.[k]).toBeCloseTo(w * 0.3 - 0.05));
@@ -144,33 +108,6 @@ describe("soft tech scenes", () => {
     expect(shots[0].visual?.times?.map((x) => +x.toFixed(2))).toEqual([0.55, 1.15, 2.35]);
     expect(shots[1].tone).toBe("dark");
   });
-
-  it("film: counts reveals as beats and wants scenes to alternate tone", () => {
-    const grid = { kind: "grid" as const, items: ["a.jpg", "b.jpg"], cols: 2, groups: [], times: [2] };
-    const scene = (start: number, end: number, tone: "light" | "dark") => ({ start, end, layout: "scene" as const, anchor: `${start}`, header: "H", tone, visual: grid });
-    const ok = lintShots([scene(0, 4, "dark"), scene(4, 7, "light")], 7, "film");
-    expect(ok).toEqual([]);
-    const text = lintShots([scene(0, 3, "dark"), scene(3, 8, "dark")], 8, "film").map((i) => i.message).join("\n");
-    expect(text).toMatch(/two dark scenes in a row/);
-    expect(text).toMatch(/nothing new on screen for 5.0s/);
-  });
-});
-
-describe("camera and shared elements", () => {
-  it("warns on a rushed capture move and on an entrance with no scene before it", () => {
-    const img = { kind: "image" as const, src: "a.png", frame: "card" as const, highlight: [], from: [0, 0, 1, 1] as [number, number, number, number], to: [0.2, 0.2, 0.5, 0.5] as [number, number, number, number] };
-    const text = lintShots(
-      [
-        { start: 0, end: 0.8, layout: "split", anchor: "a", visual: img },
-        { start: 0.8, end: 3, layout: "full", anchor: "b" },
-        { start: 3, end: 5, layout: "scene", anchor: "c", header: "H", visual: img, enter: { from: "tile", index: 0 } },
-      ],
-      5,
-      "film",
-    ).map((i) => i.message).join("\n");
-    expect(text).toMatch(/camera move lasts 0.80s/);
-    expect(text).toMatch(/needs a scene before it/);
-  });
 });
 
 describe("youtube canvas", () => {
@@ -190,29 +127,29 @@ describe("youtube canvas", () => {
       words,
       5,
     );
-    expect(lintShots(ok.shots, 5, "react", "youtube").filter((i) => i.level === "error")).toEqual([]);
+    expect(lintWide(ok.shots, 5).filter((i) => i.level === "error")).toEqual([]);
     const bad = resolveShots(wide([{ at: "If", layout: "split", visual: { kind: "title", text: "x" } }]), words, 5);
-    expect(lintShots(bad.shots, 5, "react", "youtube").some((i) => i.level === "error")).toBe(true);
+    expect(lintWide(bad.shots, 5).some((i) => i.level === "error")).toBe(true);
   });
 
   it("warns when a full-frame youtube card waits for its first word", () => {
     const card = (first: number) => [{ start: 10, end: 20, layout: "media", anchor: "a", visual: { kind: "shift", from: { text: "x" }, to: { text: "y" }, times: [first, 15] } }] as never;
-    expect(lintShots(card(13), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(true);
-    expect(lintShots(card(10.3), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(false);
+    expect(lintWide(card(13), 30).some((i) => i.message.includes("blank"))).toBe(true);
+    expect(lintWide(card(10.3), 30).some((i) => i.message.includes("blank"))).toBe(false);
     // A title timed to the words waits for its first one too ("Really tear this code apart", 2026-11-10).
     const title = (first: number) => [{ start: 10, end: 20, layout: "media", anchor: "a", visual: { kind: "title", text: "x y", sync: true, words: [first, 15] } }] as never;
-    expect(lintShots(title(11.8), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(true);
-    expect(lintShots(title(10.2), 30, "react", "youtube").some((i) => i.message.includes("blank"))).toBe(false);
+    expect(lintWide(title(11.8), 30).some((i) => i.message.includes("blank"))).toBe(true);
+    expect(lintWide(title(10.2), 30).some((i) => i.message.includes("blank"))).toBe(false);
   });
 
   it("rejects youtube layouts on a reel", () => {
     const { shots } = resolveShots(plan([{ at: "If", layout: "side", visual: { kind: "title", text: "x" } }]), words, 5);
-    expect(lintShots(shots, 5).some((i) => i.level === "error" && i.message.includes("youtube"))).toBe(true);
+    expect(lintClean(shots, 5, false).some((i) => i.level === "error" && i.message.includes("not a clean layout"))).toBe(true);
   });
 
   it("warns when graphics are dense", () => {
     const shots = Array.from({ length: 12 }, (_, i) => ({ start: i * 10, end: i * 10 + 10, layout: "side", anchor: `a${i}`, visual: { kind: "title", text: "x" } })) as never;
-    expect(lintShots(shots, 120, "react", "youtube").some((i) => i.message.includes("sparse"))).toBe(true);
+    expect(lintWide(shots, 120).some((i) => i.message.includes("sparse"))).toBe(true);
   });
 });
 
@@ -229,13 +166,6 @@ describe("chart and pipeline", () => {
     expect(issues).toEqual([]);
     expect(shots[0].visual?.times?.[1]).toBeCloseTo(8 * 0.3 - 0.05);
     expect(shots[1].visual?.times?.[0]).toBeCloseTo(10 * 0.3 - 0.05);
-  });
-});
-
-describe("keyword captions", () => {
-  it("skip filler words and keep content words", () => {
-    expect(["the", "a", "is", "of", "and", "It's"].some(isKeyword)).toBe(false);
-    expect(["factory", "massive", "30,000", "Claude", "agents."].every(isKeyword)).toBe(true);
   });
 });
 

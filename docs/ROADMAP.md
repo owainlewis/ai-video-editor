@@ -2,6 +2,20 @@
 
 Written 2026-11-10 after a review of the code and the running app. Every claim in "Where it stands" points at the file that showed it then; that section describes the app before Phase 0 and 1.
 
+## Next: the reel component kit (2026-11-13)
+
+Owain: "I want our reels to be best in the world." Reels are to be built from a small kit of high quality components with real layout, so a reel is reliable and fast to make and custom code is the exception. This comes before the rest of Phase 2.
+
+1. **App windows.** `cli` (Claude Code and Codex), `claudeapp` and `grokbot` exist (`effects/apps/`). Make each one hold up full frame and in the split's panel, with the steps Owain's topics need.
+2. **Real web pages.** Fetch the page live and render it at full resolution (`studio record` today), for GitHub repos, docs, blog posts and product pages. Never a scaled-up screenshot.
+3. **Text cards.** Card beats, the bracketed list, the hit word and the command chip, set in Helvetica only.
+4. **Logos.** Crisp real logos for every topic. `library/logos` has Claude Code, Google and OpenAI; Codex, GitHub, Grok Bot and DeepSeek are still to add.
+5. **One diagram system.** Thin lines that draw on their words, one accent, built from `effects/clean/kit.tsx`, in place of one-off diagrams per reel.
+6. **The frame.** The light palette as the default, and the 45 / 10 / 45 split: visual, caption band with a hairline, footage.
+7. **Checks.** Spacing and balance in QC (`engine/qc.ts`), so a layout problem is caught before Owain sees it. Every component runs in the gallery and in `qc --library` at its sample and its longest text.
+
+Done when a new reel on any of Owain's topics (Claude Code, Codex, OpenAI, Google, GitHub, Grok Bot, DeepSeek, software engineering, web pages, diagrams) can be planned from the kit alone, with no new code, and passes `check` and `qc` first time.
+
 ## Status, 2026-11-10
 
 Phase 0 and Phase 1 are built, except the parts listed here.
@@ -40,7 +54,6 @@ The engine is strong. The app around it is thin.
 - The whole editor UI is about 2,400 lines (`app/`). It is a viewer with a few edit actions, not yet an editor.
 - Review is scattered. Plan checks are a collapsed text list in the chat panel (`app/Editor.tsx:420`). QC runs only from the CLI or inside an export, and its strips are JPGs in `checks/qc/` that the app never shows (no `qc` call anywhere in `app/`). Part renders open in a new tab. The export check is a JSON file.
 - The live player plays the voice only (`effects/cut.tsx:42`). Music and sound effects are heard only in a render.
-- A real review board exists (approve, change, note per shot, reopened when a shot changes) but it is a second app on another port for the old reel pipeline (`reels/review/`).
 - Graphics cannot be moved or trimmed on the timeline, only b-roll edges (`app/Timeline.tsx:285`). No waveform, no thumbnails, no markers, no multi-select, no copy and paste, no frame step. On YouTube the arrow keys do nothing, because they step beats and only reels have beats (`app/Editor.tsx:93`).
 - The inspector replaces the chat, so you cannot edit a graphic and talk to Claude at once (`app/Editor.tsx:278`).
 - Claude runs one note at a time, shows tool lines and a closing sentence, and never shows what it changed (`server/agent.ts`). It gets the selection and playhead, not the picked graphic, the frame or the open issues.
@@ -58,7 +71,7 @@ Six phases. Each ships on its own and is useful on its own. Sizes are rough: S i
 
 Nothing here is visible, but phases 1 to 3 depend on it.
 
-1. **Stable shot ids.** Each shot in `edit.json` gets an `id` (made from its anchor, as `reels/review/model.ts` does, then kept). The API, inspector, variants and suggestions address shots by id. Start times stay for display only.
+1. **Stable shot ids.** Each shot in `edit.json` gets an `id` (made from its anchor, then kept). The API, inspector, variants and suggestions address shots by id. Start times stay for display only.
 2. **Playhead store.** Move `time` out of React state into a small store that components subscribe to. Only the playhead line and the "now" highlights update per frame.
 3. **Typed API.** One zod schema per action, shared by `server/` and `app/api.ts`. Replace the string-matched handler and the `Number(input.x)` casts.
 4. **Lighter reloads.** A plan change sends the resolved plan and issues, not the transcripts and clip words again.
@@ -68,7 +81,7 @@ Nothing here is visible, but phases 1 to 3 depend on it.
 
 The goal: you never export to find a problem. One screen tells you the video is ready, and why.
 
-1. **Review mode** (`#/p/<slug>/review`). A queue of every moment that changes: each graphic on YouTube, each beat on a reel. Each item loops live with the footage and shows its words, its checks and its QC result. Approve or Change with a note. Keys: J and K to move, A approve, C change, N next waiting. Port the model from `reels/review/model.ts`: an item that changes after approval goes back to waiting, with its old note kept.
+1. **Review mode** (`#/p/<slug>/review`). A queue of every moment that changes: each graphic on YouTube, each beat on a reel. Each item loops live with the footage and shows its words, its checks and its QC result. Approve or Change with a note. Keys: J and K to move, A approve, C change, N next waiting. An item that changes after approval goes back to waiting, with its old note kept.
 2. **Notes on the timeline.** M drops a marker at the playhead with a note, while playing or paused. Notes show on a Notes track and in a list.
 3. **Send notes to Claude.** One button sends every open note as one run. Claude answers each note, and each changed item returns to the queue with before and after side by side.
 4. **QC in the app.** A Run QC button and a live issues panel. Each issue seeks to its moment and shows its strip. QC caches by shot hash, so only changed graphics are measured again and it can run after every change.
@@ -101,7 +114,7 @@ The goal: any small change is quicker by hand than by asking.
 
 1. **Pipeline board on Home.** Columns by stage: script, filmed, editing, in review, approved, exported, published. Thumbnails, format filter, archive. Test and lab projects in their own space.
 2. **Job queue.** One panel for imports, QC, part renders and exports across all projects: progress, logs, cancel. Queue several exports and leave them overnight.
-3. **One app.** Fold `reels/` into Studio: script mock-ups, the Kokoro voice, carousels and the Airtable push become Studio features, and the second schema, server and compositions go.
+3. **One app.** Done another way (2026-11-13): `reels/` was removed, and its script mock-ups, Kokoro voice, carousels and Airtable push went with it. Studio is the one app.
 4. **Reels from a YouTube video.** Claude proposes the strongest 30 to 60 second stretches, reframes to 9:16 and opens each as a reel project linked to its source.
 5. **Publish kit.** Thumbnail frame picker, title, description and chapters from the plan's parts, pushed to Airtable.
 

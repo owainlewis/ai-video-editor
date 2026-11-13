@@ -1,13 +1,18 @@
 // Claude Code and Codex in a terminal, drawn as the real CLIs draw themselves. Both were captured on
 // 2026-11-13 by running them in a virtual terminal and reading every cell's text and colour (Claude
 // Code 2.1.321, Codex CLI 0.157.1), with Owain's screen recordings of Claude Code for the full-screen
-// layout. The terminal is a grid of rows: text wraps at the last column, the input sits at the
-// bottom, and when the history fills the window the oldest rows scroll off the top.
+// layout. Clawd's glyphs and his blink are the ones in the 2.1.321 binary. The terminal is a grid of
+// rows: text wraps at the last column, the input sits at the bottom, and when the history fills the
+// window the oldest rows scroll off the top.
+//
+// The camera: the type is as large as the script allows. The terminal's font is fitted so the
+// busiest moment of the shot fits the window, between 30 px and the box's largest body size; the
+// columns follow from it, as a terminal resized to that font would wrap.
 import React from "react";
 import type { ResolvedShot } from "../../engine/schema";
 import { appBeats, typeRate, type Beat } from "../../engine/apps";
 import type { V } from "../soft";
-import { Caret, enter, MONO, SANS, segs, Shimmer, Stage, typed, useBox, windowSize } from "./kit";
+import { bodyRange, Caret, fit, Lights, MONO, SANS, segs, Shimmer, Stage, typed, useBox, Window, windowSize } from "./kit";
 
 // The colours each CLI sends (24-bit, from the capture).
 const CC = {
@@ -45,7 +50,7 @@ const wrap = (lead: Cell[], body: Cell[], width: number, indent: number): Row[] 
       let w = word;
       // A word longer than a whole row breaks at the edge, as a terminal does.
       while (col + w.trimEnd().length > width) {
-        const fit = width - col;
+        const fit = Math.max(1, width - col);
         row.push({ ...cell, s: w.slice(0, fit) });
         w = w.slice(fit);
         push();
@@ -60,103 +65,108 @@ const wrap = (lead: Cell[], body: Cell[], width: number, indent: number): Row[] 
 };
 // Cuts a run to `n` columns with an ellipsis.
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s);
-const blank: Row = [{ s: "" }];
+const blank = (): Row => [{ s: "" }];
 
 // Claude Code's working glyph, forwards then back.
 const SPIN = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
-// Clawd, Claude Code's mascot, from the three rows of block characters it prints at start-up.
+// Clawd, Claude Code's mascot: three rows of block characters (the 2.1.321 binary's default pose:
+// arms down, eyes open, both feet). Closed, each eye is a lid (a dark bar along the cell's foot).
 const CLAWD = [" ▐▛███▛█ ", "▝▜██████▀", " ▝▝   ▝▝ "];
-const QUAD: Record<string, number[]> = { " ": [0, 0, 0, 0], "█": [1, 1, 1, 1], "▐": [0, 1, 0, 1], "▌": [1, 0, 1, 0], "▛": [1, 1, 1, 0], "▜": [1, 1, 0, 1], "▝": [0, 1, 0, 0], "▀": [1, 1, 0, 0] };
-export const Clawd: React.FC<{ fs: number }> = ({ fs }) => {
-  // Each character cell is half as wide as a row is tall, split into four quadrants.
+const EYES = [2, 6];
+const QUAD: Record<string, number[]> = { " ": [0, 0, 0, 0], "█": [1, 1, 1, 1], "▐": [0, 1, 0, 1], "▌": [1, 0, 1, 0], "▛": [1, 1, 1, 0], "▜": [1, 1, 0, 1], "▝": [0, 1, 0, 0], "▘": [1, 0, 0, 0], "▀": [1, 1, 0, 0] };
+// He blinks every 4 s or so, for a sixth of a second.
+const blinking = (time: number) => time % 4.1 > 3.94;
+export const Clawd: React.FC<{ fs: number; time?: number }> = ({ fs, time = 0 }) => {
+  // Each cell is 0.6 em wide and a row 1.3 em tall, split into quadrants; runs merge into one rect
+  // each and snap to whole pixels, so no seam shows between them.
   const cw = fs * 0.6, rh = fs * 1.3;
-  const cells: React.ReactNode[] = [];
-  CLAWD.forEach((line, y) =>
-    [...line].forEach((ch, x) =>
-      (QUAD[ch] ?? [0, 0, 0, 0]).forEach((on, q) => {
-        if (!on) return;
-        cells.push(<rect key={`${y}-${x}-${q}`} x={x * cw + (q % 2) * (cw / 2)} y={y * rh + Math.floor(q / 2) * (rh / 2)} width={cw / 2 + 0.5} height={rh / 2 + 0.5} fill={CC.clay} />);
-      }),
-    ),
-  );
-  return <svg width={cw * 9} height={rh * 3} style={{ position: "absolute", left: 0, top: 0 }}>{cells}</svg>;
+  const shut = blinking(time);
+  const rects: React.ReactNode[] = [];
+  CLAWD.forEach((line, y) => {
+    for (const half of [0, 1]) {
+      const on = [...line].flatMap((ch, x) => {
+        const q = QUAD[ch] ?? [0, 0, 0, 0];
+        const eye = shut && y === 0 && EYES.includes(x);
+        // A shut eye: the whole cell lit but for a thin lid at its foot.
+        return eye ? [1, 1] : [q[half * 2], q[half * 2 + 1]];
+      });
+      for (let i = 0; i < on.length; ) {
+        if (!on[i]) { i++; continue; }
+        let j = i;
+        while (j < on.length && on[j]) j++;
+        const top = y * rh + half * (rh / 2);
+        rects.push(<rect key={`${y}-${half}-${i}`} x={Math.round((i * cw) / 2)} y={Math.round(top)} width={Math.round((j * cw) / 2) - Math.round((i * cw) / 2)} height={Math.round(top + rh / 2) - Math.round(top)} fill={CC.clay} />);
+        i = j;
+      }
+    }
+  });
+  if (shut) EYES.forEach((x) => rects.push(<rect key={`lid${x}`} x={Math.round(x * cw)} y={Math.round(rh * 0.78)} width={Math.round(cw)} height={Math.max(2, Math.round(rh * 0.14))} fill={BG} />));
+  return <svg width={Math.ceil(cw * 9)} height={Math.ceil(rh * 3)} shapeRendering="crispEdges" style={{ position: "absolute", left: 0, top: 0 }}>{rects}</svg>;
 };
 
 type Props = { shot: ResolvedShot; time: number; v: V<"cli"> };
 
-export const Cli: React.FC<Props> = ({ shot, time, v }) => {
-  const box = useBox();
+// Everything on the terminal at `time`, at `W` columns: the welcome rows, the history and the rows
+// pinned to the bottom (the command menu, the input and its footer).
+const screen = (v: V<"cli">, beats: Beat[], time: number, W: number) => {
   const claude = v.app === "claude-code";
-  const tall = box.height > box.width * 0.7 || box.panel;
-  const cols = tall ? 46 : 74;
-  const { winW, winH } = windowSize(box, v.backdrop, 1640);
-  const fs = winW / (cols * 0.6 + 2);
-  const rowH = fs * 1.3;
-  const pad = fs;
-  const barH = fs * 1.7;
-  const maxRows = Math.floor((winH - barH - pad * 1.2) / rowH);
-  const beats = appBeats(v, shot.start, v.times);
-  const W = cols;
-
-  // ---- the history: every step that has started, as rows ----
-  const hist: Row[] = [];
   const model = v.model ?? (claude ? "Opus 5.5 · Claude Max" : "GPT-6-Astra medium");
+  const welcome: Row[] = [];
   if (v.welcome) {
     if (claude) {
       // Clawd draws over the first nine columns of these three rows.
-      hist.push([{ s: "           " }, { s: "Claude Code", b: true, c: CC.fg }, { s: " v2.1.321", c: CC.grey }]);
-      hist.push([{ s: "           " }, { s: cut(model, W - 11), c: CC.grey }]);
-      hist.push([{ s: "           " }, { s: cut(v.cwd, W - 11), c: CC.grey }]);
+      welcome.push([{ s: "           " }, { s: "Claude Code", b: true, c: CC.fg }, ...(W >= 31 ? [{ s: " v2.1.321", c: CC.grey }] : [])]);
+      welcome.push([{ s: "           " }, { s: cut(model, W - 11), c: CC.grey }]);
+      welcome.push([{ s: "           " }, { s: cut(v.cwd, W - 11), c: CC.grey }]);
     } else {
       const hint = "   /model to change";
       const room = W - 4;
       const lines: Row[] = [
-        [{ s: ">_ " }, { s: "OpenAI Codex", b: true }, { s: " (v0.157.1)", c: CX.dim }],
+        [{ s: ">_ " }, { s: "OpenAI Codex", b: true }, ...(W >= 33 ? [{ s: " (v0.157.1)", c: CX.dim }] : [])],
         [],
-        [{ s: "model:     ", c: CX.dim }, { s: model }, ...(11 + model.length + hint.length <= room ? [{ s: "   " }, { s: "/model", c: CX.cyan }, { s: " to change", c: CX.dim }] : [])],
+        [{ s: "model:     ", c: CX.dim }, { s: cut(model, room - 11) }, ...(11 + model.length + hint.length <= room ? [{ s: "   " }, { s: "/model", c: CX.cyan }, { s: " to change", c: CX.dim }] : [])],
         [{ s: "directory: ", c: CX.dim }, { s: cut(v.cwd, room - 11) }],
       ];
       const inner = Math.min(room, Math.max(...lines.map((l) => l.reduce((n, c) => n + c.s.length, 0))));
       lines.forEach((l, k) => {
         const row: Row = [{ s: " " }, ...l.map((c) => ({ ...c, s: cut(c.s, inner) }))];
         row.box = { cols: inner + 2, edge: k === 0 ? "top" : k === lines.length - 1 ? "bottom" : "mid" };
-        hist.push(row);
+        welcome.push(row);
       });
     }
   }
 
   // The turn: from a prompt being sent until a done step or the last reply. While it runs, the
   // working line sits under the history.
+  const hist: Row[] = [];
   let sentAt = Infinity;
   let verb = "";
-  let working = false;
-  const turnStart = (i: number) => beats[i].t1;
   let lastSent = -1;
   v.steps.forEach((s, i) => {
     const b = beats[i];
     if (time < b.t0) return;
     if (s.type === "prompt") {
       if (time < b.t1) return; // still in the input
-      hist.push(blank);
+      if (hist.length || welcome.length) hist.push(blank());
       // Claude Code sets a sent prompt on a grey band the width of the terminal.
       const sent = wrap(claude ? [{ s: "❯ ", c: CC.grey }] : [{ s: "› ", b: true }], [{ s: s.text, c: claude ? CC.white : CX.fg }], W, 2);
       if (claude) sent.forEach((r) => (r.bg = "#373737"));
       hist.push(...sent);
-      sentAt = turnStart(i);
+      sentAt = b.t1;
       lastSent = i;
       verb = "";
       return;
     }
     if (s.type === "think") return void (verb = s.text);
     if (s.type === "done") {
-      hist.push(blank);
+      hist.push(blank());
       const secs = Math.max(1, Math.round(b.t0 - sentAt));
       const text = s.text || `Worked for ${secs}s`;
       hist.push(...(claude ? wrap([{ s: "✻ ", c: CC.grey }], [{ s: text, c: CC.grey }], W, 2) : [[{ s: "─ " + cut(text, W - 4) + " " + "─".repeat(Math.max(0, W - text.length - 3)), c: CX.dim }]]));
       sentAt = Infinity;
       return;
     }
-    hist.push(blank);
+    hist.push(blank());
     if (s.type === "text") {
       const body = segs(s.text).map((g): Cell => ({ s: g.s, c: g.code ? (claude ? CC.lavender : CX.green) : undefined, b: g.bold }));
       // Rows land a few at a time, as the reply arrives.
@@ -184,27 +194,26 @@ export const Cli: React.FC<Props> = ({ shot, time, v }) => {
     }
   });
   // Working: after a prompt is sent and before its turn's done step or final reply lands.
+  let working = false;
   if (isFinite(sentAt) && lastSent >= 0) {
     const rest = v.steps.slice(lastSent + 1);
-    const endAt = (() => {
-      const d = rest.findIndex((s) => s.type === "done");
-      if (d >= 0) return beats[lastSent + 1 + d].t0;
-      const lastText = rest.map((s, k) => (s.type === "text" ? k : -1)).filter((k) => k >= 0).pop();
-      return lastText !== undefined ? beats[lastSent + 1 + lastText].t0 : Infinity;
-    })();
+    const d = rest.findIndex((s) => s.type === "done");
+    const lastText = rest.map((s, k) => (s.type === "text" ? k : -1)).filter((k) => k >= 0).pop();
+    const endAt = d >= 0 ? beats[lastSent + 1 + d].t0 : lastText !== undefined ? beats[lastSent + 1 + lastText].t0 : Infinity;
     working = time >= sentAt && time < endAt;
   }
   if (working) {
     const secs = Math.floor(time - sentAt);
-    hist.push(blank);
+    hist.push(blank());
     if (claude) {
-      const tail = ` (${secs}s · ↓ ${Math.floor(secs * 23 + 12)} tokens)`;
+      const tail = W >= 34 ? ` (${secs}s · ↓ ${Math.floor(secs * 23 + 12)} tokens)` : ` (${secs}s)`;
       const word = cut(verb || "Thinking", W - tail.length - 3) + "…";
       const glyph = SPIN[Math.floor(time * 8) % SPIN.length];
       hist.push([{ s: glyph + " ", c: CC.clay }, { s: word, node: <Shimmer text={word} time={time} base={CC.clay} hi={CC.clayHi} /> }, { s: tail, c: CC.grey }]);
     } else {
-      const word = cut(verb || "Working", W - 30);
-      hist.push([{ s: "• ", c: CX.dim }, { s: word, b: true, node: <Shimmer text={word} time={time} base={CX.dim} hi={CX.hi} /> }, { s: ` (${secs}s • esc to interrupt)`, c: CX.dim }]);
+      const tail = W >= 36 ? ` (${secs}s • esc to interrupt)` : ` (${secs}s)`;
+      const word = cut(verb || "Working", W - tail.length - 2);
+      hist.push([{ s: "• ", c: CX.dim }, { s: word, b: true, node: <Shimmer text={word} time={time} base={CX.dim} hi={CX.hi} /> }, { s: tail, c: CX.dim }]);
     }
   }
 
@@ -234,18 +243,59 @@ export const Cli: React.FC<Props> = ({ shot, time, v }) => {
       ]
     : [
         ...wrap([{ s: "› ", b: true }], text ? [{ s: text }] : [{ s: "Ask Codex to do anything", c: CX.dim }], W - 1, 2).map((r, k, all) => (k === all.length - 1 && text ? [...r, { s: " ", node: caret }] : r)),
-        blank,
-        [{ s: "  " }, { s: cut(model, 24), c: CX.model }, { s: " · " }, { s: cut(v.cwd, W - 7 - Math.min(24, model.length)), c: CX.path }],
+        blank(),
+        [{ s: "  " }, { s: cut(model, Math.min(24, W - 6)), c: CX.model }, ...(W >= 30 ? [{ s: " · " }, { s: cut(v.cwd, W - 7 - Math.min(24, model.length)), c: CX.path }] : [])],
         [{ s: "  " }, { s: "?", b: true }, { s: " for shortcuts", c: CX.dim }],
       ];
   // Claude Code draws its menu above the input box, Codex just above its prompt line.
-  const bottom: Row[] = [...menuRows, ...input];
+  return { welcome, hist, bottom: [...menuRows, ...input] };
+};
 
-  // ---- fit: the newest rows that fit, the input pinned to the bottom ----
+// The terminal's geometry at font size `fs` in a window `winW` x `winH`.
+const grid = (fs: number, winW: number, winH: number) => {
+  const pad = fs * 0.8;
+  const barH = Math.max(44, fs * 1.5);
+  const rowH = fs * 1.3;
+  const cols = Math.floor((winW - 2 * pad) / (fs * 0.6));
+  const rows = Math.floor((winH - barH - pad * 1.1) / rowH);
+  return { pad, barH, rowH, cols, rows };
+};
+
+export const Cli: React.FC<Props> = ({ shot, time, v }) => {
+  const box = useBox();
+  const claude = v.app === "claude-code";
+  const { winW, winH } = windowSize(box, v.backdrop, 1640);
+  const beats = appBeats(v, shot.start, v.times);
+
+  // The camera: the largest font at which the busiest moment of the shot (its history, without the
+  // welcome, and the bottom rows) fits the window, sampled at every step's start, middle and end.
+  const fs = React.useMemo(() => {
+    const [lo, hi] = bodyRange(box, { winW, winH }, "terminal");
+    const at = [...beats.flatMap((b) => [b.t0 + 0.02, (b.t0 + b.t1) / 2, b.t1 - 0.02, b.t1 + 0.02]), shot.end - 0.05];
+    return fit(lo, hi, (f) => {
+      const g = grid(f, winW, winH);
+      if (g.cols < 24) return false;
+      return at.every((t) => {
+        const s = screen(v, beats, t, g.cols);
+        return s.hist.length + s.bottom.length + 1 <= g.rows;
+      });
+    });
+    // The script and the box decide it; `time` does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v, shot.start, shot.end, winW, winH, box.panel]);
+  const { pad, barH, rowH, cols: W, rows: maxRows } = grid(fs, winW, winH);
+  const { welcome, hist, bottom } = screen(v, beats, time, W);
+
+  // ---- fit: the newest rows that fit, the input pinned to the bottom. The welcome stays while it
+  // all fits and leaves whole (never half a header), as the history scrolls it off. ----
   const room = Math.max(0, maxRows - bottom.length - 1);
-  const drop = Math.max(0, hist.length - room);
-  const shown = hist.slice(drop);
-  const clawdOn = claude && v.welcome && drop === 0;
+  const head = welcome.length && welcome.length + 1 + hist.length <= room ? [...welcome, ...(hist.length ? [] : [blank()])] : [];
+  const all = [...head, ...hist];
+  // No blank row at the very top of the window: the history starts on its first line.
+  const lead = head.length ? 0 : all.findIndex((r) => r.length > 1 || r[0]?.s !== "");
+  const drop = Math.max(0, all.length - room, lead);
+  const shown = all.slice(drop);
+  const clawdOn = claude && head.length > 0;
   const title = claude ? "✳ Claude Code" : "codex";
 
   const edge = "1px solid rgba(232,232,232,0.42)";
@@ -258,22 +308,20 @@ export const Cli: React.FC<Props> = ({ shot, time, v }) => {
   );
   return (
     <Stage backdrop={v.backdrop}>
-      <div style={{ width: winW, height: winH, borderRadius: fs * 0.55, overflow: "hidden", background: BG, border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 50px 120px rgba(0,0,0,0.55)", display: "flex", flexDirection: "column", ...enter(time, shot.start, shot.end) }}>
-        <div style={{ height: barH, flex: "0 0 auto", position: "relative", display: "flex", alignItems: "center", gap: fs * 0.42, padding: `0 ${fs * 0.75}px`, background: "#232323", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-            <div key={c} style={{ width: fs * 0.5, height: fs * 0.5, borderRadius: fs, background: c }} />
-          ))}
-          <div style={{ position: "absolute", left: 0, right: 0, textAlign: "center", fontFamily: SANS, fontWeight: 500, fontSize: Math.max(24, fs * 0.72), color: "#B9B9B9" }}>{title}</div>
+      <Window w={winW} h={winH} r={Math.max(16, fs * 0.5)} bg={BG} edge="rgba(255,255,255,0.12)" time={time} start={shot.start} end={shot.end}>
+        <div style={{ height: barH, flex: "0 0 auto", position: "relative", display: "flex", alignItems: "center", padding: `0 ${barH * 0.42}px`, background: "#232323", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          <Lights s={barH * 0.3} />
+          <div style={{ position: "absolute", left: 0, right: 0, textAlign: "center", fontFamily: SANS, fontWeight: 500, fontSize: Math.max(26, barH * 0.44), color: "#B9B9B9" }}>{title}</div>
         </div>
-        <div style={{ position: "relative", flex: 1, padding: `${pad * 0.6}px ${pad}px`, fontFamily: MONO, fontSize: fs, color: claude ? CC.fg : CX.fg, display: "flex", flexDirection: "column" }}>
+        <div style={{ position: "relative", flex: 1, padding: `${pad * 0.5}px ${pad}px ${pad * 0.6}px`, fontFamily: MONO, fontSize: fs, color: claude ? CC.fg : CX.fg, display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ position: "relative" }}>
-            {clawdOn && <Clawd fs={fs} />}
+            {clawdOn && <Clawd fs={fs} time={time} />}
             {shown.map((r, k) => <RowView key={k + drop} r={r} />)}
           </div>
           <div style={{ flex: 1 }} />
           {bottom.map((r, k) => <RowView key={`b${k}`} r={r} />)}
         </div>
-      </div>
+      </Window>
     </Stage>
   );
 };

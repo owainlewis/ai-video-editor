@@ -17,8 +17,9 @@ import { timeline } from "./bin.ts";
 import { ffmpeg, type Log, readJson, ROOT, writeJson } from "./tools.ts";
 
 const CHROME = join(ROOT, "node_modules/.remotion/chrome-headless-shell/mac-arm64/chrome-headless-shell-mac-arm64/chrome-headless-shell");
-// The panel's shape on a split (1080 x 960), at a size that makes the page's type large.
-const VIEW = { width: 800, height: 711 };
+// The panel's shape on a split (1080 x 864, above the caption band), at a size that makes the page's
+// type large.
+const VIEW = { width: 800, height: 640 };
 
 const Action = z.object({
   at: z.string(),

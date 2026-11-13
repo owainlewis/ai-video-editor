@@ -14,7 +14,7 @@ import { Side } from "./ui";
 // change to a visual's code shows here in a second (hot reload), and a change to a plan as soon as
 // it is saved. Hover a tile to play it; click it to open it large with controls.
 //
-// Links: #/gallery?tab=projects&q=threethings opens the projects tab filtered to "threethings".
+// Links: #/gallery?tab=projects&q=flow opens the projects tab filtered to "flow".
 
 export type Item = { key: string; title: string; sub: string; plan: Resolved; footage?: Resolved; from: number; to: number; settled: number; visual: unknown; slug?: string };
 
@@ -27,6 +27,8 @@ export const Gallery: React.FC = () => {
   const [theme, setTheme] = useState<"dark" | "light">(q0.get("theme") === "light" ? "light" : "dark");
   const [search, setSearch] = useState(q0.get("q") ?? "");
   const [longest, setLongest] = useState(q0.get("text") === "longest");
+  // Approved cards only, unless reviewing every candidate.
+  const [all, setAll] = useState(q0.get("all") === "1");
   const [effects, setEffects] = useState<Effect[]>([]);
   const [projects, setProjects] = useState<{ slug: string; resolved: Resolved }[]>([]);
   const [open, setOpen] = useState<Item | null>(null);
@@ -34,13 +36,13 @@ export const Gallery: React.FC = () => {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams({ tab, canvas, theme, ...(longest ? { text: "longest" } : {}), ...(search ? { q: search } : {}) });
+    const params = new URLSearchParams({ tab, canvas, theme, ...(longest ? { text: "longest" } : {}), ...(all ? { all: "1" } : {}), ...(search ? { q: search } : {}) });
     history.replaceState(null, "", `#/gallery?${params}`);
-  }, [tab, canvas, theme, longest, search]);
+  }, [tab, canvas, theme, longest, all, search]);
 
   useEffect(() => {
-    api.effects(canvas).then(setEffects).catch((e) => setError(String(e.message)));
-  }, [canvas]);
+    api.effects(canvas, all).then(setEffects).catch((e) => setError(String(e.message)));
+  }, [canvas, all]);
 
   // Plans change while Claude works; reload the projects a moment after each save.
   useEffect(() => {
@@ -57,7 +59,8 @@ export const Gallery: React.FC = () => {
 
   const library: Item[] = useMemo(
     () =>
-      effects.map((e) => {
+      // A reel shows its clean kit only, as library QC checks it.
+      effects.filter((e) => canvas === "youtube" || !e.off).map((e) => {
         const plan = cardPlan(e.id, canvas, canvas === "youtube" ? theme : undefined, longest);
         return { key: e.id, title: e.kind === "custom" ? e.purpose : e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
       }),
@@ -119,6 +122,9 @@ export const Gallery: React.FC = () => {
                 <label className="small" title="Fill every text slot to its limit, to check the layout holds">
                   <input type="checkbox" checked={longest} onChange={(e) => setLongest(e.target.checked)} /> Longest text
                 </label>
+                <label className="small" title="Every card, approved or not, to review candidates">
+                  <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show all
+                </label>
               </>
             )}
             <input className="search" placeholder="Filter: kind, project, words…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -127,6 +133,7 @@ export const Gallery: React.FC = () => {
           {tab === "library" ? (
             <div className={`tiles ${canvas}`}>
               {library.filter((i) => match(i.key, i.title, i.sub, String((i.visual as { kind?: string }).kind))).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
+              {!library.length && !error && <p className="muted">No approved cards yet. Tick Show all to review the candidates.</p>}
             </div>
           ) : (
             groups.map((g) => {

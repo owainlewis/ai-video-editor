@@ -6,7 +6,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 
 ## Interface
 
-- `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`.
+- `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`, and `useLogo(name)`: `library/logos/<name>.svg` (else `.png`) as a data URL.
 - `ingest.ts`: `ingest(projects, file, slug, log?, choices?)`, `addClip(projects, slug, file, id, log?, name?)`, `transcribe`, `cleanWords`, `starterPlan`, `slugFor`, `projectMeta`, `setStatus`, `liveStatus`, types `Status` and `Choices`.
 - `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `cameraOnTimeline(dir, cut)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
 - `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
@@ -17,6 +17,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `broll.ts`: `loadLibrary`, `indexLibrary`, `describeLibrary`, `searchLibrary`, `useClip(projectDir, id)`, `BROLL`, type `Clip` (a library shot, not the same as the bin `Clip`).
 - `auphonic.ts`: `cleanVoice(dir, title, log?)`, `cleanProject(projects, slug, log?)`, `ALGORITHMS`, `OUTPUTS`.
 - `scan.ts`: `frameSheets(dir, every = 15, log?)`, `scanCamera(dir, refs)`.
+- `capture.ts`: `capture(projects, slug, url, opts, log?)` returns `{ png, json, page }`; `pageName(url)`. Options: `name`, `from`, `to`, `dark`, `scale` (3), `width` (900), `height` (1400). CLI: `npm run studio -- capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--scale 3] [--width 900] [--height 1400]`.
 - `tools.ts`: `run`, `ffmpeg`, `ffmpegProgress`, `hasHardwareH264`, `probeDuration`, `probeSize`, `mediaProbe(dir)`, `probeRate`, `speechEnd`, `imageSize`, `readJson`, `writeJson`, `ROOT`, `FPS` (30), type `Log`.
 
 ## Invariants
@@ -25,6 +26,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 
 - `resolveProject` returns no `resolved` and writes nothing when `cut.json` is invalid, `edit.json` fails the schema, or a filmed reel has no `face`. Other error issues are returned and the build files are still written.
 - `project.json` and `edit.json` must exist. A missing one throws.
+- An `image` visual whose source has a page json beside it (`assets/pages/<name>.json`, from `capture`) gets its `phrase` marks and cameras turned into rects (`engine/page.ts`). A phrase the page lacks, or any phrase on an image with no page json, is an error.
 - With a cut, an empty cut or a non-empty `remove` is an error.
 - `exportCut` writes separate `build/edit.export.json` and `build/audio.export.json`, so the editor cannot swap the flattened cut out from under a running export.
 - A `video` visual's source can be used once in a plan. Kept shots do not count.
@@ -57,6 +59,14 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `slugFor`: lowercase, other characters become `-`, 40 characters at most, falling back to `clip`.
 - Nothing in this package checks that slugs or clip ids are unique. `server/index.ts` numbers them on upload.
 
+### Capture
+
+- A page is captured light unless `dark` is set, since pages honour `prefers-color-scheme`.
+- `from` finds a heading that starts with the text, else the smallest element whose text (or image alt text) starts with it. `to` is searched after it. Without `from` the capture starts at the top of the page and runs to `to` or `height` CSS px.
+- With `from`, the section is scrolled into view, every fixed or sticky element that does not hold it is hidden, and the capture is the section's column (`article`, `main` or `.markdown-body`) with 24 px of page each side.
+- Everything is measured in viewport coordinates, and the window grows (up to twice) until the section fits, because some pages scroll an inner panel that paints only what is on screen.
+- The json's boxes are normalised 0 to 1 of the PNG, one per word, with its block. `scale` and `size` (CSS px) let `resolveProject` judge how large page text shows.
+
 ### Tools and voice
 
 - `run` throws on a non-zero exit and defaults its working directory to the repo root.
@@ -67,10 +77,12 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 
 - Child processes: `ffmpeg`, `ffprobe`, `npx remotion`, `uvx --from mlx-whisper mlx_whisper`, `uv run ... python -m audio.mix`, and `claude -p` for b-roll descriptions.
 - Network: `https://auphonic.com/api`, with `AUPHONIC_API_KEY` from the environment or `.env`.
+- Network: `capture.ts` opens the page in headless Chrome (its user agent without "Headless") and fetches its favicon.
 - Local server: `qc.ts` runs an HTTP server on 127.0.0.1 and opens headless Chrome through `openBrowser`.
 - Writes in a project:
   - `ingest` and `addClip`: `project.json`, `edit.json`, `status.json`, `transcript.json`, `transcript.txt`, `source/`, `build/preview.*`, `build/whisper/`, `checks/frame.jpg`, and `clips/<id>/`. `ingest` also creates `renders/` and `history/`.
   - `resolveProject`: `build/edit.resolved.json` and `build/audio.json`, or the export pair. It copies b-roll into `assets/broll/`.
+  - `capture`: `assets/pages/<name>.png`, `<name>.json` and `<name>-icon.<ext>`.
   - `clipLevels`: `build/level.json`. `footageCuts`: `build/cuts.json`. `scanCamera`: `build/camera.json`.
   - `mixAudio`, and so `renderFinal` and `exportOverOriginal`, through the `audio.mix` child process: `build/mix.wav` and `build/audio/`.
   - `renderFinal` and `exportOverOriginal`: `renders/final.mp4`, or `renders/part-<name>.mp4` with a `preview`. `exportOverOriginal` also writes `build/export/` and `checks/export-check.json` (with a `preview`, `checks/part-<name>-check.json`).

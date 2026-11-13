@@ -1,6 +1,6 @@
 // The Blueprint card catalog: every visual kind the editor can put on screen, as a card with an
 // id, a tier, a purpose, its slots (what the plan fills, and how long each may be) and sample
-// content for the style lab. Modelled on herk-edit-kit's style library: named styles, tiered cards,
+// content for the gallery and library QC. Modelled on herk-edit-kit's style library: named styles, tiered cards,
 // declared slots.
 //
 // Tiers: t1 is a full-frame scene takeover, t2 sits in the split panel beside the speaker (or
@@ -12,6 +12,7 @@ import { atMax, slotIssuesIn, slotValues, type Card, type Slot, type StyleDef } 
 export { atMax, slotValues, type Card, type Slot };
 import { tokens } from "./tokens";
 import { appCards } from "./apps";
+import { kitCards } from "./kit";
 import { sampleArticle, sampleLogo, samplePage, sampleRepo, SAMPLE_ARTICLE_SIZE, SAMPLE_PAGE_SIZE, SAMPLE_REPO_SIZE, sampleThumb } from "./samples";
 
 const T = (maxChars = 32): Slot => ({ name: "title", type: "text", maxChars, optional: true });
@@ -62,90 +63,10 @@ const catalog: Card[] = [
     summary: "Focus lift over a screen recording: the paragraph being discussed lifts off the blurred page as a card, a highlighter follows the spoken words, then it settles back.",
     layouts: ["media"],
     slots: [{ name: "region", type: "text", maxChars: 30, note: "[x, y, w, h] of the frame, in 1920x1080 pixels" }, { name: "mark", type: "text", maxChars: 30, optional: true, note: "[x, y, w, h] of the phrase to highlight" }, at("from"), at("to")],
-    noSample: "Lifts a region of real footage; the lab has no stand-in screen recording.",
-  },
-  {
-    id: "blueprint.t1.reviewmd",
-    kind: "reviewmd",
-    tier: "t1",
-    purpose: "proof",
-    summary: "The docs' example REVIEW.md in a neutral browser window over the Graphite stage; a highlighter marks each named line as it is said.",
-    layouts: ["media"],
-    slots: [{ name: "marks[].line", type: "text", maxChars: 80, note: "a line of engine/reviewmd.ts, word for word" }, at("marks[].at")],
-    noSample: "Shows one fixed document; the lab already has it as the reviewmd idea.",
-  },
-  {
-    id: "blueprint.t1.claudecode",
-    kind: "claudecode",
-    tier: "t1",
-    purpose: "proof",
-    summary: "A Claude Code session drawn clean in a tilted window that settles flat: prompts type themselves, output lands line by line, one phrase is marked. Words from the real demo.",
-    layouts: ["media"],
-    slots: [{ name: "lines", type: "list", minItems: 1, maxItems: 12 }, { name: "lines[].text", type: "text", maxChars: 70 }, at("lines[].at")],
-    noSample: "Shows a real session's words; there is no stand-in session.",
+    noSample: "Lifts a region of real footage; the gallery has no stand-in screen recording.",
   },
   // ---- the app mock-ups (effects/apps/): the real products, drawn to move ----
   ...appCards(),
-  {
-    id: "blueprint.t1.search",
-    kind: "search",
-    tier: "t1",
-    purpose: "hook",
-    summary: "A search bar types the query, then the real result card (site, title, line) rises under it.",
-    layouts: ["media"],
-    slots: [{ name: "text", type: "text", maxChars: 40 }, { name: "result.title", type: "text", maxChars: 60, optional: true }, at("at"), at("result.at")],
-    noSample: "The result card is a real page; the lab has none to show.",
-  },
-  {
-    id: "blueprint.t1.tiers",
-    kind: "tiers",
-    tier: "t1",
-    purpose: "structure",
-    summary: "Two to four cards in depth; the tier being said comes forward with a sage edge and its rule is marked on its word.",
-    layouts: ["media"],
-    slots: [{ name: "items", type: "list", minItems: 2, maxItems: 4 }, { name: "items[].rule", type: "text", maxChars: 16 }, { name: "items[].examples", type: "text", maxChars: 70 }, at("items[].at"), at("items[].markAt")],
-    noSample: "Tiers are the source's own; the lab has none to show.",
-  },
-  {
-    id: "blueprint.t1.compose",
-    kind: "compose",
-    tier: "t1",
-    purpose: "proof",
-    summary: "An email writing itself in a clean mail window, from an agent, with the agent's own example text; Send presses on its word.",
-    layouts: ["split", "media"],
-    slots: [{ name: "subject", type: "text", maxChars: 40 }, { name: "body", type: "list", minItems: 1, maxItems: 3 }, at("at"), at("send")],
-    noSample: "Shows a real source's names and words; the lab has none to show.",
-  },
-  {
-    id: "blueprint.t1.divisions",
-    kind: "divisions",
-    tier: "t1",
-    purpose: "structure",
-    summary: "A grid of labelled pills in their real colours; each named one lights on its word, a big count can land over them.",
-    layouts: ["split", "media"],
-    slots: [{ name: "items", type: "list", minItems: 2, maxItems: 24 }, { name: "items[].label", type: "text", maxChars: 20 }, at("items[].at")],
-    noSample: "Shows a real source's names and words; the lab has none to show.",
-  },
-  {
-    id: "blueprint.t1.chips",
-    kind: "chips",
-    tier: "t1",
-    purpose: "stat",
-    summary: "Rows of real names drifting past in opposite directions; a count lands over them on its word.",
-    layouts: ["split", "media"],
-    slots: [{ name: "rows", type: "list", minItems: 1, maxItems: 5 }, { name: "count.value", type: "text", maxChars: 6, optional: true }, at("count.at")],
-    noSample: "Shows a real source's names and words; the lab has none to show.",
-  },
-  {
-    id: "blueprint.t1.runs",
-    kind: "runs",
-    tier: "t1",
-    purpose: "process",
-    summary: "An agent's pipeline: each step queued, running on its word, passed when the next starts.",
-    layouts: ["split", "media"],
-    slots: [{ name: "steps", type: "list", minItems: 2, maxItems: 6 }, { name: "steps[].label", type: "text", maxChars: 22 }, at("steps[].at")],
-    noSample: "Shows a real source's names and words; the lab has none to show.",
-  },
   {
     id: "blueprint.t1.custom",
     kind: "custom",
@@ -615,7 +536,7 @@ const catalog: Card[] = [
     summary: "B-roll or a product's own clip, in a card, with one slow push-in.",
     layouts: ["split", "media", "cutaway", "scene", "side"],
     slots: [{ name: "src", type: "image", note: "a project clip or broll:<id>" }],
-    noSample: "Needs a real clip; the lab shows no stand-in footage.",
+    noSample: "Needs a real clip; the gallery shows no stand-in footage.",
   },
   {
     id: "blueprint.t2.logos",
@@ -869,50 +790,8 @@ const catalog: Card[] = [
       scene: "Before you *ship*",
     },
   },
-  {
-    id: "blueprint.t2.flow",
-    kind: "flow",
-    tier: "t2",
-    purpose: "structure",
-    treatment: "diagram",
-    summary: "How parts talk: cards joined by lines that draw, a chip riding along what is passed.",
-    layouts: BOTH,
-    slots: [
-      { name: "nodes", type: "list", minItems: 2, maxItems: 4 },
-      { name: "nodes[].title", type: "richtext", maxChars: 18 },
-      { name: "nodes[].kicker", type: "text", maxChars: 14, optional: true },
-      { name: "nodes[].lines", type: "text", maxChars: 24, optional: true },
-      { name: "edges[].chip", type: "text", maxChars: 14, optional: true },
-      at("nodes[].at"),
-    ],
-    sample: {
-      visual: { kind: "flow", root: false, nodes: [{ title: "Planner", kicker: "Sample", lines: [] }, { title: "*Builder*", kicker: "Sample", lines: [] }], edges: [{ from: 0, to: 1, chip: "plan.md" }] },
-      header: "How it *works*",
-      scene: "How it *works*",
-    },
-  },
-  {
-    id: "blueprint.t2.terminal",
-    kind: "terminal",
-    tier: "t2",
-    purpose: "evidence",
-    treatment: "terminal",
-    summary: "A terminal that types each line on its spoken word. Real commands only.",
-    layouts: ["split", "media", "side"],
-    slots: [T(24), { name: "lines", type: "list", minItems: 1, maxItems: 5 }, { name: "lines[].text", type: "text", maxChars: 32, note: "start with > for output" }, at("lines[].at")],
-    sample: { visual: { kind: "terminal", title: "sample", lines: [{ text: "npm run sample" }, { text: "> Illustration output" }] }, header: "Run *it*", scene: "Run *it*" },
-  },
-  {
-    id: "blueprint.t2.prompt",
-    kind: "prompt",
-    tier: "t2",
-    purpose: "evidence",
-    treatment: "chat-input",
-    summary: "A plain chat input where a prompt types itself out on its word.",
-    layouts: ["split", "media", "side"],
-    slots: [{ name: "app", type: "text", maxChars: 16 }, { name: "text", type: "text", maxChars: 120 }, at("at")],
-    sample: { visual: { kind: "prompt", app: "Sample app", text: "Write a sample prompt that types itself out." }, header: "The *prompt*", scene: "The *prompt*" },
-  },
+  // ---- the laid-out kinds: the code editor and the flow diagram (styles/blueprint/kit.ts) ----
+  ...kitCards(),
 
   // ---- overlay: over the speaker's picture (16:9) ----
   {

@@ -1,12 +1,13 @@
 // The clean style in Studio (style "clean", locked 2026-11-06; research/reels/STUDY.md). Draws a
 // resolved reel plan as the system Owain chose from the samples:
-//   split (the main view: the visual on top, Owain or b-roll below, the caption on the seam), text
+//   split (the main view, 45 / 10 / 45: the visual on top, the caption in a band, Owain or b-roll below), text
 //   cards, cinematic shots, a full-screen line diagram on green now and then, and the graphic b-roll
 //   overlay (the diagram in a dark glass panel over a full-frame picture).
 //   Text is one style (display in text.tsx) in six parts: caption sized by weight, hit, two-line
 //   title, caption inside the diagram, bracketed list, card beats. One at a time. Over the first
 //   seconds, the text hook (./hook.tsx) sits at the top of the frame; frame 0 is the cover (./cover.tsx).
-// Fixed geometry: one centre line (x 540), the seam at y 960, the glass panel at 60, 380, 960 x 880,
+// Fixed geometry: one centre line (x 540), the panel 0 to 864, the caption band 864 to 1056, the
+// footage from 1056, the glass panel at 60, 380, 960 x 880,
 // chips at y 120.
 // Hard cuts between shots; easing only inside a graphic. Diagrams are `custom` visuals drawn per
 // video in effects/custom/ with the parts in ./kit.
@@ -18,26 +19,28 @@ import { lastKept } from "../../engine/resolve";
 import { Soundtrack } from "../cut";
 import { CUSTOM } from "../custom";
 import { Speaker } from "../Speaker";
+import { BAND } from "../theme";
 import { VisualView } from "../Visuals";
-import { C, H, lerp, move, type Palette, PALETTES, PaletteContext, W } from "./kit";
+import { C, H, lerp, move, type Palette, PALETTES, PaletteContext, usePalette, W } from "./kit";
 import { blurIn, Center, Chip, chunkClean, display, GREEN, Typed, WHITE } from "./text";
 import { HOOK_BAND } from "../../engine/resolve";
 import { Cover } from "./cover";
 import { Hook, underHook } from "./hook";
+import { CodeView } from "./code";
+import { FlowView } from "./flow";
 
-export const SEAM = 960;
+// The split's panel ends where the caption band starts; the footage starts below the band.
+export const PANEL = BAND.top;
+const FOOT = BAND.top + BAND.height;
 // A chip's top on a split: below Instagram's top bar (QC's safe area starts at y 96).
 export const CHIP_Y = 120;
 export const GLASS = { left: 60, top: 380, width: W - 120, height: 880 };
 // The box each layout draws its visual in, in frame pixels.
 export const box = (layout: ResolvedShot["layout"]) =>
-  layout === "split" ? { left: 0, top: 0, width: W, height: SEAM } : layout === "over" ? GLASS : { left: 0, top: 0, width: W, height: H };
+  layout === "split" ? { left: 0, top: 0, width: W, height: PANEL } : layout === "over" ? GLASS : { left: 0, top: 0, width: W, height: H };
 
-// A screen recording on a split runs right down to the seam, a true 50/50 with nothing between the
-// halves. A page is often white, so its caption and hit sit just under the seam, on the speaker's half.
+// A screen recording on a split fills the whole panel, edge to edge, down to the band.
 const fillsPanel = (s: ResolvedShot) => s.layout === "split" && s.visual?.kind === "video" && !!s.visual.sync;
-const UNDER_SEAM = SEAM + 22;
-const ON_FOOTAGE = { textShadow: "0 2px 26px rgba(0,0,0,0.6)" };
 
 // A card's colour; on the light palette an ink card is black (Owain, 2026-11-13: "occasional black screens").
 const bgOf = (s: ResolvedShot, p: Palette) => (s.layout === "diagram" ? p.diagram : s.layout === "card" ? { ink: p.card, paper: C.paper, green: GREEN }[s.bg ?? "ink"] : p.stage);
@@ -57,7 +60,7 @@ const Picture: React.FC<{ r: Resolved; s: ResolvedShot; first: boolean; time: nu
   // The opening push: the one eased move a reel gets (1.3x to 1x).
   const push = first ? lerp(1.3, 1, move(time, s.start, 0.7)) : 1;
   return (
-    <div style={{ position: "absolute", left: 0, top: split ? SEAM : 0, width: W, height: split ? H - SEAM : H, overflow: "hidden" }}>
+    <div style={{ position: "absolute", left: 0, top: split ? FOOT : 0, width: W, height: split ? H - FOOT : H, overflow: "hidden" }}>
       <Video src={staticFile(`${r.slug}/${s.picture.src}`)} muted loop playbackRate={s.picture.rate} trimBefore={Math.round(s.picture.start * 30)} objectFit="cover" style={{ width: "100%", height: "100%", filter, scale: String(push) }} />
     </div>
   );
@@ -68,6 +71,7 @@ const Picture: React.FC<{ r: Resolved; s: ResolvedShot; first: boolean; time: nu
 // the band covers its top).
 const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number; hooked: boolean }> = ({ r, s, time, hooked }) => {
   const v = s.visual;
+  const pal = usePalette();
   // A card draws its beats or list itself; a custom visual on a card is a designed card (egm-reel-v3's end).
   if (!v || (s.layout === "card" && v.kind !== "custom")) return null;
   // A capture sits in the panel as a window, with margins, so the page never touches the frame's edge.
@@ -77,11 +81,21 @@ const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number; hooked: boo
   // diagram is drawn for the whole panel and keeps its own margins.
   // A synced screen recording fills the top half edge to edge, down to the seam.
   const top = hooked && s.layout === "split" ? HOOK_BAND : 100;
-  const b = fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top, height: 790 - top } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top, width: W - 120, height: 790 - top } : hooked && s.layout === "split" ? { left: 0, top, width: W, height: SEAM - top } : box(s.layout);
+  // The kit's laid-out kinds (code, flow) size themselves to the box: on a split the safe panel, under
+  // the glass its inside, full frame the middle of the frame clear of the caption.
+  const laid = v.kind === "code" || v.kind === "flow";
+  const b = laid
+    ? s.layout === "split" ? { left: 60, top, width: W - 120, height: PANEL - 40 - top } : s.layout === "over" ? { left: GLASS.left + 48, top: GLASS.top + 48, width: GLASS.width - 96, height: GLASS.height - 96 } : { left: 60, top: 220, width: W - 120, height: 1180 }
+    : fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top, height: PANEL - 40 - top } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top, width: W - 120, height: PANEL - 40 - top } : hooked && s.layout === "split" ? { left: 0, top, width: W, height: PANEL - top } : box(s.layout);
   const Custom = v.kind === "custom" ? CUSTOM[v.name] : undefined;
   return (
     <div style={{ position: "absolute", ...b, overflow: "visible" }}>
-      {Custom && v.kind === "custom" ? (
+      {laid ? (
+        // Under the dark glass the diagram takes the forest colours, whatever the reel's palette.
+        <PaletteContext.Provider value={s.layout === "over" ? PALETTES.forest : pal}>
+          {v.kind === "code" ? <CodeView v={v} time={time} start={s.start} w={b.width} h={b.height} /> : v.kind === "flow" ? <FlowView v={v} time={time} start={s.start} w={b.width} h={b.height} slug={r.slug} /> : null}
+        </PaletteContext.Provider>
+      ) : Custom && v.kind === "custom" ? (
         <Custom shot={s} time={time} props={v.props ?? {}} times={v.times ?? []} width={b.width} height={b.height} panel={s.layout !== "diagram"} />
       ) : (
         <VisualView slug={r.slug} shot={s} time={time} w={b.width} h={b.height} v={v} />
@@ -97,12 +111,12 @@ export const Clean: React.FC<Resolved> = (r) => {
   const words = useMemo(() => r.chunks.flatMap((c) => c.words), [r.chunks]);
   const chunks = useMemo(() => chunkClean(words), [words]);
   const faceless = !r.video && !r.cut && !r.standIn;
-  const pal = PALETTES[r.palette ?? "forest"];
+  const pal = PALETTES[r.palette ?? "light"];
   if (!shot) return <AbsoluteFill style={{ background: pal.stage }} />;
 
   const paper = shot.layout === "card" && shot.bg === "paper";
   // Type on the stage takes the palette's colour; over footage and on dark cards it stays white.
-  const onStage = (shot.layout === "split" || shot.layout === "diagram") && !fillsPanel(shot);
+  const onStage = shot.layout === "split" || shot.layout === "diagram";
   const ink = paper ? GREEN : onStage ? pal.text : WHITE;
   const glass = shot.layout === "over";
   const v = shot.visual;
@@ -123,10 +137,10 @@ export const Clean: React.FC<Resolved> = (r) => {
   // A custom card that carries the words itself (props.caption false) has no caption over it.
   const quiet = v?.kind === "custom" && v.props?.caption === false;
   const capOn = r.captions && ch && time < Math.min(next?.start ?? Infinity, ch.end + 0.5) && !hit && !beat && !list && !quiet;
-  const filled = fillsPanel(shot);
   const cp = (() => {
     switch (shot.layout) {
-      case "split": return { y: filled ? UNDER_SEAM : SEAM - 98, size: 110 };
+      // In the band, centred: on the stage colour, clear of the panel and the footage.
+      case "split": return { y: BAND.top + (BAND.height - 100) / 2, size: 100 };
       case "over": return { y: GLASS.top + GLASS.height + 120, size: 92 };
       case "diagram": return shot.inside ? { y: 960 - 52, size: 76 } : { y: 1520, size: 84 };
       case "card": return { y: 900, size: 120 };
@@ -136,7 +150,10 @@ export const Clean: React.FC<Resolved> = (r) => {
   })();
   // On a split the hit sits on the seam like the caption, and a tag stacks it upward: nothing but the
   // seam word crosses onto the speaker's panel.
-  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : filled ? UNDER_SEAM : shot.layout === "split" ? SEAM - 75 - (shot.hit?.tag ? 160 : 0) : 870;
+  // On a split the hit sits in the band, a little smaller, with its tag above it in the panel.
+  const split = shot.layout === "split";
+  const hitSize = split ? 150 : 176;
+  const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : split ? BAND.top + (BAND.height - hitSize) / 2 : 870;
 
   return (
     <PaletteContext.Provider value={pal}>
@@ -195,23 +212,26 @@ export const Clean: React.FC<Resolved> = (r) => {
 
       {hit && (
         <>
-          <Center y={hitY} style={{ ...display(176), color: ink, ...(filled ? ON_FOOTAGE : {}) }}>
+          <Center y={hitY} style={{ ...display(hitSize), color: ink }}>
             <Typed s={hit.text} t={time} at={hit.at} per={0.045} />
           </Center>
           {hit.tag && (
-            <Center y={hitY + 150} style={{ ...display(84), color: ink, ...(filled ? ON_FOOTAGE : {}) }}>
+            <Center y={split ? hitY - 104 : hitY + 150} style={{ ...display(84), color: ink }}>
               <Typed s={hit.tag} t={time} at={hit.at + hit.text.length * 0.045 + 0.05} per={0.04} />
             </Center>
           )}
         </>
       )}
 
+      {/* The caption band: the stage colour, no grid, a hairline at its top edge. */}
+      {split && <div data-qc="band" style={{ position: "absolute", left: 0, top: BAND.top, width: W, height: BAND.height, background: pal.stage, borderTop: `2px solid ${pal.faint}` }} />}
+
       <Hook r={r} shot={shot} time={time} faceless={faceless} />
 
       {capOn && ch && (() => {
         const size = ch.small ? cp.size * 0.6 : cp.size;
         return (
-          <Center y={cp.y} style={{ ...display(size), color: ink, marginTop: ch.small ? cp.size * 0.25 : 0, ...(filled ? ON_FOOTAGE : {}) }}>
+          <Center y={cp.y} style={{ ...display(size), color: ink, marginTop: ch.small ? cp.size * 0.25 : 0 }}>
             {ch.text}
           </Center>
         );

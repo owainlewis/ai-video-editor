@@ -33,12 +33,11 @@ describe("the gallery's plans", () => {
     expect(effectList("youtube").find((e) => e.kind === "lower")?.off).toBeTruthy();
   });
 
-  it("shows each project's look: house graphics first, clean cards only in clean reels", () => {
-    const ivory = effectList("reel");
-    expect(ivory.slice(0, 4).map((e) => e.kind)).toEqual(["words", "focus", "shift", "map"]);
-    expect(ivory.some((e) => e.id === "blueprint.t1.beats" || e.off)).toBe(false);
-    const clean = effectList("reel", "clean");
-    const kit = clean.filter((e) => !e.off).map((e) => e.id);
+  it("shows each canvas's look: house graphics first on YouTube, the clean kit on reels", () => {
+    const wide = effectList("youtube");
+    expect(wide.slice(0, 4).map((e) => e.kind)).toEqual(["words", "focus", "shift", "map"]);
+    expect(wide.some((e) => e.id === "blueprint.t1.beats")).toBe(false);
+    const kit = effectList("reel").filter((e) => !e.off).map((e) => e.id);
     expect(kit.slice(0, 2)).toEqual(["blueprint.t1.beats", "blueprint.t1.list.bracket"]);
     expect(kit).toContain("blueprint.t1.words");
     expect(kit).not.toContain("blueprint.t2.kpi");
@@ -46,11 +45,11 @@ describe("the gallery's plans", () => {
   });
 
   it("draws a clean card as a clean reel does", () => {
-    const beats = cardPlan("blueprint.t1.beats", "reel", undefined, false, "clean");
+    const beats = cardPlan("blueprint.t1.beats", "reel", undefined, false);
     expect([beats.style, beats.shots[0].layout, beats.shots[0].bg, beats.shots[0].header]).toEqual(["clean", "card", "ink", undefined]);
-    const words = cardPlan("blueprint.t1.words", "reel", "light", false, "clean");
+    const words = cardPlan("blueprint.t1.words", "reel", "light", false);
     expect([words.shots[0].layout, words.shots[0].tone, words.standIn]).toEqual(["split", "dark", true]);
-    expect(cardPlan("blueprint.t1.words", "reel").style).toBeUndefined();
+    expect(cardPlan("blueprint.t1.words", "youtube").style).toBeUndefined();
   });
 
   it("picks the bracketed list card only for a bracketed title", () => {
@@ -58,9 +57,9 @@ describe("the gallery's plans", () => {
     expect(slotIssues({ kind: "list", title: "Plain title", items: [{ text: "a" }, { text: "b" }], preview: false } as never)).toEqual([]);
   });
 
-  it("checks the library in every theme and the clean style, at sample and longest text", () => {
-    expect(libraryVariants()).toHaveLength(14);
-    expect(libraryVariants("reel").every((v) => v.canvas === "reel")).toBe(true);
-    expect(libraryVariants("youtube").some((v) => v.style === "clean")).toBe(false);
+  it("checks YouTube in every theme and reels once in the clean style, at sample and longest text", () => {
+    expect(libraryVariants()).toHaveLength(8);
+    expect(libraryVariants("reel")).toEqual([{ canvas: "reel", theme: "dark", longest: false }, { canvas: "reel", theme: "dark", longest: true }]);
+    expect(libraryVariants("youtube")).toHaveLength(6);
   });
 });

@@ -4,10 +4,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { type Issue, type ScreenZoom, zoomClashes, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveHook, resolveShots, sfxEvents, shotLabel } from "../engine/resolve.ts";
+import { type Issue, type ScreenZoom, zoomClashes, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintWide, resolveHook, resolveShots, sfxEvents, shotLabel } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
-import { frameRect } from "../effects/camera.ts";
-import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
+import { frameRect, rectOf } from "../effects/camera.ts";
+import { type Page, placePhrases } from "../engine/page.ts";
+import { BAND } from "../effects/theme.ts";
 import { cards, slotIssues } from "../styles/blueprint/style.ts";
 import { stripAnchors } from "../engine/insert.ts";
 import { BROLL, useClip } from "./broll.ts";
@@ -56,10 +57,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   }
   // The video's theme is every graphic's tone unless a shot sets its own.
   if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
-  const clean = plan.style === "clean" && !youtube;
+  // Every reel is a clean reel; YouTube has its own checks.
+  const clean = !youtube;
   const { hook, issues: hookIssues } = clean ? resolveHook(plan.hook, words, shots, meta.duration, FPS, explicit) : { hook: undefined, issues: [] };
   issues.push(...hookIssues);
-  issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script, hook, plan.cover) : lintShots(shots, meta.duration, plan.format, plan.canvas)));
+  issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script, hook, plan.cover) : lintWide(shots, meta.duration)));
   // The cover's card comes in from the library at the 3:4 band's size (1080 x 1440), so the renderer can
   // serve it and it loads at once; a full-size photo is several megabytes.
   let cover: Resolved["cover"];
@@ -116,7 +118,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     }
   }
   for (const [src, n] of pictures) if (n > 1) issues.push({ level: "warn", message: `picture ${src} is used ${n} times; fresh b-roll reads better` });
-  // Library logos ("logo:<name>", library/logos/<name>.png) become data URLs wherever they appear in a
+  // Library logos ("logo:<name>", library/logos/<name>.svg or .png) become data URLs wherever they appear in a
   // visual (custom props included).
   const logos = (x: unknown): unknown =>
     typeof x === "string" && x.startsWith("logo:") ? useLogo(x.slice(5)) ?? (issues.push({ level: "error", message: `no logo ${x} in library/logos` }), x)
@@ -135,14 +137,21 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     if (v?.kind === "windows") s.visual = { ...v, items: v.items.map((it) => ({ ...it, ...(existsSync(join(dir, it.src)) ? { size: imageSize(join(dir, it.src)) } : {}) })) };
     if (v?.kind === "image" && existsSync(join(dir, v.src))) {
       const size = imageSize(join(dir, v.src));
-      s.visual = { ...v, size };
-      // Captures are taken at 2x, so page text of 16 CSS px is 32 image px; under ~30 px on the
-      // 1080 frame it is unreadable on a phone.
-      if (size && v.to && !youtube) {
-        const top = s.header ? HEADER.top + 120 + 30 : 150;
-        const bottom = (s.layout === "split" ? splitGeom(plan.split).panelBottom : MEDIA.panelBottom) - 20;
-        const { k } = frameRect(v.to, size[0], size[1], 900, bottom - top - (v.frame === "browser" ? 64 : 0));
-        if (k * 32 < 30) issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} ends too wide; 16px page text shows at ${Math.round(k * 32)}px. Tighten "to".` });
+      // A page from `capture` has its words beside it, so the plan names words, not rects.
+      const pageFile = join(dir, v.src.replace(/\.\w+$/, ".json"));
+      const read = existsSync(pageFile) ? readJson<Page>(pageFile) : undefined;
+      const page = Array.isArray(read?.runs) ? read : undefined;
+      const { visual, errors } = placePhrases(v, page);
+      for (const message of errors) issues.push({ level: "error", message: `"${s.anchor}": ${message}` });
+      s.visual = { ...visual, size };
+      // Page text of 16 CSS px is 16 x scale image px (captures are 3x, older ones 2x); under ~26 px
+      // on the 1080 frame it is hard to read on a phone. Measured in the clean split's panel, where a
+      // capture sits 48 px in from each side, from y 100 to 40 px above the caption band.
+      const to = rectOf(visual.to);
+      if (size && to && !youtube && s.layout === "split") {
+        const { k } = frameRect(to, size[0], size[1], 1080 - 96, BAND.top - 40 - 100 - (v.frame === "browser" ? 64 : 0));
+        const px = k * 16 * (page?.scale ?? 2);
+        if (px < 26) issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} ends too wide; 16px page text shows at ${Math.round(px)}px. Tighten "to".` });
       }
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
@@ -189,7 +198,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     grade: plan.grade,
     split: plan.split,
     canvas: plan.canvas,
-    style: plan.style,
+    style: youtube ? "ivory" : "clean",
     captions: plan.captions ?? !youtube,
     theme: plan.theme,
     palette: plan.palette,
@@ -234,7 +243,11 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
 
 const LIBRARY_LOGOS = join(BROLL, "..", "logos");
 // A library logo as a data URL, so any visual can draw it without knowing the project's folder.
-function useLogo(name: string): string | undefined {
-  const from = join(LIBRARY_LOGOS, `${name}.png`);
-  return existsSync(from) ? `data:image/png;base64,${readFileSync(from).toString("base64")}` : undefined;
+// The official SVG when there is one (crisp at any size), else the PNG.
+export function useLogo(name: string): string | undefined {
+  for (const [ext, type] of [["svg", "image/svg+xml"], ["png", "image/png"]]) {
+    const from = join(LIBRARY_LOGOS, `${name}.${ext}`);
+    if (existsSync(from)) return `data:${type};base64,${readFileSync(from).toString("base64")}`;
+  }
+  return undefined;
 }

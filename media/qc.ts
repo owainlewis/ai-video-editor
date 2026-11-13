@@ -6,7 +6,10 @@
 // reveal landing, settled, and the picture after it. Nothing is rendered to video.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { C } from "../effects/clean/kit.tsx";
+import { C, PALETTES } from "../effects/clean/kit.tsx";
+import { underHook } from "../effects/clean/hook.tsx";
+import { BAND as SPLIT_BAND } from "../effects/theme.ts";
+import { HOOK_BAND } from "../engine/resolve.ts";
 import { GREEN } from "../effects/clean/text.tsx";
 import { createServer as createHttp } from "node:http";
 import { join } from "node:path";
@@ -56,13 +59,23 @@ const framesFor = (s: ResolvedShot, duration: number) => {
 
 // The clean style's backgrounds: a split's top panel and the cards are flat ink, paper or green; the
 // glass and full shots sit on footage.
-const CLEAN_BG = { ink: C.ink, paper: C.paper, green: GREEN };
-const cleanBg = (s: ResolvedShot) => (s.layout === "split" ? C.ink : s.layout === "card" ? CLEAN_BG[s.bg ?? "ink"] : s.layout === "diagram" ? GREEN : undefined);
+// The stage a clean graphic sits on, in the reel's palette (light by default).
+const cleanBg = (r: Resolved, s: ResolvedShot) => {
+  const p = PALETTES[r.palette ?? "light"];
+  return s.layout === "split" ? p.stage : s.layout === "card" ? { ink: p.card, paper: C.paper, green: GREEN }[s.bg ?? "ink"] : s.layout === "diagram" ? p.diagram : undefined;
+};
+// A clean split's panel, for balance: below the hook while it shows, down to the caption band.
+// Only drawn graphics (diagrams and app windows) are judged; a capture is framed by its plan.
+const panelFor = (r: Resolved, s: ResolvedShot): [number, number, number, number] | undefined => {
+  if (r.style !== "clean" || s.layout !== "split" || !s.visual || s.visual.kind === "image" || s.visual.kind === "video") return undefined;
+  const top = underHook(r, s) ? HOOK_BAND : 0;
+  return [0, top, 1080, SPLIT_BAND.top - top];
+};
 
 // The background a graphic's text sits on, for contrast: the canvas for designed frames, nothing on footage.
 const bgFor = (r: Resolved, s: ResolvedShot) =>
   r.style === "clean"
-    ? cleanBg(s)
+    ? cleanBg(r, s)
     : s.layout === "half"
     ? tokens.color.light.bg
     : s.layout === "side" || s.layout === "media" || s.layout === "scene" || s.layout === "split"
@@ -190,7 +203,7 @@ async function checkGraphic(page: Page, r: Resolved, s: ResolvedShot, where: str
       // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full
       // frame is centred. Centring is judged once everything has landed.
       const centred = t === settled && (s.layout === "media" || s.layout === "scene") && s.visual!.kind !== "chapter";
-      for (const issue of qcLayout(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s`, bgFor(r, s), centred)) {
+      for (const issue of qcLayout(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s`, bgFor(r, s), centred, t === settled ? panelFor(r, s) : undefined)) {
         const key = issue.message.replace(/ at [\d.]+s:/, ":");
         if (!seen.has(key)) seen.add(key), issues.push(issue);
       }
@@ -216,7 +229,7 @@ async function checkHook(page: Page, r: Resolved, frames: string, name: string, 
     files.push(file);
     const m = (await page.evaluate(() => window.qcMeasure!())) as Measure;
     writeJson(join(frames, `${name}-${files.length - 1}-measure.json`), m);
-    const designed = cleanBg(s);
+    const designed = cleanBg(r, s);
     let bg = designed ? hex(designed) : undefined;
     const ink = m.texts.filter((x) => x.hook).map((x) => x.box);
     if (!bg && ink.length) {
@@ -350,7 +363,7 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
     const v = s.visual;
     if (v?.kind !== "video" || !v.sync || !wanted(s)) continue;
     // A recording the wrong shape for the panel gets its edges cropped.
-    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 960) > 0.02) other.push({ level: "warn", message: `${shotLabel(s, i)}: the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 960), so its edges are cropped` });
+    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 864) > 0.02) other.push({ level: "warn", message: `${shotLabel(s, i)}: the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 864), so its edges are cropped` });
     const stats = join(out, `motion-${i + 1}.txt`);
     ffmpeg(["-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`, "-f", "null", "-"], log);
     const diffs = [...readFileSync(stats, "utf8").matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
@@ -373,14 +386,12 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
 // that uses it, so this runs after a change to a visual or the style (Owain, 2026-11-02: the quote
 // card stacked one word a line beside him, and list numbers sat at 1.2:1, both found by eye first).
 export const LIBRARY_QC = join(ROOT, "library", "qc");
-// Clean reels are always on ink, so they are checked once, beside the Ivory reel themes.
+// YouTube is checked in each of its themes. Every reel is a clean reel, always on ink, so reels are
+// checked once.
 export const libraryVariants = (canvas?: Canvas) =>
   (["youtube", "reel"] as const)
     .filter((c) => !canvas || c === canvas)
-    .flatMap((c) => [
-      ...(["light", "dark", "black"] as const).map((theme) => ({ canvas: c, theme, style: "ivory" })),
-      ...(c === "reel" ? [{ canvas: c, theme: "dark" as const, style: "clean" }] : []),
-    ])
+    .flatMap((c): { canvas: Canvas; theme: "light" | "dark" | "black" }[] => (c === "reel" ? [{ canvas: c, theme: "dark" }] : (["light", "dark", "black"] as const).map((theme) => ({ canvas: c, theme }))))
     .flatMap((v) => [false, true].map((longest) => ({ ...v, longest })));
 
 // One library plan with the hook over it: loaded, then checked as a reel's opening is.
@@ -398,25 +409,23 @@ export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log
   try {
     for (const canvas of ["youtube", "reel"] as const) {
       const variants = libraryVariants(opts.canvas).filter((v) => v.canvas === canvas);
-      // Every card, the lower third included (Owain may still ask for one); in the clean style only
-      // its kit, since the rest are checked in Ivory, the look they draw in.
-      const cardsIn = (style: string) => effectList(canvas, style).filter((e) => !(style === "clean" && e.off) && (!opts.card || e.id.includes(opts.card) || e.kind === opts.card));
-      if (!variants.length || !variants.some((v) => cardsIn(v.style).length)) continue;
+      // Every card on YouTube, the lower third included (Owain may still ask for one); on a reel only
+      // the clean kit, since a reel cannot use the rest.
+      const clean = canvas === "reel";
+      const cards = effectList(canvas).filter((e) => !(clean && e.off) && (!opts.card || e.id.includes(opts.card) || e.kind === opts.card));
+      if (!variants.length || !cards.length) continue;
       const { browser, page } = await qcPage(srv, compositionFor(canvas), "library=1", log);
       try {
         for (const v of variants) {
-          const cards = cardsIn(v.style);
-          if (!cards.length) continue;
-          const look = v.style === "clean" ? "clean" : v.theme;
+          const look = clean ? "clean" : v.theme;
           const name = `${canvas}-${look}${v.longest ? "-longest" : ""}`;
           const frames = join(LIBRARY_QC, name);
           mkdirSync(frames, { recursive: true });
           const settled: string[] = [];
           const hooked: string[] = [];
-          const clean = v.style === "clean";
           for (const [n, e] of cards.entries()) {
             onStage?.(`${name}: ${n + 1}/${cards.length} ${e.kind}`);
-            const r = cardPlan(e.id, canvas, v.theme, v.longest, v.style);
+            const r = cardPlan(e.id, canvas, v.theme, v.longest);
             await page.evaluate((plan: Resolved) => window.qcLoad!(plan), r as never);
             const where = `${e.id} (${canvas}, ${look}${v.longest ? ", longest text" : ""})`;
             const got = await checkGraphic(page, r, r.shots[0], where, frames, e.id.replace(/^blueprint\./, ""), issues);

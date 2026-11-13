@@ -61,7 +61,6 @@ None. The TypeScript files only define data and pure functions. They do no file,
 
 A card is a visual kind (`engine/schema.ts`, drawn by `effects/Visuals.tsx`, `effects/elements.tsx`,
 `effects/soft.tsx`, `effects/cards.tsx`, `effects/house.tsx`, `effects/browser.tsx` (`windows`),
-`effects/ui.tsx` (`claudecode`, `search`, `tiers`, `compose`, `divisions`, `chips`, `runs`),
 `effects/apps/` (`cli`, `claudeapp`, `grokbot`; cards in `blueprint/apps.ts`),
 `effects/clean/Clean.tsx` (`beats`) or `effects/custom/`) as this style offers it: an id
 `<style>.<tier>.<purpose or kind>[.<treatment>]`, a tier (`t1` full frame, `t2` beside the speaker,
@@ -71,54 +70,26 @@ and `media/project.ts` warns when a plan goes past one. A custom visual is check
 `blueprint.t1.custom`, so a plan past a stage card's `props.*` limit gets no warning.
 
 Most components read colour, type, spacing and motion from tokens through `effects/style.ts`.
-`effects/clean/kit.tsx` and `effects/ui.tsx` define literal colours, and `effects/soft.tsx` imports
+`effects/clean/kit.tsx` and `effects/apps/` define literal colours, and `effects/soft.tsx` imports
 `BLACK` and `GRAPHITE` straight from the Ivory tokens. `tests/catalog.test.ts` fails on a literal
 colour in the four files listed under Invariants.
 
 ## Commands
 
-These run from `reels/` and act on `reels/styles/`, a separate copy of this folder that has drifted
-from it. The root package has no `reel` script and no `styles` command. `--style` defaults to
-`ivory`, and only registered styles work, so `--style blueprint` fails.
-
-```bash
-npm run reel -- styles --style ivory
-```
-
-```bash
-npm run reel -- styles --write
-```
-
-```bash
-npm run reel -- styles stills
-```
-
-```bash
-npm run reel -- styles feedback
-```
-
-```bash
-npm run reel -- styles new aurora
-```
-
-The style lab is on the review board (`npm run reel -- review`, from `reels/`): every card with a
-sample plays live, light and dark, split and scene, with sample text or every slot at its max.
-Overlay cards get one view, wide and dark. A card with no sample shows only its `noSample` text.
-
-In the root editor, the gallery (`#/gallery`) plays the cards that have a sample, and
-`npm run studio -- qc --library` measures them. Both leave out the 11 cards with no sample. The
-gallery always uses the default Ivory style, so it also leaves out the two clean-only cards, `beats`
-and `list.bracket`. `qc --library` checks those two in its clean variant.
+There is no `styles` command. In the editor, the gallery (`#/gallery`) plays the cards that have a
+sample, and `npm run studio -- qc --library` measures them. Both leave out the 3 cards with no sample
+(`lift`, `custom`, `video`). On YouTube both show the house look in each theme. On reels both show
+only the clean kit, since every reel is a clean reel: the clean-only cards (`beats`,
+`list.bracket`), the house graphics, real captures and the app kinds.
 
 ## Adding a style
 
-`reels/` has the `styles new` command and the `_template/` folder. This folder has neither, so in
-the root package make the new folder by hand from Blueprint's files.
+There is no `styles new` command or template folder, so make the new folder by hand from Blueprint's files.
 
-1. `npm run reel -- styles new <id>` (in `reels/`) copies Blueprint's tokens, catalog and samples under the new id and the DESIGN.md skeleton.
+1. Copy Blueprint's `tokens.ts`, `style.ts`, `samples.ts` and `DESIGN.md` under the new id.
 2. Write `DESIGN.md` from references, then change `tokens.ts` to match it.
 3. Keep, drop or add cards in `style.ts`. A new kind needs a schema entry, a component that reads tokens, anchors in `engine/resolve.ts` `visualAnchors`, and a geometry case in `cardGeom` (`effects/cards.tsx`), tested in `tests/catalog.test.ts`.
-4. Review it in the style lab.
+4. Review it in the gallery and with `npm run studio -- qc --library`.
 
-Rendering reads the active style from `effects/style.ts` (`reels/src/style.ts` in `reels/`), so one
-style renders at a time. Point that import at the new folder to see it in the lab and in reels.
+Rendering reads the active style from `effects/style.ts`, so one style renders at a time. Point
+that import at the new folder to see it.

@@ -8,10 +8,10 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 
 ### `schema.ts`
 
-- `Edit`: zod schema for `edit.json`. Fields: `title`, `canvas`, `style`, `theme`, `leave`, `remove`, `captions`, `format`, `split`, `header`, `face`, `accents`, `music`, `grade`, `voiceGain`, `shots`.
-- `Shot`: fields `at` and `layout` (required), plus `id` (the shot's name across versions; made from the anchor when left out), `visual`, `shift`, `sfx`, `zoom`, `header`, `keep`, `tone`, `enter`, `picture`, `bg`, `hit`, `title`, `chip`, `inside`, `note`.
+- `Edit`: zod schema for `edit.json`. Fields: `title`, `canvas`, `style` (defaults to `clean`; every reel is a clean reel, and YouTube ignores it), `theme`, `leave`, `remove`, `captions`, `split`, `header`, `face`, `accents`, `music`, `grade`, `voiceGain`, `shots`.
+- `Shot`: fields `at` and `layout` (required), plus `id` (the shot's name across versions; made from the anchor when left out), `visual`, `shift`, `sfx`, `zoom`, `header`, `keep`, `tone`, `picture`, `bg`, `hit`, `title`, `chip`, `inside`, `note`.
 - `Visual`: discriminated union on `kind`. The list of kinds is in `schema.ts`.
-- `Layout`: `full`, `punch`, `split`, `media`, `cutaway`, `scene`. YouTube only: `side`, `half`, `over`. Clean style only: `card`, `diagram`. On clean reels, `over` is the glass overlay.
+- `Layout`: every layout either canvas takes. Reels take `CLEAN_LAYOUTS` (`split`, `full`, `card`, `diagram`, `over`, `cutaway`); there `over` is the glass overlay. YouTube takes `full`, `side`, `half`, `media`, `over` and `cutaway`. `punch` and `scene` are left from the retired Ivory reel and pass neither lint.
 - `Picture`, `SfxKind`.
 - `Cut`, `Segment`, `MAIN` (the id `"main"`, the clip the project was made from): schema for `cut.json`.
 - Types: `EditPlan`, `VisualSpec`, `CutPlan`, `CutSegment`, `Word`, `ResolvedVisual`, `ResolvedShot`, `Chunk`, `SfxEvent`, `Resolved`.
@@ -23,8 +23,8 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `chunkWords(words, accents, cuts, fps)`: caption chunks.
 - `sfxEvents(shots)`, `cleanSfx(shots)`: sound events sorted by time.
 - `cameraRanges(dist, rate, threshold = 20, minRun = 2, bridge = 0.5)`: on-camera stretches from a picture scan.
-- `lintShots`, `lintWide`, `lintClean`, `lintLeave`, `lintOnCamera`: each returns `Issue[]`.
-- `CUT_LEAD`, `CLEAN_LAYOUTS`, types `Issue` and `Format`.
+- `lintWide`, `lintClean`, `lintLeave`, `lintOnCamera`: each returns `Issue[]`.
+- `CUT_LEAD`, `CLEAN_LAYOUTS`, type `Issue`.
 
 ### `cut.ts`
 
@@ -49,9 +49,9 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `beats.ts`: `reelBeats(shots, words, duration, fps = 30)`, `beatAt(beats, t)`, type `Beat`.
 - `insert.ts`: `wordAt`, `phraseAt`, `mergeShots`, `planIndex`, `stripAnchors`.
 - `tighten.ts`: `tighten(words, opts)`, `wordsRange`, type `Trim`.
+- `page.ts`: a captured web page's words (written by `media/capture.ts`). `findPhrase(page, phrase, nth = 1)`, `markRect`, `phraseFrame(page, { phrase, pad, block, nth })`, `closest`, `placePhrases(v, page)`, types `Page`, `PhraseFrame`, `ImageSpec`. Not the same as `findPhrase` in `resolve.ts`, which finds spoken words.
 - `api.ts`: `Actions` (one zod schema per editor action), `isAction`, types `ActionName`, `ActionInput`, `ActionData`. Read by `server/index.ts` and `app/api.ts`.
 - `review.ts`: review before render. `reviewItems(r, words)`, `itemHash(r, index, said)`, `reviewable(s)`, `mergeReview(review, items)`, `counts`, `noteTime(note, words)`, `openNotes`, `openChanges`, `formatFeedback(review, items, words)`, `seenPath(id, hash)`, `emptyReview`, `hash`, `stable`, types `Review`, `ItemReview`, `Past`, `Note`, `Item`, `Status`.
-- `reviewmd.ts`: `REVIEW_MD`, `reviewLine`, the example file the `reviewmd` visual shows.
 
 ## Invariants
 
@@ -66,7 +66,6 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `keep` is an error unless the previous shot has a visual or is kept, the layouts match, and the shot has no visual of its own.
 - Reveal anchors search forward from the shot's word. A miss falls back to the shot's start: an error normally, a warning with `cut = true`.
 - `Edit.shots` needs at least one shot. `Segment` needs `out` greater than `in`.
-- A `reviewmd` mark's `line` must exactly match a line in `REVIEW_MD`.
 
 ### Ids and review
 
@@ -79,9 +78,8 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 
 ### Which lint runs
 
-- `lintShots` hands over to `lintWide` when the canvas is `youtube`.
-- `lintClean` replaces `lintShots` for `style: "clean"` on reels. `media/project.ts` makes that choice.
-- `lintShots`, `lintWide` and `lintClean` each error if the shots stop more than 0.05 s before the duration.
+- `media/project.ts` runs `lintWide` on YouTube and `lintClean` on every reel.
+- `lintClean` errors on any layout outside `CLEAN_LAYOUTS`, so a YouTube layout on a reel is caught there.
 
 ### Cuts
 
@@ -97,6 +95,14 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `saidTwice` finds matching 4-word runs that start 20 to 300 s apart and counts each pair against the two 30 s windows they fall in, floored to multiples of 30 s. It warns when a pair of windows reaches 10. The two windows can be the same one.
 - `reelBeats` splits any span over 2.5 s into parts of about 2 s. Changes within 0.35 s share a beat, except a new shot.
 - `tighten` defaults: `pause` 0.6 s, `keep` 0.25 s, `reach` 24 words. Its comment says proposals never overlap.
+
+### Phrases on a page
+
+- A phrase matches words in order, ignoring punctuation at either end of each word and skipping runs with no letters or digits. A match in the same case wins; otherwise any case matches. `nth` picks a later match.
+- An unknown phrase throws, naming the three closest phrases on the page.
+- `markRect` pads the words by 4 x 2 CSS px and throws when the phrase wraps onto a second line.
+- `phraseFrame` pads by `pad` of the page's width on every side (0.04 by default), the same pixels up and down. Rects are kept inside the image.
+- `placePhrases` fills the rects in an `image` visual and the browser window's `url` when the plan leaves it out. A phrase with no page json beside the image is an error.
 
 ## Side Effects
 

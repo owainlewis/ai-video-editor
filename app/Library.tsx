@@ -41,10 +41,9 @@ export const Library: React.FC<{
     [r],
   );
   const [effects, setEffects] = useState<Effect[]>([]);
-  const style = canvas === "reel" && r.style === "clean" ? "clean" : undefined;
   useEffect(() => {
-    api.effects(canvas, style).then(setEffects).catch(() => {});
-  }, [canvas, style]);
+    api.effects(canvas).then(setEffects).catch(() => {});
+  }, [canvas]);
   // Cards off the project's look stay out of the way unless asked for.
   const [showOff, setShowOff] = useState(false);
   const off = effects.filter((e) => e.off).length;
@@ -207,14 +206,14 @@ export const Library: React.FC<{
       ) : tab === "effects" ? (
         <div className="assets">
           <p className="muted small">
-            Every graphic in this video's look ({lookName(canvas, style, theme)}), live. House graphics first. Hover to play; click one to add it at the playhead (<Clock />). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
+            Every graphic in this video's look ({lookName(canvas, theme)}), live. House graphics first. Hover to play; click one to add it at the playhead (<Clock />). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
           </p>
           {error && <p className="error small">{error}</p>}
           <div className="effects">
             {effects
               .filter((e) => showOff || !e.off)
               .map((e) => {
-                const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme, false, style);
+                const plan = cardPlan(e.id, canvas === "reel" ? "reel" : "youtube", theme, false);
                 const item = { key: e.id, title: e.name ?? e.kind, sub: e.off ? `${e.off}. ${e.summary}` : e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
                 return (
                   // Shown on request, dimmed: off this look.
@@ -238,8 +237,8 @@ export const Library: React.FC<{
 };
 
 // The look a project's graphics draw in, as Owain names it.
-const lookName = (canvas: string, style: string | undefined, theme?: Resolved["theme"]) =>
-  style === "clean" ? "clean reel" : `${theme === "black" ? "Black" : theme === "dark" ? (canvas === "reel" ? "Forest" : "Graphite") : "Ivory"}${canvas === "reel" ? " reel" : ""}`;
+const lookName = (canvas: string, theme?: Resolved["theme"]) =>
+  canvas === "reel" ? "clean reel" : theme === "black" ? "Black" : theme === "dark" ? "Graphite" : "Ivory";
 
 // The script, word by word: select words and cut them (the button, or Delete), as in a text editor.
 // Tighten proposes what to lose (retakes, fillers, long pauses) struck through in the script; click

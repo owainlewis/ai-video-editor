@@ -6,6 +6,10 @@ brand system" (22 min); a Matt D'Avella-style video on time management (12.5 min
 "Copy This Strategy to 10X Your Business Fast" (26 min). Plus two 30 s product promos (Ultramock,
 XFastest): pure motion design, no hard cuts. RULES.md wins over anything here.
 
+For reels, the kit in CLAUDE.md ("Reels") comes first: app windows, real pages, text cards, real logos
+and one diagram system. The reel studies below are where its parts came from; reach past the kit only
+when it cannot show the idea.
+
 ## What all four do
 
 1. **A visible spine.** One recurring device marks every section, so the viewer always knows where
@@ -24,7 +28,7 @@ XFastest): pure motion design, no hard cuts. RULES.md wins over anything here.
 6. **Act breaks.** A moment of silence or black, then a low hit, before the first section or a
    montage (Gaudet 0:22.7, D'Avella 1:14).
 
-## Fits Owain (calm, Ivory, hard cuts)
+## Fits Owain on YouTube (calm, Ivory, hard cuts)
 
 | Trick | Seen in | How it would work here | Status |
 | --- | --- | --- | --- |
@@ -49,7 +53,7 @@ XFastest): pure motion design, no hard cuts. RULES.md wins over anything here.
 ## The motion lab (2026-10-25): all six approved, all in the library
 
 Studied Ben's Claude Code review frame by frame (one persistent stage, two speeds, 80 ms staggers, a
-second beat on the word), built six directions on real moments (`effects/Lab.tsx`), and Owain approved
+second beat on the word), built six directions on real moments, and Owain approved
 all six ("I love them all"). Where each lives now:
 
 | Direction | Use it when | Plan |
@@ -87,7 +91,7 @@ Eight graphics came out of it, for `side` and `media`, all in the library (`effe
 | `gaps` | something gets complete | `holes`, `helpers`; `count: false` unless the number is said |
 | `scale` | a trade-off with a verdict | `left`, `right` |
 
-Rules: filled rings remember, empty rings know nothing. One accent, on the part that matters; older beams go quiet. Numbers only when said. These are moments, not a look for a whole video: on camera only, and each video still gets its own `DESIGN.md`. Try them on his words at `#/gallery?tab=projects&q=stage`.
+Rules: one accent, on the part that matters; older beams go quiet. Numbers only when said. These are moments, not a look for a whole video: on camera only, and each video still gets its own `DESIGN.md`. Try them on his words in the gallery (`#/gallery?q=lens`, and so on). Owain, 2026-11-13: no rings filled with dots, and show the real product wherever one exists; these are for ideas that have no screen.
 
 ## Needs Owain's call (conflicts with a rule)
 
@@ -114,7 +118,7 @@ wipes, blur dissolves, stock and TV clips. Loud, branded and busy; Owain's notes
 
 ## Reels references (2026-10-25)
 
-**Nick Saraev, Agency Agents.** Speaker in a rounded window under a framed graphic, two-tier hook title, real GitHub pages in browser frames with highlights, a star counter rolling over the real Star button, the agent's own email typing in a mail window, a Claude Code board of agent cards, an orchestrator pipeline with queued and running pills, a chip cloud of real agent names. Something new about every 1.5 s. Built as `compose`, `divisions`, `chips`, `runs` (our palette, not his blue); see `projects/agency-agents`.
+**Nick Saraev, Agency Agents.** Speaker in a rounded window under a framed graphic, two-tier hook title, real GitHub pages in browser frames with highlights, a star counter rolling over the real Star button, the agent's own email typing in a mail window, a Claude Code board of agent cards, an orchestrator pipeline with queued and running pills, a chip cloud of real agent names. Something new about every 1.5 s. These moments are now drawn by the app kit (`cli`, `claudeapp`, `grokbot`) and real pages filmed with `studio record`.
 
 **Google Pomelli reel (25.7 s).** About 10 cuts, but inside each shot something changes about every 1 s. The speaker appears only in the hook (0 to 2 s) and the CTA; the middle is Google's own 16:9 launch video in a letterboxed box on a flat background that flips white and dark per section. Worth borrowing:
 1. Real vendor footage letterboxed on a switching background: pace from real UI without drawing any.
@@ -148,7 +152,7 @@ Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare se
 
 **Watch out.** The Agency Agents reel's badges say 282 and 163k while the voice says 200 and 160k. Our rule holds: the number on screen matches what is said, or the note says why.
 
-**Built (2026-10-25).** All seven are in `effects/custom/moves.tsx` as `statbadge`, `stopwatch`, `timeline`, `hub`, `phases`, `verifier`, `igcta`, shown one per section in `projects/moves-lab`. Use them from a plan as `{ "kind": "custom", "name": "<name>", "at": [...], "props": {...} }`; the props and beats are documented at the top of the file.
+**Built, then removed.** All seven were built as one-off custom graphics on 2026-10-25 and removed on 2026-11-13 with the other one-offs. If a reel needs one again, build it from the kit's parts, and make it a kit component if it earns its place twice.
 
 ## Diagram motion: "Anthropic Says You're Using Subagents WRONG" (studied 2026-10-26)
 
@@ -167,7 +171,7 @@ Agency Agents (Nick Saraev, 42 s), 5 MCP servers (faceless, 57 s), Cloudflare se
 | Scene exit | whole canvas fades over about 7 frames, annotations leading | screen to diagram: a 5-frame crossfade |
 | Carry-over | one node stays put while the rest fades over 8 frames, its label rewrites, new children spawn from it | links scenes |
 
-Best to borrow, in our style (Helvetica, clean strokes, sage): spawn from the parent and fold back into it, plus things travelling along edges (context dots that arrive or fall away at a red X, a tag riding a return edge, a node pulsing when it receives). Also: a structure trace (retrace one tree in the accent, then the matching edges in another to show "same shape"), and the same nodes with clean edges swapped for tangled ones.
+Best to borrow, in our style (Helvetica, clean strokes, one accent): spawn from the parent and fold back into it, plus things travelling along edges (context dots that arrive or fall away at a red X, a tag riding a return edge, a node pulsing when it receives). Also: a structure trace (retrace one tree in the accent, then the matching edges in another to show "same shape"), and the same nodes with clean edges swapped for tangled ones.
 
 Our MOVE (460 ms) is about 1.5x slower than their child spawn (270 to 330 ms) and our FAST (180 ms) slower than their strokes and node fades (70 to 170 ms). Their diagrams feel lively because the parts are quick and something is always flowing, not because anything is big.
 

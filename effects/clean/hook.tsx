@@ -1,13 +1,13 @@
 // The clean style's text hook (Owain, 2026-11-11; geometry in engine/resolve.ts, HOOK): one headline
-// at the top of the frame from the first frame, set as written, with its one *marked* phrase in
-// Signifier italic sage. It cuts in and out with no fade. On a split it sits on the top of the panel,
+// at the top of the frame from the first frame, set as written, with its one *marked* phrase set apart
+// by colour (Helvetica only, Owain 2026-11-13). It cuts in and out with no fade. On a split it sits on the top of the panel,
 // which starts again below it; over the speaker it sits in the top third on a soft scrim, its type
 // sized to keep two lines above his brow.
 import React from "react";
 import { HOOK, HOOK_BAND, hookParts } from "../../engine/resolve";
 import type { Resolved, ResolvedShot } from "../../engine/schema";
 import { faceRect } from "../Speaker";
-import { PALETTES, SERIF, W } from "./kit";
+import { PALETTES, W } from "./kit";
 import { display, GREEN, WHITE } from "./text";
 
 // A shot the hook is on screen in. A split among them keeps its panel below the hook's band for the
@@ -23,8 +23,10 @@ export const Hook: React.FC<{ r: Resolved; shot: ResolvedShot; time: number; fac
   const paper = shot.layout === "card" && shot.bg === "paper";
   // Sage is too light on paper; there the phrase is set apart by its face alone. On the stage the hook
   // takes the palette; over footage it is white.
-  const pal = PALETTES[r.palette ?? "forest"];
-  const [color, accent] = paper ? [GREEN, GREEN] : footage ? [WHITE, PALETTES.forest.accent] : [pal.text, pal.accent];
+  const pal = PALETTES[r.palette ?? "light"];
+  // Dark ground (footage, a black card, the forest stage): white with sage. Light stage: the palette.
+  const dark = footage || (shot.layout === "card" && !paper) || pal.name === "forest";
+  const [color, accent] = paper ? [GREEN, GREEN] : dark ? [WHITE, PALETTES.forest.accent] : [pal.text, pal.accent];
   const head = shot.layout === "full" && !shot.picture && !faceless ? faceRect({ ...r, split: "half" }, shot, time) : undefined;
   const face = head && { left: head.left, top: head.top + head.height * BROW, width: head.width, height: head.height * (1 - BROW) };
   const room = face ? face.top - 24 - HOOK.top : Infinity;
@@ -52,7 +54,7 @@ export const Hook: React.FC<{ r: Resolved; shot: ResolvedShot; time: number; fac
       >
         {hookParts(r.hook.text).map((p, i) =>
           i % 2 ? (
-            <span key={i} style={{ fontFamily: SERIF, fontStyle: "italic", fontWeight: 500, fontSize: "1.08em", lineHeight: HOOK.lineHeight / 1.08, letterSpacing: -1, color: accent }}>
+            <span key={i} style={{ color: accent }}>
               {p}
             </span>
           ) : (
