@@ -2,9 +2,9 @@
 // improves it and cuts breaths"). The original voice is kept as source/voice.original.wav and is what
 // gets sent, so a second run starts from the same place. Timing never changes: fillers and silence
 // come back as a cut list in build/auphonic/, not cut, so words and picture stay in sync.
-import { copyFileSync, existsSync, mkdirSync, openAsBlob, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openAsBlob, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ffmpeg, probeDuration, ROOT, type Log } from "./tools.ts";
+import { envValue, ffmpeg, probeDuration, type Log } from "./tools.ts";
 
 const API = "https://auphonic.com/api";
 const DONE = 3, ERROR = 2;
@@ -24,9 +24,7 @@ export const OUTPUTS = [
 ];
 
 function apiKey(): string {
-  const file = join(ROOT, ".env");
-  const line = existsSync(file) ? readFileSync(file, "utf8").match(/^AUPHONIC_API_KEY=(.+)$/m) : null;
-  const key = process.env.AUPHONIC_API_KEY ?? line?.[1]?.trim();
+  const key = envValue("AUPHONIC_API_KEY");
   if (!key) throw new Error("no Auphonic key: set AUPHONIC_API_KEY in .env");
   return key;
 }

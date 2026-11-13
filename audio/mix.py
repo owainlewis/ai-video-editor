@@ -113,9 +113,12 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
     effects = sfx.render(cfg.get("sfx", []), seconds, 220.0, library, youtube=cfg.get("canvas") == "youtube")
     sf.write(work / "sfx.wav", fit(effects * 0.5), SR, subtype="FLOAT")
 
+    # Reels: effects 6 dB louder than YouTube's (Owain, 2026-11-13: "quite quiet"); a placed sound
+    # now peaks about 10 dB under the voice instead of 16.
+    fx_db = -7.0 if cfg.get("canvas") == "youtube" else -1.0
     graph = (
         duck_graph(gain, music_db) + ";"
-        "[2:a]volume=-7dB[fx];"
+        f"[2:a]volume={fx_db}dB[fx];"
         "[v][duck][fx]amix=inputs=3:normalize=0,alimiter=limit=0.89:attack=3:release=60[mix]"
     )
     pre = work / "premaster.wav"

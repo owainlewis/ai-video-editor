@@ -37,9 +37,9 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | any other | `/api/library` | Returns `{ busy, clips }`. |
 | any | `/api/effects?canvas` | Returns the library cards from `effectList`: the house look on YouTube, the clean kit on reels. |
 | any | `/api/gallery` | Projects with a resolved plan and at least one visual, newest first, captions emptied. |
-| any | `/api/projects` | Project summaries, newest first: `slug`, `title`, `canvas`, `duration`, `status`, `modified`, `thumb`, `exported`, `review` (`approved` and `total` from `review.json` as it is). |
+| any | `/api/projects` | Project summaries, newest first: `slug`, `title`, `canvas`, `duration`, `status`, `modified`, `thumb`, `exported`, `review` (`approved` and `total` from `review.json` as it is), `approval` (reels only: `state` and `at`, else null). |
 | POST | `/api/projects/<slug>/delete` | Moves the project to `projects/.trash/`. |
-| GET | `/api/projects/<slug>?have` | `{ slug, status }` until ready, then the full project state, with `review`, `qc`, `mix` and `exportCheck`. |
+| GET | `/api/projects/<slug>?have` | `{ slug, status }` until ready, then the full project state, with `review`, `qc`, `mix`, `exportCheck` and `approval` (reels only: `state`, `ready`, `reason`, `record`, `folder`, `reveal`). |
 | GET | `/api/projects/<slug>/clips` | The project's bin. |
 | POST | `/api/projects/<slug>/clips?name` | Saves a clip to the bin, starts a clip job, returns `{ id }`. |
 | POST | `/api/projects/<slug>/assets?name` | Saves an asset, returns `{ path }`. |
@@ -64,6 +64,9 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | POST | `/api/projects/<slug>/review` | `{ id, hash, status?, comment? }`. Saves a decision on one review item. |
 | POST | `/api/projects/<slug>/note` | `{ t, text }` adds a timeline note; `{ id, text?, status?, remove? }` changes one. |
 | POST | `/api/projects/<slug>/review-send` | Starts Claude with every open note and change. |
+| POST | `/api/projects/<slug>/approve` | Copies a reel's current export and cover to the approved folder (`media/approve.ts`). Waits for the cover; returns `{ ok, record }`. |
+| POST | `/api/projects/<slug>/unapprove` | Moves the reel's approved files to the Trash and drops `approved.json`. |
+| POST | `/api/projects/<slug>/reveal` | Shows the approved video in Finder (`open -R`), or the folder when the file has moved on. |
 
 ## Invariants
 
@@ -75,6 +78,8 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 - `review` returns 409 when `hash` is not the item's current hash, and 404 for an id that is not a review item.
 - `review-send` returns 400 with nothing open and 409 while Claude is working. It marks open notes `sent` before Claude starts.
 - `qc`, `mix` and `render` return 409 while a job is running. `render` passes `--force` only when asked.
+- `approve` returns 409 while a job is running, and 409 with the reason when the export is not current, its check failed, or the project is not a reel. `unapprove` returns 404 for a reel that is not approved. `reveal` returns 501 off macOS (the editor shows the path instead) and 404 when neither the file nor the folder exists.
+- `approve` and `unapprove` send a `status` event, so the projects page and the editor reload.
 
 - Errors reply `{ error }`. A numeric `code` on the error becomes the HTTP status. Anything else is 500.
 - Project routes other than delete need a slug matching `/^[\w.-]+$/` and an existing `project.json`, or they return 404.
@@ -109,9 +114,10 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 - `finishSend` reads and deletes `review-replies.json`, which Claude writes.
 - `qc` and `mix` start detached jobs (`cli.ts qc <slug> --status --cached`, `cli.ts mix <slug> --status`) that report in `status.json`.
 
-- Watches `projects/` recursively and `library/broll/` for `index.json`.
+- Watches `projects/` recursively and `library/broll/` for `index.json`. A change to a project's `status.json` or `approved.json` sends a `status` event.
 - Holds in memory: event clients, debounce timers, the library busy flag and running Claude processes. A restart loses them.
 - Spawns `npx tsx cli.ts` detached for `ingest`, `clip`, `render` and `broll index`. Output goes to `<project>/job.log` or `library/broll/job.log`. Restarting the server does not stop them.
+- `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`) and `unapprove` moves files to the Trash. `reveal` spawns `open`.
 - Spawns `claude -p --output-format stream-json --verbose --permission-mode acceptEdits` in the repo root, with `--resume` when a session exists.
 - Reads and writes in a project: `edit.json`, `cut.json`, `chat.json`, `suggestions.json`, `variants.json`, `history/`, `assets/`, and `clips/<id>/status.json` (`POST clips`).
 - `GET /api/projects/<slug>` can write: the first version, asset thumbnails, `build/level.json` for each ready clip, and everything `resolveProject` writes. It is not read-only.

@@ -132,6 +132,19 @@ button.icon svg { width: 16px; height: 16px; display: block; }
 .card .state.busy { background: var(--warn-wash); color: var(--warn); }
 .card .state.failed { color: var(--error); }
 .card .state.done { color: var(--muted); }
+/* A reel's approval (app/Approval.tsx): blue when it is ready to approve, a blue dot once approved,
+   amber when it changed after. The same pill sits by the title in the editor. */
+.card .state.exported, .approval.exported { background: var(--accent-soft); color: var(--accent); }
+.card .state.approved, .approval.approved { color: var(--ink); }
+.card .state.approved::before, .approval.approved::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+.card .state.stale, .approval.stale { background: var(--warn-wash); color: var(--warn); }
+.approval { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: var(--raise); color: var(--muted); }
+/* The week's approved reels on the projects page: a line of words and a meter of seven. */
+.week { display: flex; align-items: center; gap: 12px; margin-top: -6px; color: var(--muted); font-size: 13px; }
+.week b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.week .meter { display: flex; gap: 3px; }
+.week .meter i { width: 18px; height: 4px; border-radius: 2px; background: var(--fill-2); }
+.week .meter i.on { background: var(--accent); }
 .card .name { font-weight: 600; font-size: 13px; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .about { display: flex; justify-content: space-between; gap: 8px; color: var(--faint); font-size: 12px; padding: 0 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .card .delete { position: absolute; top: 8px; right: 8px; opacity: 0; background: var(--panel); color: var(--ink-2); font-size: 12px; padding: 3px 9px; border-radius: 999px; }
@@ -416,7 +429,8 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .preflight .line > i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .preflight .line.todo > i { background: var(--warn); }
 .preflight .line.bad > i { background: var(--error); }
-.preflight .line > b { width: 56px; font-weight: 500; }
+.preflight .line > b { width: 64px; font-weight: 500; }
+.preflight .line .path { display: block; margin-top: 4px; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); word-break: break-all; user-select: all; }
 .preflight .line > span { flex: 1; min-width: 0; color: var(--ink-2); }
 .preflight .found { flex-basis: 100%; max-height: 180px; overflow-y: auto; padding-left: 18px; }
 

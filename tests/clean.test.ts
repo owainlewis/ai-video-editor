@@ -136,6 +136,34 @@ describe("clean plans", () => {
     expect(ev.filter((e) => e.kind === "key").length).toBeGreaterThan(3);
   });
 
+  it("whooshes a new graphic into the split, hits a huge beat, and stays quiet back on the face", () => {
+    const { shots } = resolveShots(
+      plan([
+        { at: "If", layout: "split", visual: { kind: "custom", name: "x" } },
+        { at: "having", layout: "split", visual: { kind: "custom", name: "y" } },
+        { at: "good", layout: "card", visual: { kind: "beats", items: [{ text: "CODE", size: "huge", at: "code" }, { text: "review", size: "small", at: "review" }] } },
+        { at: "tool is", layout: "full" },
+      ]),
+      words,
+      5,
+    );
+    const ev = cleanSfx(shots);
+    // Not on the first shot (the hook is there), and its peak lands on the cut.
+    expect(ev.filter((e) => e.kind === "whoosh").map((e) => e.t)).toEqual([shots[1].start - 0.18]);
+    expect(ev.filter((e) => e.kind === "impact").map((e) => e.t)).toEqual([shots[2].visual!.times![0]]);
+    expect(ev.filter((e) => e.t >= shots[3].start)).toEqual([]);
+  });
+
+  it("warns when a full-screen card holds over 4 s", () => {
+    const card = { at: "If", layout: "card", visual: { kind: "beats", items: [{ text: "A", at: "If" }] } };
+    const long = (rest: unknown[]) => {
+      const { shots } = resolveShots(plan([card, ...rest]), words, 5);
+      return lintClean(shots, 5, false).some((i) => /full-screen card holds/.test(i.message));
+    };
+    expect(long([])).toBe(true); // the card runs the whole 5 s
+    expect(long([{ at: "having", layout: "split", visual: { kind: "custom", name: "x" } }])).toBe(false);
+  });
+
   it("holds the hook to the first cut after 3 s, or its own words, and never past 5 s", () => {
     const at = (cuts: string[], hook: { text: string; until?: string }) => {
       const { shots } = resolveShots(plan(cuts.map((c) => ({ at: c, layout: "full" }))), words, 5);

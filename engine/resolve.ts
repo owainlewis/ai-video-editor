@@ -571,6 +571,9 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
     if (s.sfx === "riser") ev.push({ kind: "riser", t: s.start - 1, dur: 1, gain: 0.5, exact: true });
     else if (s.sfx) ev.push({ kind: s.sfx, t: s.start });
     else if (takesOver(s) && !takesOver(shots[i - 1])) ev.push({ kind: "thud", t: s.start, gain: 0.7, exact: true });
+    // A new graphic in the split's panel lands with a soft whoosh (Owain, 2026-11-13: the effects were
+    // "quite quiet and basic"; most cuts were silent). Never on a cut back to the face.
+    else if (i > 0 && s.layout === "split" && s.visual && !s.keep) ev.push({ kind: "whoosh", t: s.start - 0.18, gain: 0.45, exact: true }); // its peak, 0.2 s in, on the cut
     if (s.hit) ev.push({ kind: "impact", t: s.hit.at, gain: 0.6, exact: true });
     if (s.chip) typing(s.chip.at + 0.25, s.chip.name.length, 1 / 0.035);
     const v = s.visual;
@@ -595,7 +598,8 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
       for (const t of b.marks) ev.push({ kind: "blip", t, gain: 0.6, exact: true });
     }
     const each = v.kind === "image" ? "blip" : v.kind === "logos" ? "chime" : v.kind === "list" || v.kind === "beats" ? "pop" : null;
-    if (each) times.forEach((t) => ev.push({ kind: each, t, gain: 0.6, exact: true }));
+    // A huge card beat lands with a low hit under it; the smaller ones tick.
+    if (each) times.forEach((t, n) => ev.push(v.kind === "beats" && v.items[n]?.size === "huge" ? { kind: "impact", t, gain: 0.5, exact: true } : { kind: each, t, gain: 0.6, exact: true }));
     // A click or a mark on a recorded screen; the file spans the reel, so only this shot's.
     if (v.kind === "video") for (const t of v.ticks ?? []) if (t >= s.start && t < s.end) ev.push({ kind: "pop", t, gain: 0.45, exact: true });
   });
@@ -605,6 +609,9 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
 
 // The clean style's house rules, from the samples Owain chose (2026-11-06). `faceless`: a reel with
 // no footage of the speaker (a voiced script), so every picture comes from b-roll.
+// The longest a full-screen text card holds before the reel feels slow.
+export const CARD_MAX = 4;
+
 export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boolean, hook?: { text: string }, cover?: { title: string }): Issue[] => {
   const issues: Issue[] = [...lintHook(hook), ...lintCover(cover)];
   shots.forEach((s, i) => {
@@ -620,6 +627,8 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
     // A card whose beats keep landing is not holding still.
     const beatsMove = v?.kind === "beats" && [s.start, ...(v.times ?? []), s.end].every((t, k, a) => k === 0 || t - a[k - 1] <= 3);
     if (len > 7 && s.layout !== "split" && !beatsMove) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; the cinematic references cut about every 3 s` });
+    // Owain, 2026-11-13: "our reels are a tiny bit slow... a long section with black screen and text".
+    if (s.layout === "card" && len > CARD_MAX) issues.push({ level: "warn", message: `${label}: a full-screen card holds ${len.toFixed(1)}s; cut back to the split within ${CARD_MAX} s` });
     const moments = v?.kind === "custom" ? v.times : v?.kind === "flow" ? flowMoments(v, s.start, v.times) : v?.kind === "code" ? codeMoments(v, s.start, v.times) : undefined;
     if (moments?.length && s.layout !== "card") {
       const beats = [s.start, ...moments.filter((t) => t < s.end), s.end];

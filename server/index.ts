@@ -19,6 +19,7 @@ import { qcState } from "../media/qc.ts";
 import { mixState } from "../media/previewmix.ts";
 import { planIndex } from "../engine/insert.ts";
 import { trashProject } from "./trash.ts";
+import { approval, approve, approvedFolder, loadRecord, unapprove } from "../media/approve.ts";
 import { changeParts, dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
@@ -113,7 +114,8 @@ export async function startServer(port = 4747) {
     if (parts.length === 4 && parts[1] === "clips" && parts[3] === "status.json") return broadcast({ type: "status", slug: parts[0] });
     if (parts.length !== 2) return;
     if (parts[1] === "edit.json" || parts[1] === "cut.json") planChanged(parts[0]);
-    if (parts[1] === "status.json") broadcast({ type: "status", slug: parts[0] });
+    // status.json: a job's progress. approved.json: a reel approved or unapproved, from here or the CLI.
+    if (parts[1] === "status.json" || parts[1] === "approved.json") broadcast({ type: "status", slug: parts[0] });
     if (parts[1] === "suggestions.json" || parts[1] === "variants.json") broadcast({ type: "plan", slug: parts[0] });
   });
 
@@ -217,6 +219,8 @@ export async function startServer(port = 4747) {
             thumb: existsSync(join(dir, "checks/frame.jpg")) ? `${d.name}/checks/frame.jpg` : null,
             exported: existsSync(join(dir, "renders/final.mp4")),
             review: decided.length ? { approved: decided.filter((x) => x.status === "approved").length, total: decided.length } : null,
+            // A reel's approval (media/approve.ts): its state, and when it was approved.
+            approval: plan && plan.canvas !== "youtube" ? (({ state, record }) => ({ state, at: record?.at ?? null }))(approval(dir)) : null,
           };
         })
         .sort((a, b) => b.modified - a.modified);
@@ -277,6 +281,8 @@ export async function startServer(port = 4747) {
           items: qc.items.map((x) => ({ ...x, sheet: `${slug}/checks/qc/${x.sheet}` })),
         },
         exportCheck: existsSync(checkFile) ? readJson(checkFile) : null,
+        // A reel's approval: draft, exported (ready), approved or stale, and where its files went.
+        approval: readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube" ? null : { ...approval(dir), folder: approvedFolder(), reveal: process.platform === "darwin" },
         // The sound as the export will mix it, when it has been mixed for the editor.
         mix: resolved ? mixState(dir, slug) : null,
         plan: readFileSync(join(dir, "edit.json"), "utf8"),
@@ -406,6 +412,26 @@ export async function startServer(port = 4747) {
       mix: () => {
         idle();
         job(slug, ["mix", slug, "--status"]);
+      },
+      // Approving a reel copies its export and draws its cover (a few seconds); the request waits.
+      approve: async () => {
+        idle();
+        const record = await approve(projects, slug);
+        broadcast({ type: "status", slug });
+        return { ok: true, record };
+      },
+      unapprove: () => {
+        unapprove(projects, slug);
+        broadcast({ type: "status", slug });
+      },
+      // Show the approved video in Finder, or the folder when the file has been moved on.
+      reveal: () => {
+        if (process.platform !== "darwin") throw Object.assign(new Error(`showing files works on macOS only; the folder is ${approvedFolder()}`), { code: 501 });
+        const video = loadRecord(dir)?.video;
+        const folder = approvedFolder();
+        if (video && existsSync(video)) spawn("open", ["-R", video], { stdio: "ignore", detached: true }).unref();
+        else if (existsSync(folder)) spawn("open", [folder], { stdio: "ignore", detached: true }).unref();
+        else throw Object.assign(new Error(`${folder} does not exist yet`), { code: 404 });
       },
       review: ({ id, hash, status, comment }) => {
         setItem(dir, plan(), timeline(dir).words, id, hash, { status, comment });

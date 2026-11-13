@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { thisWeek, WEEKLY_TARGET } from "../engine/approve";
 import { api, clock, type ProjectSummary } from "./api";
+import { LABEL } from "./Approval";
 import { confirmIt } from "./dialog";
 import { NewProject } from "./NewProject";
 import { ago, Side } from "./ui";
@@ -21,6 +23,9 @@ export const Home: React.FC = () => {
     return api.events((e) => e.type === "status" && load());
   }, []);
 
+  // The week's reels: how many were approved since Monday, against the target.
+  const reels = (projects ?? []).filter((p) => p.approval).length;
+  const approved = thisWeek((projects ?? []).map((p) => p.approval?.at));
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = (projects ?? []).filter((p) => (kind === "all" || p.canvas === kind) && words.every((w) => `${p.title} ${p.slug}`.toLowerCase().includes(w)));
 
@@ -46,6 +51,7 @@ export const Home: React.FC = () => {
               </>
             )}
           </div>
+          {reels > 0 && <Week approved={approved} />}
           {error && <p className="error">{error}</p>}
           {projects?.length === 0 && (
             <div className="empty">
@@ -76,13 +82,30 @@ export const Home: React.FC = () => {
   );
 };
 
-// Where a project has got to, in a word or two, or nothing while it is simply being edited.
+// This week (Monday to Sunday): approved reels against the target, in words and as a meter.
+const Week: React.FC<{ approved: number }> = ({ approved }) => (
+  <div className="week" title="Reels approved since Monday">
+    <span>
+      This week: <b>{approved}</b> of {WEEKLY_TARGET} approved
+    </span>
+    <span className="meter" aria-hidden>
+      {Array.from({ length: WEEKLY_TARGET }, (_, k) => (
+        <i key={k} className={k < approved ? "on" : ""} />
+      ))}
+    </span>
+  </div>
+);
+
+// Where a project has got to, in a word or two. A reel says where its approval is; a YouTube video
+// says nothing while it is simply being edited.
 const state = (p: ProjectSummary): { text: string; cls: string } | null =>
   p.status?.error
-    ? { text: "Import failed", cls: "failed" }
+    ? { text: p.status.stage === "Failed" ? "Import failed" : p.status.stage, cls: "failed" }
     : p.status && !p.status.done
       ? { text: `${p.status.stage}…`, cls: "busy" }
-      : p.exported
+      : p.approval
+        ? { text: LABEL[p.approval.state], cls: p.approval.state }
+        : p.exported
         ? { text: "Exported", cls: "done" }
         : p.review?.approved
           ? { text: `${p.review.approved} of ${p.review.total} approved`, cls: "" }

@@ -4,6 +4,7 @@
 //   npm run studio -- clip <slug> <file> [--id c] [--name n]   add a clip to a project's bin (cut it in from the editor)
 //   npm run studio -- check <slug>                 resolve the plan, print the shots and every issue
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
+//   npm run studio -- cover <slug> [--prompt]     the reel's cover: renders/cover.jpg and cover-grid.jpg, or --prompt for the Higgsfield kit
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
@@ -17,7 +18,10 @@
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 //   npm run studio -- render <slug> --part <name>  the same for one part only, to renders/part-<name>.mp4
 //   npm run studio -- render <slug> --from <s> --to <s>   the same for a stretch of the timeline
-import { existsSync } from "node:fs";
+//   npm run studio -- approve <slug>              copy a reel's current export and cover to ~/Reels/Approved (STUDIO_APPROVED)
+//   npm run studio -- unapprove <slug>            move them to the Trash again
+//   npm run studio -- approved                    approved reels, newest first, and this week's count
+import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { cleanProject } from "./media/auphonic.ts";
@@ -26,14 +30,18 @@ import { resolveProject } from "./media/project.ts";
 import { record } from "./media/record.ts";
 import { capture } from "./media/capture.ts";
 import { previewMix } from "./media/previewmix.ts";
-import { renderFinal, stills } from "./media/render.ts";
+import { coverStill, renderFinal, stills } from "./media/render.ts";
+import { coverKit } from "./media/coverkit.ts";
+import { Edit } from "./engine/schema.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
 import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
-import { readJson, ROOT, writeJson } from "./media/tools.ts";
+import { readJson, ROOT, run, writeJson } from "./media/tools.ts";
+import { approve, approvedFolder, listApproved, unapprove, weekCount } from "./media/approve.ts";
+import { day } from "./engine/approve.ts";
 import { startServer } from "./server/index.ts";
 
 const args = process.argv.slice(2);
@@ -252,8 +260,50 @@ async function main() {
       }
       return;
     }
+    case "cover": {
+      // The cover as images to upload as the reel's cover: full size, and the 3:4 crop the grid shows.
+      const slug = need(target);
+      // --prompt: the kit for Higgsfield (portrait, logos, prompt) instead of drawing it here.
+      if (args.includes("--prompt")) {
+        const plan = readJson<{ cover?: unknown }>(join(projects, slug, "edit.json"));
+        const cover = Edit.shape.cover.parse(plan.cover);
+        if (!cover) throw new Error(`${slug} has no cover in its plan`);
+        const kit = await coverKit(join(projects, slug), cover);
+        console.log(`${kit}\n\n${readFileSync(join(kit, "prompt.txt"), "utf8")}\nMake it in Higgsfield with portrait.* and the logo files attached, then save it as projects/${slug}/cover.png; approve uses it.`);
+        return;
+      }
+      const file = join(projects, slug, "renders/cover.jpg");
+      mkdirSync(join(projects, slug, "renders"), { recursive: true });
+      await coverStill(projects, slug, file, log);
+      const grid = join(projects, slug, "renders/cover-grid.jpg");
+      run("ffmpeg", ["-v", "error", "-y", "-i", file, "-vf", "crop=1080:1440:0:240", "-q:v", "2", grid], { log });
+      console.log(`${file}\n${grid}`);
+      return;
+    }
+    case "approve": {
+      const slug = need(target);
+      const r = await approve(projects, slug, { log });
+      console.log(`Approved ${slug}:\n  ${r.video}\n  ${r.cover}`);
+      const w = weekCount(projects);
+      console.log(`This week: ${w.count} of ${w.target} approved.`);
+      return;
+    }
+    case "unapprove": {
+      const r = unapprove(projects, need(target));
+      console.log(`Moved to the Trash:\n  ${r.video}\n  ${r.cover}`);
+      return;
+    }
+    case "approved": {
+      const list = listApproved(projects);
+      const w = weekCount(projects);
+      if (!list.length) console.log(`No approved reels yet. They go to ${approvedFolder()}.`);
+      for (const { slug, record, state } of list)
+        console.log(`  ${day(new Date(record.at))}  ${record.title}  (${slug})${state === "stale" ? "  OUT OF DATE: changed since it was approved" : ""}\n              ${record.video}`);
+      console.log(`\nThis week: ${w.count} of ${w.target} approved.`);
+      return;
+    }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, capture <slug> <url>, render <slug> [--part <name> | --from <s> --to <s>] [--force]");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, capture <slug> <url>, render <slug> [--part <name> | --from <s> --to <s>] [--force], approve <slug>, unapprove <slug>, approved");
   }
 }
 

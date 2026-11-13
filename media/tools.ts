@@ -1,6 +1,6 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +40,16 @@ export const hasHardwareH264 = () =>
 export const probeDuration = (file: string) =>
   parseFloat(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));
 
+// Integrated loudness of a file's sound, in LUFS (NaN when it has none).
+export function loudness(file: string): number {
+  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
+  return parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(log.slice(log.lastIndexOf("Summary")))?.[1] ?? "NaN");
+}
+
+// How long a file's first sound stream runs, in seconds (NaN when it has none).
+export const probeAudioDuration = (file: string) =>
+  parseFloat(execFileSync("ffprobe", ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));
+
 export const probeSize = (file: string): [number, number] => {
   const [w, h] = execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file], { encoding: "utf8" })
     .trim()
@@ -55,6 +65,15 @@ export const probeRate = (file: string): [number, number] => {
     .map(Number);
   return [num, den || 1];
 };
+
+// A setting from the environment, else from the repo's .env (NAME=value lines).
+export function envValue(name: string): string | undefined {
+  if (process.env[name]) return process.env[name];
+  const file = join(ROOT, ".env");
+  if (!existsSync(file)) return undefined;
+  const line = readFileSync(file, "utf8").match(new RegExp(`^${name}=(.*)$`, "m"));
+  return line?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
+}
 
 export const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8"));
 

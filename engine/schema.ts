@@ -500,9 +500,17 @@ export const Edit = z.object({
   // to the first cut after the first shot or 3 s, whichever is later, and never past 5 s.
   hook: z.object({ text: z.string().min(1), until: Anchor.optional() }).optional(),
   // The clean style's cover (Owain, 2026-11-11): frame 0 is a clean card for the Instagram feed, Owain's
-  // blank card (library/covers/<image>.png or .jpg) with the title over it. No logos: Owain, 2026-11-11,
-  // "they look bad. Just text for now". Instagram's default cover is the first frame.
-  cover: z.object({ title: z.string().min(1), image: z.string().default("owain") }).optional(),
+  // blank card (library/covers/<image>.png or .jpg) with the title over it. Instagram's default cover is
+  // the first frame. `logos` (2026-11-13, after a cover Owain made with an image model): up to two real
+  // logos from library/logos in angled glass tiles beside his head, a name or { logo, name } with a label
+  // under it; with logos the title moves to the top. `npm run studio -- cover <slug>` writes it as an image.
+  cover: z
+    .object({
+      title: z.string().min(1),
+      image: z.string().default("owain"),
+      logos: z.array(z.union([z.string(), z.object({ logo: z.string(), name: z.string().optional() })])).max(2).default([]),
+    })
+    .optional(),
   // Where the speaker's face is in the source footage, as fractions of its frame:
   // centre x, centre y, and head height (crown to chin). Used to frame every speaker layout.
   // Required for footage; script projects (no footage) use the placeholder's own.
@@ -623,7 +631,7 @@ export type Resolved = {
   // The clean style's text hook, from the first frame to `until`.
   hook?: ResolvedHook;
   // The cover on frame 0: the card's file in the project.
-  cover?: { title: string; image: string };
+  cover?: { title: string; image: string; logos?: { src: string; name?: string }[] };
   chunks: Chunk[];
   sfx: SfxEvent[];
 };

@@ -10,6 +10,7 @@ import { BeatBar } from "./Beats";
 import { Clock, playhead, usePlayhead } from "./playhead";
 import { ask } from "./dialog";
 import { Preflight } from "./Preflight";
+import { ApprovalBadge, useApproval } from "./Approval";
 import { useProject } from "./project";
 import { KeysButton, RedoIcon, ThemeSwitch, UndoIcon } from "./ui";
 
@@ -39,13 +40,22 @@ export const playable = (r: Resolved, mix?: string): Resolved => ({
   ...(mix && r.cut ? { cut: r.cut.map((c) => ({ ...c, audio: undefined })) } : {}),
 });
 
-// Voice or Mix: what the player sounds like. Mix is the export's own mix of the plan as it is,
-// made on request (it takes a few seconds on a reel, longer on a long video) and remade when the
-// plan's sound has changed.
+// Voice or Mix: what the player sounds like. Mix is the export's own mix of the plan as it is (a
+// few seconds on a reel, longer on a long video). While Mix is picked it is made, and remade, on
+// its own once the plan has been still for a moment: Owain never heard the music or the effects in
+// the editor because the mix waited for a click (2026-11-13). One try per plan, so a mix that fails
+// is not retried in a loop.
 export const SoundPick: React.FC<{ slug: string; p: Project; on: boolean; set: (on: boolean) => void }> = ({ slug, p, on, set }) => {
   const [error, setError] = useState("");
   const running = !!p.status && !p.status.done;
   const make = () => api.post(slug, "mix").then(() => setError("")).catch((e) => setError(String(e.message)));
+  const tried = useRef<unknown>(null);
+  const stale = !p.mix || !p.mix.fresh;
+  useEffect(() => {
+    if (!on || !stale || running || !p.resolved || tried.current === p.resolved) return;
+    const t = setTimeout(() => ((tried.current = p.resolved), make()), 1500);
+    return () => clearTimeout(t);
+  }, [on, stale, running, p.resolved]);
   return (
     <div className="seg sound" title={error || "What the player sounds like: the voice alone, or the mix with music and sound effects"}>
       <button className={!on || !p.mix ? "on" : ""} onClick={() => set(false)}>Voice</button>
@@ -71,6 +81,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   // A note being written for the review (M): the time it was started at.
   const [noting, setNoting] = useState<number | null>(null);
   const [preflight, setPreflight] = useState(false);
+  const approve = useApproval(slug, setDropError);
   // The mix by default, so the sound effects are heard; the voice alone until a mix exists.
   const [mixed, setMixed] = useState(true);
   const mix = mixed && p?.mix ? p.mix.file : undefined;
@@ -255,6 +266,9 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   })();
   const rendering = p.status && !p.status.done;
   const review = p.review;
+  // A reel whose final export is current is approved from here; Approve is then the next step.
+  const approval = p.approval;
+  const toApprove = !!approval?.ready && approval.state !== "approved" && !rendering;
   // Notes not yet closed, where their words are now.
   const notes = (review?.review.notes ?? []).filter((n) => n.status !== "done").map((n) => ({ ...n, t: noteTime(n, p.words!) }));
 
@@ -262,6 +276,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     <Shell
       title={r.title}
       kind={r.canvas === "youtube" ? "YouTube" : "Reel"}
+      badge={approval && <ApprovalBadge a={approval} />}
       keys={KEYS}
       actions={
         <>
@@ -283,7 +298,17 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
               Download
             </a>
           )}
-          <button className="primary" onClick={() => setPreflight(true)} disabled={!!rendering} title={errors.length ? "The plan has errors; see what is in the way" : "Check the video is ready, then export"}>
+          {approval?.record && approval.reveal && approval.state === "approved" && (
+            <button onClick={approve.reveal} title={approval.record.video}>
+              Show in Finder
+            </button>
+          )}
+          {toApprove && (
+            <button className="primary" disabled={!!approve.busy} onClick={approve.approve} title={`Copy the export and its cover to ${approval!.folder}`}>
+              {approve.busy === "approve" ? "Approving…" : approval!.state === "stale" ? "Approve again" : "Approve"}
+            </button>
+          )}
+          <button className={toApprove ? "" : "primary"} onClick={() => setPreflight(true)} disabled={!!rendering} title={errors.length ? "The plan has errors; see what is in the way" : "Check the video is ready, then export"}>
             {rendering ? p.status!.stage : "Export"}
           </button>
         </>
@@ -395,7 +420,7 @@ export const NoteBox: React.FC<{ at: number; onSave: (text: string) => void; onC
   );
 };
 
-export const Shell: React.FC<{ title: string; kind?: string; keys?: [string, string][]; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, kind, keys, actions, children }) => (
+export const Shell: React.FC<{ title: string; kind?: string; badge?: React.ReactNode; keys?: [string, string][]; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, kind, badge, keys, actions, children }) => (
   <div className="app">
     <header className="bar">
       <a className="brand" href="#/" title="All projects">Studio</a>
@@ -406,6 +431,7 @@ export const Shell: React.FC<{ title: string; kind?: string; keys?: [string, str
           {title}
           {kind && <span className="kind">{kind}</span>}
         </span>
+        {badge}
       </span>
       <span className="spacer" />
       {actions}

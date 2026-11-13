@@ -61,13 +61,13 @@ Owain's topics are Claude Code, Codex, OpenAI, Google, GitHub, Grok Bot, DeepSee
 5. The hook: `"hook": { "text": "Give AI agents *their own email*." }`, six words at most, two lines at most, from frame 1. The marked phrase is set apart by colour. It leaves on a hard cut on the first cut after 3 s (`until` to choose the words), never past 5 s.
 6. Open on a split under the hook, never full frame on Owain's face. End on a card, never on his face.
 7. The split is the main view, half the reel or more: the visual on top, a caption band in the middle with a hairline, the footage below (45 / 10 / 45). Captions never sit on dark footage.
-8. The other layouts punctuate it: `full` (Owain, or b-roll from `picture`), `card`, `diagram` (full screen, a fifth of the reel at most, never two in a row) and `over` (a diagram in a glass panel over a full-frame picture). Hard cuts between shots, no transitions.
+8. The other layouts punctuate it (a full-screen `card` holds 4 s at most): `full` (Owain, or b-roll from `picture`), `card`, `diagram` (full screen, a fifth of the reel at most, never two in a row) and `over` (a diagram in a glass panel over a full-frame picture). Hard cuts between shots, no transitions.
 9. Something on screen changes every 2 seconds at most.
 10. The light palette is the default: a near-white stage with a faint grid, deep green type and lines, one green accent, black cards now and then. `"palette": "forest"` (dark green) only when asked.
 11. Helvetica only, one type style (`effects/clean/text.tsx`). Mono only for commands and file names.
 12. Cut every pause between words to about 0.12 s, each join in silence (`build/level.json`, not Whisper's word times).
-13. Music: "Odd Numbers" (Curtis Cole) from 34 s into the track, 13 LU under the voice.
-14. Sounds (`cleanSfx`) only on what the eye sees land: a whoosh as a graphic takes over, a low hit under a hit word, a tick per item, a click per marker, keys under typing. Nothing on a cut back to Owain.
+13. Music: "B2B" (Rocket Jr, `reels/ES_B2B - Rocket Jr.mp3`) from 60 s into the track, where it holds steady, 11 LU under the voice. A new reel starts with it (`REEL_MUSIC`). The alternatives, in order: "Call to Action" (Alon Ohana) from 20 s, and "Odd Numbers" (Curtis Cole) from 34 s, both 11 LU under.
+14. Sounds (`cleanSfx`) only on what the eye sees land: a whoosh as a graphic takes over or a new one lands in the split, a low hit under a hit word or a huge card beat, a tick per item, a click per marker, keys under typing. Nothing on a cut back to Owain. Effects sit about 10 dB under the voice, clearly heard.
 15. A faceless reel needs b-roll from `picture` on every `full`, `split` and `over` shot. A picture never loops. Slow motion only from 60 fps sources.
 
 ## YouTube videos
@@ -130,6 +130,15 @@ Owain reviews every graphic in the editor before he exports (`#/p/<slug>/review`
 - QC in the editor is `qc <slug> --cached`: unchanged graphics keep their last result. Exports always measure afresh. `checks/qc/report.json` lists every graphic's issues under its id.
 - `npm run studio -- mix <slug>` mixes the sound as the export will, for the editor's player. It never touches `build/mix.wav`.
 - Export opens a pre-flight sheet (plan errors, QC, review, open notes). Only Owain exports with something still open.
+
+## Approving reels
+
+Owain records about ten ideas a week, we edit them, and about seven get approved. Approved reels go to one folder, `~/Reels/Approved` (`STUDIO_APPROVED` in `.env` or the environment), and he uploads them from there to his content system.
+
+- `npm run studio -- approve <slug>` copies `renders/final.mp4` there as `<YYYY-MM-DD> <title>.mp4`, with `<same name> cover.jpg` (frame 0 at full size), and records it in `approved.json`. It refuses unless the export is newer than `edit.json` and `cut.json` and `checks/export-check.json` has no errors. A name taken by another reel gets ` (2)`; approving again replaces only that reel's own files.
+- `npm run studio -- unapprove <slug>` moves its files to the Trash. `npm run studio -- approved` lists them, newest first, with this week's count against 7 (Monday to Sunday).
+- In the editor a reel is Draft, Exported (ready: the Approve button), Approved, or Out of date (the plan changed after it was approved). The projects page shows each reel's state and "This week: N of 7 approved".
+- Only Owain approves. Never approve, unapprove or write to the approved folder unless he asks.
 
 ## Notes from Owain
 

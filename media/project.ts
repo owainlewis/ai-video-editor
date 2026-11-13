@@ -72,7 +72,13 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       const rel = `assets/cover-${plan.cover.image}.jpg`;
       if (!existsSync(join(dir, rel)) || statSync(join(dir, rel)).mtimeMs < statSync(from).mtimeMs)
         mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1440:force_original_aspect_ratio=increase,crop=1080:1440:(iw-1080)/2:0", "-q:v", "2", join(dir, rel)]);
-      cover = { title: plan.cover.title, image: `${slug}/${rel}` };
+      const logos = plan.cover.logos.flatMap((l) => {
+        const name = typeof l === "string" ? l : l.logo;
+        const src = useLogo(name);
+        if (!src) issues.push({ level: "error", message: `the cover's logo "${name}" is not in library/logos` });
+        return src ? [{ src, name: typeof l === "string" ? undefined : l.name }] : [];
+      });
+      cover = { title: plan.cover.title, image: `${slug}/${rel}`, ...(logos.length ? { logos } : {}) };
     }
   }
   const onCamera = youtube ? cameraOnTimeline(dir, cut) : undefined;

@@ -29,14 +29,15 @@ Routes are read from the hash in `main.tsx`:
 | `api.remove(slug)` | POST `/api/projects/<slug>/delete`. The caller asks first with `confirmIt` |
 | `api.events(on)` | EventSource on `/api/events`, returns a close function |
 
-Also `clock(t)` and the types `Issue`, `ChatMessage`, `Status`, `Asset`, `LibraryClip`, `Suggestion`, `Effect`, `Version`, `Take`, `Variants`, `BinClip`, `ProjectSummary`, `Project`, `Event`.
+Also `clock(t)` and the types `Approval`, `ApprovalState`, `Issue`, `ChatMessage`, `Status`, `Asset`, `LibraryClip`, `Suggestion`, `Effect`, `Version`, `Take`, `Variants`, `BinClip`, `ProjectSummary`, `Project`, `Event`.
 
-The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `redo`, `render`, `parts`, `drop`, `place`, `chat`, `suggest`, `decide`, `stop`, `variants`, `variant-use`, `variant-clear`, `review`, `note`, `review-send`, `qc`, `mix`. `api.post` is typed by `engine/api.ts`: a wrong payload does not compile.
+The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `redo`, `render`, `parts`, `drop`, `place`, `chat`, `suggest`, `decide`, `stop`, `variants`, `variant-use`, `variant-clear`, `review`, `note`, `review-send`, `qc`, `mix`, `approve`, `unapprove`, `reveal`. `api.post` is typed by `engine/api.ts`: a wrong payload does not compile.
 
 ### Components
 
 - `Editor` (`slug`), `Review` (`slug`), `Preflight` (`slug`, `p`, `onClose`), `Home`, `NewProject` (`onClose`), `Gallery`, `Tile`, `BeatBar`, `NoteBox`, `SoundPick`, `Shell`.
 - `dialog.tsx`: `ask(q)` resolves to the text typed or null, `confirmIt(q)` to true or false; `Dialogs` is mounted once in `main.tsx` and draws the one that is open. The app never calls the browser's `prompt`, `confirm` or `alert`.
+- `Approval.tsx`: `ApprovalBadge` (`a`), the pill by the title; `ApprovalLine` (`slug`, `a`, `running`, `onError`), the line on the export sheet; `useApproval(slug, onError)` (`approve`, `unapprove`, `reveal`, `busy`); `explain(a)`, `LABEL`, `shortDate`.
 - `ui.tsx`: `ThemeSwitch`, `KeysButton` (`keys`), `UndoIcon`, `RedoIcon`, `ago(ms)`.
 - `project.ts`: `useProject(slug)` loads a project and keeps it current. `playhead.tsx`: `playhead` (`get`, `set`, `subscribe`), `usePlayhead(select?)`, `Clock`. `Preflight.tsx` also exports `preflight(p)`, the lines of the sheet.
 - `Timeline`, `Inspector` and `Library`: props are in their files. `Editor` is the only parent.
@@ -99,7 +100,8 @@ Handled in `Review`, on `window`:
 - One dialog shows at a time; asking for another cancels the first. Enter takes the answer, Escape or a click outside cancels, and keys pressed in a dialog do not reach the page behind it. A dialog whose action cannot be undone opens with the focus on Cancel.
 - Rejecting a suggestion asks for an optional reason; cancelling that dialog leaves the suggestion pending.
 - Colours come only from the tokens at the top of `style.css`, each a `light-dark()` pair. No rule or component names a colour of its own, except things drawn on the video (the phone frame, labels on thumbnails). With no `data-theme` the page follows the system.
-- `Home` shows a card per project from the summary (`thumb`, `exported`, `review`, `modified`), filtered by a search box and a format switch. Delete is on the card, not in the editor's header.
+- `Home` shows a card per project from the summary (`thumb`, `exported`, `review`, `approval`, `modified`), filtered by a search box and a format switch. Delete is on the card, not in the editor's header. A reel's card shows its approval state (Draft, Exported, Approved, Out of date) unless a job is running or failed. With any reel, the page shows "This week: N of 7 approved", counted Monday to Sunday from each reel's approval time (`engine/approve.ts`).
+- A reel's approval: the editor shows `ApprovalBadge` by the title. When the final export is current and not yet approved (Exported, or Out of date after a new export), Approve is the header's filled button and Export is not. Approved shows Show in Finder when the server can (`reveal`); otherwise the export sheet shows the path. The export sheet's Approval line sits apart from the pre-flight lines and never changes whether the export is ready. Unapprove asks first.
 - A sentence on the Said track narrower than 44 px is drawn as a mark, without its words.
 - The playhead's time is not React state. `Editor` writes it to the `playhead` store on every frame; only `Clock`, the playhead line, the lit sentence, the lit word in the script and the current beat subscribe. Handlers read `playhead.get()`.
 - The picked graphic is a shot id, not a start time. `Inspector` saves by id, and the server writes the id into the plan when the anchor changes, so the inspector stays on the shot.

@@ -1,10 +1,11 @@
 // The editor's view of the server API (server/index.ts).
 import type { ActionInput, ActionName } from "../engine/api";
+import type { ApprovalRecord, ApprovalState } from "../engine/approve";
 import type { Issue } from "../engine/resolve";
 import type { Item, Review } from "../engine/review";
 import type { CutPlan, Resolved, Word } from "../engine/schema";
 
-export type { Issue };
+export type { ApprovalState, Issue };
 export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
 export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
@@ -17,7 +18,14 @@ export type Take = { id: string; label: string; reason?: string; shot: Record<st
 export type Variants = { start: number; note?: string; items: Take[] };
 // A clip in the project's bin. "main" is the one the project was made from.
 export type BinClip = { id: string; name: string; duration: number; status: Status; ready: boolean };
-export type ProjectSummary = { slug: string; title: string; canvas: string; duration?: number; status: Status; modified: number; thumb: string | null; exported: boolean; review: { approved: number; total: number } | null };
+export type ProjectSummary = {
+  slug: string; title: string; canvas: string; duration?: number; status: Status; modified: number; thumb: string | null; exported: boolean; review: { approved: number; total: number } | null;
+  // Reels only: where approval has got to, and when it was approved (media/approve.ts).
+  approval: { state: ApprovalState; at: string | null } | null;
+};
+// A reel's approval (engine/approve.ts). `ready`: the final export is current and passed its check.
+// `reason` says why not, or what the state means. `reveal`: the server can show files in Finder.
+export type Approval = { state: ApprovalState; ready: boolean; reason: string; record: ApprovalRecord | null; folder: string; reveal: boolean };
 // Review before render (engine/review.ts): the decisions and notes, the items they are about, and
 // how many notes and changes are waiting to go to Claude.
 export type ReviewState = { review: Review; items: Item[]; counts: { approved: number; change: number; waiting: number }; open: number };
@@ -50,6 +58,7 @@ export type Project = {
   review?: ReviewState | null;
   qc?: Qc | null;
   exportCheck?: ExportCheck | null;
+  approval?: Approval | null;
   // The sound as the export will mix it (media/previewmix.ts). `fresh`: nothing it is made from has changed since.
   mix?: { file: string; at: number; fresh: boolean } | null;
 };

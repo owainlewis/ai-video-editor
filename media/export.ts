@@ -11,7 +11,7 @@ import { frameWindow, overlayEnable, type Preview, rangesInWindow, sectionFrames
 import { type Issue, lastKept } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { prepareExport } from "./render.ts";
-import { ffmpegProgress, hasHardwareH264, type Log, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
+import { ffmpegProgress, hasHardwareH264, type Log, loudness, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
 
 export type Section = { start: number; end: number; alpha: boolean };
 
@@ -150,8 +150,7 @@ export function verifyExport(original: string, out: string, files: { file: strin
       issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
     }
   }
-  const loud = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", out, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
-  const lufs = parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(loud.slice(loud.lastIndexOf("Summary")))?.[1] ?? "NaN");
+  const lufs = loudness(out);
   if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
   return { issues, lufs, sections: files.length, size: `${ew}x${eh}` };
 }

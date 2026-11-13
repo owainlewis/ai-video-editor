@@ -48,9 +48,9 @@ export const Review: React.FC<{ slug: string }> = ({ slug }) => {
   const player = useRef<PlayerRef>(null);
   const field = useRef<HTMLTextAreaElement>(null);
 
-  // The review plays the mix when there is one: it is the last look before an export.
+  // The review plays the mix (made on its own, see SoundPick): it is the last look before an export.
   const [picked, setMixed] = useState<boolean | null>(null);
-  const mixed = picked ?? !!p?.mix?.fresh;
+  const mixed = picked ?? true;
   const mix = mixed && p?.mix ? p.mix.file : undefined;
   const r = useMemo(() => (p?.resolved ? playable(p.resolved, mix) : null), [p?.resolved, mix]);
   const state = p?.review;

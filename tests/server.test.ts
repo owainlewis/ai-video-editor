@@ -99,6 +99,9 @@ describe("import", () => {
   it("starts landscape footage as a YouTube video and portrait as a reel", () => {
     expect(Edit.parse(starterPlan("demo", words, [3840, 2160]))).toMatchObject({ canvas: "youtube" });
     expect(Edit.parse(starterPlan("demo", words, [1080, 1920]))).toMatchObject({ canvas: "reel" });
+    // A new reel gets the B2B bed; YouTube comes without music.
+    expect(Edit.parse(starterPlan("demo", words, [1080, 1920])).music).toMatchObject({ track: "reels/ES_B2B - Rocket Jr.mp3", start: 60, under: 11 });
+    expect(Edit.parse(starterPlan("demo", words, [3840, 2160])).music).toBe(false);
   });
   it("starts a valid plan anchored on the opening words", () => {
     const plan = Edit.parse(starterPlan("demo", words, [1080, 1920]));

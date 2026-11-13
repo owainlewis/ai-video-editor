@@ -43,6 +43,11 @@ export const Actions = {
   qc: none,
   // Mix the sound as the export will, for the editor to play.
   mix: none,
+  // A finished reel (media/approve.ts): copy its current export and cover to the approved folder,
+  // take it out again (to the Trash), or show it in Finder.
+  approve: none,
+  unapprove: none,
+  reveal: none,
 } as const;
 
 export type ActionName = keyof typeof Actions;

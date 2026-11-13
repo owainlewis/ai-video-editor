@@ -7,7 +7,8 @@ import { compositionFor } from "../effects/canvas.ts";
 import { frameWindow, type Preview, type Range } from "../engine/parts.ts";
 import { resolveProject } from "./project.ts";
 import { type FlatCut, hasCut, renderCut } from "./cutrender.ts";
-import { FPS, type Log, ROOT, run } from "./tools.ts";
+import type { Issue } from "../engine/resolve.ts";
+import { FPS, type Log, loudness, probeAudioDuration, probeDuration, probeSize, ROOT, run, writeJson } from "./tools.ts";
 
 // `flat`: mix the flattened cut's voice, with the settings its export wrote.
 export function mixAudio(projects: string, slug: string, log?: Log, flat?: FlatCut) {
@@ -36,6 +37,39 @@ export function stills(projects: string, slug: string, times: number[], log?: Lo
   });
 }
 
+// The cover: frame 0 at full size, the card Instagram shows on the grid. Written to `file` (a .jpg).
+// Async, so the server stays responsive while Remotion bundles and draws it.
+export function coverStill(projects: string, slug: string, file: string, log?: Log): Promise<void> {
+  const resolved = ensureResolved(projects, slug);
+  const argv = ["remotion", "still", "effects/index.ts", compositionFor(resolved.canvas).id, file, `--props=${join(projects, slug, "build/edit.resolved.json")}`,
+    "--frame=0", "--scale=1", "--image-format=jpeg", "--jpeg-quality=95", "--log=error"];
+  log?.(`$ npx ${argv.join(" ")}`.slice(0, 200));
+  return new Promise((ok, fail) => {
+    const p = spawn("npx", argv, { cwd: ROOT });
+    let tail = "";
+    const read = (c: Buffer) => (tail = (tail + c.toString()).slice(-2000));
+    p.stdout.on("data", read);
+    p.stderr.on("data", read);
+    p.on("close", (code) => (code === 0 ? ok() : fail(new Error(`the cover still failed:\n${tail}`))));
+  });
+}
+
+// After a reel's export: the length the plan says, the reel's size, sound that runs the whole way,
+// and the loudness. Written to checks/export-check.json, which approving a reel reads (2026-11-13).
+export function verifyReel(out: string, length: number, size: [number, number]) {
+  const issues: Issue[] = [];
+  const got = probeDuration(out);
+  if (Math.abs(got - length) > 0.15) issues.push({ level: "error", message: `the export is ${got.toFixed(2)}s; the plan is ${length.toFixed(2)}s` });
+  const [w, h] = probeSize(out);
+  if (w !== size[0] || h !== size[1]) issues.push({ level: "error", message: `the export is ${w}x${h}; a reel is ${size[0]}x${size[1]}` });
+  const sound = probeAudioDuration(out);
+  if (Number.isNaN(sound)) issues.push({ level: "error", message: "the export has no sound" });
+  else if (Math.abs(sound - got) > 0.15) issues.push({ level: "error", message: `the sound runs ${sound.toFixed(2)}s of the ${got.toFixed(2)}s picture` });
+  const lufs = loudness(out);
+  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; Instagram plays around -14` });
+  return { issues, lufs, length: got, size: `${w}x${h}` };
+}
+
 // What every export does before its picture. A cut is flattened from the originals first, and the
 // export draws the picture from that file. The order matters: resolving with the flat files writes
 // the settings the mix reads, and resolving after the mix picks it up.
@@ -58,7 +92,7 @@ export async function renderFinal(projects: string, slug: string, onProgress: (d
   const out = join(projects, slug, "renders", preview?.file ?? "final.mp4");
   mkdirSync(join(projects, slug, "renders"), { recursive: true });
   const win = preview && frameWindow(preview.range, resolved.fps);
-  return new Promise((ok, fail) => {
+  return new Promise<string>((ok, fail) => {
     const p = spawn("npx", ["remotion", "render", "effects/index.ts", compositionFor(resolved.canvas).id, out, `--props=${join(projects, slug, flat ? "build/edit.export.json" : "build/edit.resolved.json")}`, ...(win ? [`--frames=${win.a}-${win.b - 1}`] : [])], { cwd: ROOT });
     let tail = "";
     const read = (chunk: Buffer) => {
@@ -70,5 +104,12 @@ export async function renderFinal(projects: string, slug: string, onProgress: (d
     p.stdout.on("data", read);
     p.stderr.on("data", read);
     p.on("close", (code) => (code === 0 ? ok(out) : fail(new Error(`render failed:\n${tail}`))));
+  }).then((file) => {
+    onStage("Checking the export");
+    const comp = compositionFor(resolved.canvas);
+    const check = verifyReel(file, win ? (win.b - win.a) / resolved.fps : resolved.duration, [comp.width, comp.height]);
+    writeJson(join(projects, slug, preview ? `checks/${preview.file.replace(/\.mp4$/, "")}-check.json` : "checks/export-check.json"), { at: new Date().toISOString(), ...check });
+    for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
+    return file;
   });
 }

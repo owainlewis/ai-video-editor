@@ -9,7 +9,8 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`, and `useLogo(name)`: `library/logos/<name>.svg` (else `.png`) as a data URL.
 - `ingest.ts`: `ingest(projects, file, slug, log?, choices?)`, `addClip(projects, slug, file, id, log?, name?)`, `transcribe`, `cleanWords`, `starterPlan`, `slugFor`, `projectMeta`, `setStatus`, `liveStatus`, types `Status` and `Choices`.
 - `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `cameraOnTimeline(dir, cut)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
-- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
+- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`, `coverStill(projects, slug, file, log?)` (frame 0 at full size, async), `verifyReel(out, length, size)`.
+- `approve.ts`: `approve(projects, slug, opts?)` (async) returns the `ApprovalRecord`; `unapprove(projects, slug, opts?)`, `approval(dir)` (`state`, `ready`, `reason`, `record`), `approvalFacts(dir)`, `listApproved(projects)`, `weekCount(projects, now?)`, `moveToTrash(file, trash?)`, `loadRecord`, `approvedFolder()`, `trashFolder()`. Options: `folder`, `trash`, `now`, `log`, `cover`. The pure rules are in `engine/approve.ts`.
 - `cutrender.ts`: `renderCut(projects, slug, onStage, log?, range?)` returns `FlatCut`. Also `hasCut`, `segmentFrames`, `XFADE`.
 - `export.ts`: `exportOverOriginal(projects, slug, onStage, log?, preview?)`, `sections(r)`, `verifyExport(original, out, files, remove?, part?)`, type `Section`.
 - `qc.ts`: `runQc(projects, slug, log?, onStage?, at?, range?, cached = false)`, `qcState(dir, r)`, `qcHash(r, i)`, `codeStamp()`, types `QcItem` and `QcReport`, and `runLibraryQc(opts, log?, onStage?)` return `QcResult`. Also `footageCuts`, `libraryVariants`, `LIBRARY_QC`.
@@ -18,7 +19,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `auphonic.ts`: `cleanVoice(dir, title, log?)`, `cleanProject(projects, slug, log?)`, `ALGORITHMS`, `OUTPUTS`.
 - `scan.ts`: `frameSheets(dir, every = 15, log?)`, `scanCamera(dir, refs)`.
 - `capture.ts`: `capture(projects, slug, url, opts, log?)` returns `{ png, json, page }`; `pageName(url)`. Options: `name`, `from`, `to`, `dark`, `scale` (3), `width` (900), `height` (1400). CLI: `npm run studio -- capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--scale 3] [--width 900] [--height 1400]`.
-- `tools.ts`: `run`, `ffmpeg`, `ffmpegProgress`, `hasHardwareH264`, `probeDuration`, `probeSize`, `mediaProbe(dir)`, `probeRate`, `speechEnd`, `imageSize`, `readJson`, `writeJson`, `ROOT`, `FPS` (30), type `Log`.
+- `tools.ts`: `run`, `ffmpeg`, `ffmpegProgress`, `hasHardwareH264`, `probeDuration`, `probeAudioDuration`, `loudness`, `envValue(name)` (the environment, else `.env`), `probeSize`, `mediaProbe(dir)`, `probeRate`, `speechEnd`, `imageSize`, `readJson`, `writeJson`, `ROOT`, `FPS` (30), type `Log`.
 
 ## Invariants
 
@@ -49,6 +50,15 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `previewMix` is the real mix on the plan as it is, written beside the export's files, never over them (`build/preview/`, `build/audio-preview/`). With a cut it joins the voice from the clips' voice tracks end to end, without the export's crossfades.
 - With no `resolved`, it returns early and leaves `checks/qc/` alone.
 - It checks shots with a visual, not `keep`, and not `full`.
+
+### Approving
+
+- `approve` refuses (409) a YouTube project, a reel with no `renders/final.mp4`, an export not newer than both `edit.json` and `cut.json`, an export check older than the export or with errors, and a reel whose export is running (`build/export.lock` held by a live pid).
+- Files are named `<YYYY-MM-DD> <title>.mp4` and `<same> cover.jpg`, the date local and the title from `edit.json` through `fileTitle` (no `/ \ : * ? " < > |` or control characters, single spaces, no dots at either end, 80 characters at most). When either name is taken by a file that is not this reel's own, ` (2)`, ` (3)` and so on is added.
+- Each file is copied in under a hidden `.<name>.partial` and renamed, so the folder never holds half a file. The reel's earlier files go to the Trash only after the new ones are in place; a file with the same name is replaced in place.
+- `approve` fails if `renders/final.mp4` changed while the cover was drawn.
+- `approved.json` is the record: `{ at, video, cover, title }`, paths absolute. The week count reads these records, not the folder, so moving files on from the folder does not change it.
+- `moveToTrash` never replaces a file in the Trash: a taken name gets the time, as Finder does.
 
 ### Status and clips
 
@@ -85,10 +95,12 @@ Everything that touches footage on disk: import, transcription, turning a plan i
   - `capture`: `assets/pages/<name>.png`, `<name>.json` and `<name>-icon.<ext>`.
   - `clipLevels`: `build/level.json`. `footageCuts`: `build/cuts.json`. `scanCamera`: `build/camera.json`.
   - `mixAudio`, and so `renderFinal` and `exportOverOriginal`, through the `audio.mix` child process: `build/mix.wav` and `build/audio/`.
-  - `renderFinal` and `exportOverOriginal`: `renders/final.mp4`, or `renders/part-<name>.mp4` with a `preview`. `exportOverOriginal` also writes `build/export/` and `checks/export-check.json` (with a `preview`, `checks/part-<name>-check.json`).
+  - `renderFinal` and `exportOverOriginal`: `renders/final.mp4`, or `renders/part-<name>.mp4` with a `preview`, and `checks/export-check.json` (with a `preview`, `checks/part-<name>-check.json`). `exportOverOriginal` also writes `build/export/`. A reel's check (`verifyReel`) errors on a length more than 0.15 s from the plan, a size other than 1080x1920, or sound missing or shorter than the picture, and warns on loudness outside -18 to -10 LUFS.
+  - `approve`: `build/cover.jpg` and `approved.json`. `unapprove` removes `approved.json`.
   - `renderCut`: clears and writes `build/cut/`.
   - `runQc`: clears and writes `checks/qc/`. `stills`: clears and writes `checks/stills/`. `frameSheets`: clears and writes `checks/frames/`, writes contact sheets to `checks/frames-<k>.jpg`, and returns their paths.
   - `cleanVoice`: replaces `source/voice.wav`, and writes `source/voice.original.wav`, `build/auphonic/` and `build/preview.m4a`.
+- Writes outside the repo: `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`, made if missing); `approve` and `unapprove` move files to the Trash (`STUDIO_TRASH`, else `~/.Trash`).
 - Writes in the library: `library/broll/index.json`, `library/broll/.clips/`, and `library/qc/` (cleared by `runLibraryQc`).
 
 ## Verification

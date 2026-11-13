@@ -51,6 +51,7 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `tighten.ts`: `tighten(words, opts)`, `wordsRange`, type `Trim`.
 - `page.ts`: a captured web page's words (written by `media/capture.ts`). `findPhrase(page, phrase, nth = 1)`, `markRect`, `phraseFrame(page, { phrase, pad, block, nth })`, `closest`, `placePhrases(v, page)`, types `Page`, `PhraseFrame`, `ImageSpec`. Not the same as `findPhrase` in `resolve.ts`, which finds spoken words.
 - `api.ts`: `Actions` (one zod schema per editor action), `isAction`, types `ActionName`, `ActionInput`, `ActionData`. Read by `server/index.ts` and `app/api.ts`.
+- `approve.ts`: approving finished reels. `approvalState(facts)`, `exportReady(facts)`, `weekStart(now?)` (Monday, local midnight), `thisWeek(times, now?)`, `fileTitle(title, fallback?)`, `day(date)`, `WEEKLY_TARGET` (7), types `ApprovalState`, `ApprovalRecord`, `ApprovalFacts`. Read by `media/approve.ts` and `app/Home.tsx`.
 - `review.ts`: review before render. `reviewItems(r, words)`, `itemHash(r, index, said)`, `reviewable(s)`, `mergeReview(review, items)`, `counts`, `noteTime(note, words)`, `openNotes`, `openChanges`, `formatFeedback(review, items, words)`, `seenPath(id, hash)`, `emptyReview`, `hash`, `stable`, types `Review`, `ItemReview`, `Past`, `Note`, `Item`, `Status`.
 
 ## Invariants

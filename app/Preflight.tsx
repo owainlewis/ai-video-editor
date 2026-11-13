@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { isGraphic } from "../engine/resolve";
 import { api, type Issue, type Project } from "./api";
+import { ApprovalLine } from "./Approval";
 
 // What stands between the plan and an export, on one sheet: the plan's checks, QC on every graphic,
 // the review and the open notes. Green on every line means go. Owain can export anyway; nothing
@@ -85,6 +86,7 @@ export const Preflight: React.FC<{ slug: string; p: Project; onClose: () => void
             </div>
           ))}
         </div>
+        {p.approval && <ApprovalLine slug={slug} a={p.approval} running={running} onError={setError} />}
         {error && <p className="error small">{error}</p>}
         <div className="row">
           <button onClick={onClose}>Close</button>
