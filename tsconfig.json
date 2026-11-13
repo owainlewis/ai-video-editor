@@ -21,6 +21,7 @@
     "server",
     "app",
     "tests",
-    "cli.ts"
+    "cli.ts",
+    "electron"
   ]
 }

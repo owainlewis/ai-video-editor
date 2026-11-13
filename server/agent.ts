@@ -42,6 +42,9 @@ End with one or two plain sentences saying what you changed, for the chat panel.
 
 const running = new Map<string, ReturnType<typeof spawn>>();
 export const isRunning = (slug: string) => running.has(slug);
+// Every project Claude is working on now. A note runs as a child of the server, so the desktop app
+// waits for this to be empty before it restarts the server (electron/server.ts).
+export const runningNotes = () => [...running.keys()];
 
 // `prompt` replaces the usual note context, for requests the editor makes itself (suggestions).
 export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: () => void = () => {}, prompt?: string) {

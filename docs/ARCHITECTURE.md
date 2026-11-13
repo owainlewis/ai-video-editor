@@ -29,6 +29,7 @@ That keeps feedback cheap on long videos: a note costs seconds, not a re-render.
 | `audio/` | The mix: voice untouched, music bed, sound effects, loudness. Python. | |
 | `server/` | Local HTTP API, file serving, the plan watcher, versions, the chat bridge. | media |
 | `app/` | The editor: projects, player, timeline, chat. | engine, effects |
+| `electron/` | The Mac app: runs the repo's server, shows the editor in a window, menu bar, notifications, `studio://` links (`electron/README.md`). | server (as a process), engine |
 
 `engine/`, `effects/`, `styles/` and `audio/` are ported from `ai-reel-editor` with their tests. Each carries lessons from real edits; change them deliberately.
 

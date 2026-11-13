@@ -8,7 +8,9 @@
     "studio": "tsx cli.ts",
     "dev": "tsx cli.ts serve",
     "typecheck": "tsc -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "app": "electron .",
+    "app:build": "tsx electron/build.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.532",
@@ -26,8 +28,13 @@
     "@types/node": "22.15.30",
     "@types/react": "19.1.8",
     "@types/react-dom": "19.1.6",
+    "electron": "45.2.1",
     "typescript": "5.8.3",
     "vite": "8.3.4",
     "vitest": "5.0.3"
-  }
+  },
+  "allowScripts": {
+    "electron@45.2.1": true
+  },
+  "main": "electron/main.ts"
 }
