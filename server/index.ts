@@ -3,6 +3,7 @@
 // from the editor, from Claude in the chat panel or from Claude Code in a terminal, it saves a
 // version, re-resolves the plan and tells the open editors to reload.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
@@ -12,10 +13,13 @@ import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
 import { ask, isRunning, loadChat, stop } from "./agent.ts";
 import { redo, redoable, snapshot, undo, versions } from "./history.ts";
-import { Cut } from "../engine/schema.ts";
+import { type ActionData, type ActionName, Actions, isAction } from "../engine/api.ts";
+import { finishSend, loadReview, saveNote, setItem, startSend } from "./review.ts";
+import { qcState } from "../media/qc.ts";
+import { mixState } from "../media/previewmix.ts";
 import { planIndex } from "../engine/insert.ts";
 import { trashProject } from "./trash.ts";
-import { dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
+import { changeParts, dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } from "./variants.ts";
@@ -194,7 +198,22 @@ export async function startServer(port = 4747) {
           const status = liveStatus(dir);
           const meta = existsSync(join(dir, "project.json")) ? readJson<{ duration: number; size: [number, number] }>(join(dir, "project.json")) : null;
           const plan = existsSync(join(dir, "edit.json")) ? readJson<{ title?: string; canvas?: string }>(join(dir, "edit.json")) : null;
-          return { slug: d.name, title: plan?.title ?? d.name, canvas: plan?.canvas ?? "reel", duration: meta?.duration, status, modified: statSync(dir).mtimeMs };
+          // What the projects page shows on each card: a frame of the footage, whether it has been
+          // exported, and how far the review has got (read from the file as it is, without merging).
+          const reviewFile = join(dir, "review.json");
+          const decided = existsSync(reviewFile) ? Object.values(readJson<{ items?: Record<string, { status: string }> }>(reviewFile).items ?? {}) : [];
+          const edited = existsSync(join(dir, "edit.json")) ? statSync(join(dir, "edit.json")).mtimeMs : statSync(dir).mtimeMs;
+          return {
+            slug: d.name,
+            title: plan?.title ?? d.name,
+            canvas: plan?.canvas ?? "reel",
+            duration: meta?.duration,
+            status,
+            modified: Math.max(edited, statSync(dir).mtimeMs),
+            thumb: existsSync(join(dir, "checks/frame.jpg")) ? `${d.name}/checks/frame.jpg` : null,
+            exported: existsSync(join(dir, "renders/final.mp4")),
+            review: decided.length ? { approved: decided.filter((x) => x.status === "approved").length, total: decided.length } : null,
+          };
         })
         .sort((a, b) => b.modified - a.modified);
       return send(res, 200, list);
@@ -220,16 +239,42 @@ export async function startServer(port = 4747) {
       const line = timeline(dir);
       // Each clip's levels (build/level.json), which the editor reads to snap trims to pauses.
       for (const c of clips(dir)) if (c.ready) clipLevels(dir, c.id);
+      const bin = clips(dir);
+      // The words only change with the cut or a transcript. An editor that already holds them says
+      // so (`have`), and a reload after a plan change comes back without them.
+      const transcripts = bin.filter((c) => c.ready).map((c) => join(clipDir(dir, c.id), "transcript.json"));
+      const wordsKey = createHash("md5").update(JSON.stringify(line.cut)).update(transcripts.map((f) => `${f}:${statSync(f).mtimeMs}`).join("|")).digest("hex");
+      const qc = resolved ? qcState(dir, resolved) : null;
+      const checkFile = join(dir, "checks/export-check.json");
       return send(res, 200, {
         slug,
         status,
         resolved,
         issues,
-        words: line.words,
-        // The media bin and the cut, with each clip's own words for trimming to word edges.
-        bin: clips(dir),
+        wordsKey,
+        ...(url.searchParams.get("have") === wordsKey
+          ? {}
+          : {
+              words: line.words,
+              // Each clip's own words, for trimming to word edges.
+              clipWords: Object.fromEntries(bin.filter((c) => c.ready).map((c, k) => [c.id, readJson(transcripts[k])])),
+            }),
+        // The media bin and the cut.
+        bin,
         cut: line.cut,
-        clipWords: Object.fromEntries(clips(dir).filter((c) => c.ready).map((c) => [c.id, readJson(join(clipDir(dir, c.id), "transcript.json"))])),
+        // Review before render: Owain's decision on each graphic, his notes, and the last QC run.
+        review: resolved ? loadReview(dir, resolved, line.words) : null,
+        qc: qc && {
+          at: qc.at,
+          partial: qc.partial,
+          stale: qc.stale,
+          other: qc.other,
+          overview: existsSync(join(dir, "checks/qc/overview.jpg")) ? `${slug}/checks/qc/overview.jpg` : null,
+          items: qc.items.map((x) => ({ ...x, sheet: `${slug}/checks/qc/${x.sheet}` })),
+        },
+        exportCheck: existsSync(checkFile) ? readJson(checkFile) : null,
+        // The sound as the export will mix it, when it has been mixed for the editor.
+        mix: resolved ? mixState(dir, slug) : null,
         plan: readFileSync(join(dir, "edit.json"), "utf8"),
         versions: versions(dir),
         redo: redoable(dir),
@@ -241,6 +286,8 @@ export async function startServer(port = 4747) {
         // The scan is in the main clip's time; with a cut it is shown where those stretches play.
         camera: cameraOnTimeline(dir, line.cut),
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
+        // Finished renders of one part, by file name.
+        previews: existsSync(join(dir, "renders")) ? Object.fromEntries(readdirSync(join(dir, "renders")).filter((f) => /^part-.*\.mp4$/.test(f)).map((f) => [f, { file: `${slug}/renders/${f}`, at: statSync(join(dir, "renders", f)).mtimeMs }])) : {},
       });
     }
     if (action === "clips" && req.method === "GET") return send(res, 200, clips(dir));
@@ -266,90 +313,119 @@ export async function startServer(port = 4747) {
       broadcast({ type: "plan", slug });
       return send(res, 200, { path });
     }
-    const input = await body(req);
-    if (action === "chat") {
-      const note = String(input.note ?? "").trim();
-      if (!note) return send(res, 400, { error: "empty note" });
-      const sel = input.selection as { start: number; end: number } | undefined;
-      ask(projects, slug, note, sel && sel.end > sel.start ? sel : undefined, Number(input.playhead ?? 0), (m) => broadcast({ type: "chat", slug, message: m }), () => {
-        snapshot(dir, "claude");
-        broadcast({ type: "plan", slug });
-      });
-      return send(res, 200, { ok: true });
-    }
-    if (action === "suggest") {
-      ask(projects, slug, "Suggest graphics for this video", undefined, 0, (m) => broadcast({ type: "chat", slug, message: m }), () => broadcast({ type: "plan", slug }), SUGGEST(slug));
-      return send(res, 200, { ok: true });
-    }
-    if (action === "decide") {
-      decide(projects, slug, String(input.id ?? ""), input.accept === true, String(input.note ?? ""));
-      broadcast({ type: "plan", slug });
-      return send(res, 200, { ok: true });
-    }
-    if (action === "drop") {
-      dropBroll(projects, slug, String(input.ref ?? ""), Number(input.at ?? 0), Number(input.length ?? 3));
-      return send(res, 200, { ok: true });
-    }
-    if (action === "shot-start") {
-      moveShotStart(projects, slug, Number(input.from), Number(input.to));
-      return send(res, 200, { ok: true });
-    }
-    // Takes on one graphic: Claude writes them to variants.json; the editor plays them side by side.
-    if (action === "variants") {
-      const start = Number(input.start);
-      const note = String(input.note ?? "").trim() || undefined;
+    if (!action || !isAction(action)) return send(res, 404, { error: "not found" });
+    const parsed = Actions[action].safeParse(await body(req));
+    if (!parsed.success) return send(res, 400, { error: parsed.error.issues.map((i) => `${i.path.join(".") || action}: ${i.message}`).join("; ") });
+    const emit = (m: Parameters<Parameters<typeof ask>[5]>[0]) => broadcast({ type: "chat", slug, message: m });
+    const changed = () => broadcast({ type: "plan", slug });
+    const idle = () => {
+      if (!liveStatus(dir)?.done && existsSync(join(dir, "status.json"))) throw Object.assign(new Error("a job is already running"), { code: 409 });
+    };
+    // The plan as it resolves now, for the actions that work on it.
+    const plan = () => {
       const { resolved } = resolveProject(projects, slug);
-      const k = resolved?.shots.findIndex((s) => Math.abs(s.start - start) < 0.05) ?? -1;
-      if (!resolved || k < 0) return send(res, 409, { error: "no graphic starts there" });
-      const plan = readJson<{ shots: { at: string }[] }>(join(dir, "edit.json"));
-      const current = plan.shots[planIndex(plan.shots, resolved.shots, k)];
-      const last = lastKept(resolved.shots, k);
-      const end = resolved.shots[last].end;
-      const said = timeline(dir).words.filter((w) => w.start >= start - 0.05 && w.start < end).map((w) => w.text).join(" ");
-      saveVariants(dir, { start, note, items: [] });
-      ask(projects, slug, note ? `Variants: ${note}` : "Variants for this graphic", undefined, start, (m) => broadcast({ type: "chat", slug, message: m }), () => broadcast({ type: "plan", slug }), VARIANTS(slug, start, current, said, note));
-      return send(res, 200, { ok: true });
-    }
-    if (action === "variant-use") {
-      const v = loadVariants(dir);
-      const take = v?.items.find((x) => x.id === input.id);
-      if (!v || !take) return send(res, 404, { error: "no such take" });
-      editShot(projects, slug, v.start, { shot: take.shot });
-      clearVariants(dir);
-      broadcast({ type: "plan", slug });
-      return send(res, 200, { ok: true });
-    }
-    if (action === "variant-clear") return clearVariants(dir), broadcast({ type: "plan", slug }), send(res, 200, { ok: true });
-    if (action === "place") return send(res, 200, { start: placeCard(projects, slug, String(input.card ?? ""), Number(input.at ?? 0)) });
-    if (action === "shot-end") return moveShotEnd(projects, slug, Number(input.start), Number(input.to)), send(res, 200, { ok: true });
-    if (action === "shot") {
-      editShot(projects, slug, Number(input.start), { shot: input.shot as Parameters<typeof editShot>[3]["shot"], remove: input.remove === true });
-      return send(res, 200, { ok: true });
-    }
-    if (action === "stop") return stop(slug), send(res, 200, { ok: true });
-    if (action === "undo") return send(res, 200, { ok: undo(dir) });
-    if (action === "redo") return send(res, 200, { ok: redo(dir) });
-    // The editor's cut edits (split, trim, ripple delete, move, add a clip) write the whole cut,
-    // which is saved as a version like any change to the plan.
-    if (action === "cut") {
-      const parsed = Cut.safeParse(input.cut);
-      if (!parsed.success) return send(res, 400, { error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-      const bin = new Map(clips(dir).map((c) => [c.id, c]));
-      for (const seg of parsed.data.segments) {
-        const clip = bin.get(seg.src);
-        if (!clip?.ready) return send(res, 400, { error: `no clip ${seg.src} ready in the bin` });
-        if (seg.out > clip.duration + 0.05) return send(res, 400, { error: `${clip.name} is ${clip.duration.toFixed(2)}s; a segment cannot run to ${seg.out.toFixed(2)}s` });
-      }
-      writeJson(join(dir, "cut.json"), parsed.data);
-      snapshot(dir, "cut");
-      planChanged(slug);
-      return send(res, 200, { ok: true });
-    }
-    if (action === "render") {
-      if (!liveStatus(dir)?.done && existsSync(join(dir, "status.json"))) return send(res, 409, { error: "a job is already running" });
-      return job(slug, ["render", slug]), send(res, 200, { ok: true });
-    }
-    return send(res, 404, { error: "not found" });
+      if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
+      return resolved;
+    };
+    // Each action's work. What it returns is the response; nothing means { ok: true }.
+    const handlers: { [K in ActionName]: (input: ActionData<K>) => unknown } = {
+      chat: ({ note, selection, playhead }) => {
+        ask(projects, slug, note, selection && selection.end > selection.start ? selection : undefined, playhead, emit, () => {
+          snapshot(dir, "claude");
+          changed();
+        });
+      },
+      suggest: () => {
+        ask(projects, slug, "Suggest graphics for this video", undefined, 0, emit, changed, SUGGEST(slug));
+      },
+      decide: ({ id, accept, note }) => {
+        decide(projects, slug, id, accept, note);
+        changed();
+      },
+      drop: ({ ref, at, length }) => dropBroll(projects, slug, ref, at, length),
+      "shot-start": ({ from, to }) => moveShotStart(projects, slug, from, to),
+      "shot-end": ({ id, start, to }) => moveShotEnd(projects, slug, { id, start }, to),
+      shot: ({ id, start, shot, remove }) => editShot(projects, slug, { id, start }, { shot, remove: remove === true }),
+      // Takes on one graphic: Claude writes them to variants.json; the editor plays them side by side.
+      variants: ({ start, note: brief }) => {
+        const note = brief?.trim() || undefined;
+        const { resolved } = resolveProject(projects, slug);
+        const k = resolved?.shots.findIndex((s) => Math.abs(s.start - start) < 0.05) ?? -1;
+        if (!resolved || k < 0) throw Object.assign(new Error("no graphic starts there"), { code: 409 });
+        const edit = readJson<{ shots: { at: string }[] }>(join(dir, "edit.json"));
+        const current = edit.shots[planIndex(edit.shots, resolved.shots, k)];
+        const end = resolved.shots[lastKept(resolved.shots, k)].end;
+        const said = timeline(dir).words.filter((w) => w.start >= start - 0.05 && w.start < end).map((w) => w.text).join(" ");
+        saveVariants(dir, { start, note, items: [] });
+        ask(projects, slug, note ? `Variants: ${note}` : "Variants for this graphic", undefined, start, emit, changed, VARIANTS(slug, start, current, said, note));
+      },
+      "variant-use": ({ id }) => {
+        const v = loadVariants(dir);
+        const take = v?.items.find((x) => x.id === id);
+        if (!v || !take) throw Object.assign(new Error("no such take"), { code: 404 });
+        editShot(projects, slug, { start: v.start }, { shot: take.shot });
+        clearVariants(dir);
+        changed();
+      },
+      "variant-clear": () => {
+        clearVariants(dir);
+        changed();
+      },
+      place: ({ card, at }) => placeCard(projects, slug, card, at),
+      parts: (change) => changeParts(projects, slug, change),
+      stop: () => stop(slug),
+      undo: () => ({ ok: undo(dir) }),
+      redo: () => ({ ok: redo(dir) }),
+      // The editor's cut edits (split, trim, ripple delete, move, add a clip) write the whole cut,
+      // which is saved as a version like any change to the plan.
+      cut: ({ cut }) => {
+        const bin = new Map(clips(dir).map((c) => [c.id, c]));
+        for (const seg of cut.segments) {
+          const clip = bin.get(seg.src);
+          if (!clip?.ready) throw Object.assign(new Error(`no clip ${seg.src} ready in the bin`), { code: 400 });
+          if (seg.out > clip.duration + 0.05) throw Object.assign(new Error(`${clip.name} is ${clip.duration.toFixed(2)}s; a segment cannot run to ${seg.out.toFixed(2)}s`), { code: 400 });
+        }
+        writeJson(join(dir, "cut.json"), cut);
+        snapshot(dir, "cut");
+        planChanged(slug);
+      },
+      render: ({ part, from, to, force }) => {
+        idle();
+        const stretch = part !== undefined ? ["--part", part] : from !== undefined ? ["--from", String(from), "--to", String(to)] : [];
+        job(slug, ["render", slug, ...stretch, ...(force ? ["--force"] : [])]);
+      },
+      // QC from the editor: a detached job like a render, keeping every graphic that has not changed.
+      qc: () => {
+        idle();
+        job(slug, ["qc", slug, "--status", "--cached"]);
+      },
+      mix: () => {
+        idle();
+        job(slug, ["mix", slug, "--status"]);
+      },
+      review: ({ id, hash, status, comment }) => {
+        setItem(dir, plan(), timeline(dir).words, id, hash, { status, comment });
+        changed();
+      },
+      note: (change) => {
+        saveNote(dir, timeline(dir).words, change);
+        changed();
+      },
+      // Every open note and change goes to Claude as one run; its answers come back onto them.
+      "review-send": () => {
+        if (isRunning(slug)) throw Object.assign(new Error("Claude is still working on the last note"), { code: 409 });
+        const sent = startSend(dir, slug, plan(), timeline(dir).words);
+        if (!sent) throw Object.assign(new Error("nothing to send: no open notes or changes"), { code: 400 });
+        ask(projects, slug, `Review: ${sent.count} note${sent.count === 1 ? "" : "s"} to work through`, undefined, 0, emit, () => {
+          finishSend(dir);
+          snapshot(dir, "claude");
+          changed();
+        }, sent.prompt);
+        changed();
+      },
+    };
+    const run = handlers[action] as (input: unknown) => unknown;
+    return send(res, 200, (await run(parsed.data)) ?? { ok: true });
   };
 
   // Hot reload shares this server's port, so it never clashes with another dev server.

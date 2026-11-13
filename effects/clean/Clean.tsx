@@ -4,7 +4,8 @@
 //   cards, cinematic shots, a full-screen line diagram on green now and then, and the graphic b-roll
 //   overlay (the diagram in a dark glass panel over a full-frame picture).
 //   Text is one style (display in text.tsx) in six parts: caption sized by weight, hit, two-line
-//   title, caption inside the diagram, bracketed list, card beats. One at a time.
+//   title, caption inside the diagram, bracketed list, card beats. One at a time. Over the first
+//   seconds, the text hook (./hook.tsx) sits at the top of the frame; frame 0 is the cover (./cover.tsx).
 // Fixed geometry: one centre line (x 540), the seam at y 960, the glass panel at 60, 380, 960 x 880,
 // chips at y 120.
 // Hard cuts between shots; easing only inside a graphic. Diagrams are `custom` visuals drawn per
@@ -18,8 +19,11 @@ import { Soundtrack } from "../cut";
 import { CUSTOM } from "../custom";
 import { Speaker } from "../Speaker";
 import { VisualView } from "../Visuals";
-import { C, H, lerp, move, W } from "./kit";
+import { C, H, lerp, move, type Palette, PALETTES, PaletteContext, W } from "./kit";
 import { blurIn, Center, Chip, chunkClean, display, GREEN, Typed, WHITE } from "./text";
+import { HOOK_BAND } from "../../engine/resolve";
+import { Cover } from "./cover";
+import { Hook, underHook } from "./hook";
 
 export const SEAM = 960;
 // A chip's top on a split: below Instagram's top bar (QC's safe area starts at y 96).
@@ -35,8 +39,11 @@ const fillsPanel = (s: ResolvedShot) => s.layout === "split" && s.visual?.kind =
 const UNDER_SEAM = SEAM + 22;
 const ON_FOOTAGE = { textShadow: "0 2px 26px rgba(0,0,0,0.6)" };
 
-const BG = { ink: C.ink, paper: C.paper, green: GREEN };
-const bgOf = (s: ResolvedShot) => (s.layout === "diagram" ? GREEN : s.layout === "card" ? BG[s.bg ?? "ink"] : C.ink);
+// A card's colour; on the light palette an ink card is black (Owain, 2026-11-13: "occasional black screens").
+const bgOf = (s: ResolvedShot, p: Palette) => (s.layout === "diagram" ? p.diagram : s.layout === "card" ? { ink: p.card, paper: C.paper, green: GREEN }[s.bg ?? "ink"] : p.stage);
+// The light stage carries a faint grid, as in the clean references Owain sent (2026-11-13).
+const grid = (p: Palette, s: ResolvedShot): React.CSSProperties =>
+  p.name === "light" && s.layout !== "card" ? { backgroundImage: `linear-gradient(${p.faint} 1px, transparent 1px), linear-gradient(90deg, ${p.faint} 1px, transparent 1px)`, backgroundSize: "72px 72px", backgroundPosition: "36px 36px" } : {};
 
 // The speaker's layout in the house Speaker: split is the bottom half, over and full the whole frame.
 const speakerLayout = (s: ResolvedShot): ResolvedShot["layout"] => (s.picture ? "media" : s.layout === "split" ? "split" : s.layout === "full" || s.layout === "over" ? "full" : "media");
@@ -57,16 +64,20 @@ const Picture: React.FC<{ r: Resolved; s: ResolvedShot; first: boolean; time: nu
 };
 
 // The shot's visual in its layout's box: a custom diagram, or any other kind through the house view.
-const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number }> = ({ r, s, time }) => {
+// Under the text hook a split's panel starts below the hook's band (a recording keeps its place and
+// the band covers its top).
+const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number; hooked: boolean }> = ({ r, s, time, hooked }) => {
   const v = s.visual;
-  if (!v || s.layout === "card") return null;
+  // A card draws its beats or list itself; a custom visual on a card is a designed card (egm-reel-v3's end).
+  if (!v || (s.layout === "card" && v.kind !== "custom")) return null;
   // A capture sits in the panel as a window, with margins, so the page never touches the frame's edge.
   // On a split it keeps below Instagram's top bar (QC's safe area starts at y 96) and above the seam
   // caption, so a tall capture never runs under either.
   // Any other library kind (the house graphics, windows) gets the same safe panel on a split; a custom
   // diagram is drawn for the whole panel and keeps its own margins.
   // A synced screen recording fills the top half edge to edge, down to the seam.
-  const b = fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top: 100, height: 690 } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top: 100, width: W - 120, height: 690 } : box(s.layout);
+  const top = hooked && s.layout === "split" ? HOOK_BAND : 100;
+  const b = fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top, height: 790 - top } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top, width: W - 120, height: 790 - top } : hooked && s.layout === "split" ? { left: 0, top, width: W, height: SEAM - top } : box(s.layout);
   const Custom = v.kind === "custom" ? CUSTOM[v.name] : undefined;
   return (
     <div style={{ position: "absolute", ...b, overflow: "visible" }}>
@@ -86,10 +97,13 @@ export const Clean: React.FC<Resolved> = (r) => {
   const words = useMemo(() => r.chunks.flatMap((c) => c.words), [r.chunks]);
   const chunks = useMemo(() => chunkClean(words), [words]);
   const faceless = !r.video && !r.cut && !r.standIn;
-  if (!shot) return <AbsoluteFill style={{ background: C.ink }} />;
+  const pal = PALETTES[r.palette ?? "forest"];
+  if (!shot) return <AbsoluteFill style={{ background: pal.stage }} />;
 
   const paper = shot.layout === "card" && shot.bg === "paper";
-  const ink = paper ? GREEN : WHITE;
+  // Type on the stage takes the palette's colour; over footage and on dark cards it stays white.
+  const onStage = (shot.layout === "split" || shot.layout === "diagram") && !fillsPanel(shot);
+  const ink = paper ? GREEN : onStage ? pal.text : WHITE;
   const glass = shot.layout === "over";
   const v = shot.visual;
 
@@ -106,7 +120,9 @@ export const Clean: React.FC<Resolved> = (r) => {
   // The caption: one chunk, sized by weight, placed by the layout. Hidden under any other text.
   const ch = [...chunks].reverse().find((c) => c.start <= time + 0.02);
   const next = ch ? chunks[chunks.indexOf(ch) + 1] : undefined;
-  const capOn = r.captions && ch && time < Math.min(next?.start ?? Infinity, ch.end + 0.5) && !hit && !beat && !list;
+  // A custom card that carries the words itself (props.caption false) has no caption over it.
+  const quiet = v?.kind === "custom" && v.props?.caption === false;
+  const capOn = r.captions && ch && time < Math.min(next?.start ?? Infinity, ch.end + 0.5) && !hit && !beat && !list && !quiet;
   const filled = fillsPanel(shot);
   const cp = (() => {
     switch (shot.layout) {
@@ -123,7 +139,8 @@ export const Clean: React.FC<Resolved> = (r) => {
   const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : filled ? UNDER_SEAM : shot.layout === "split" ? SEAM - 75 - (shot.hit?.tag ? 160 : 0) : 870;
 
   return (
-    <AbsoluteFill style={{ background: bgOf(shot) }}>
+    <PaletteContext.Provider value={pal}>
+    <AbsoluteFill style={{ background: bgOf(shot, pal), ...grid(pal, shot) }}>
       {/* One continuous speaker video, never unmounted; hidden where a picture or card covers it. */}
       {!faceless && <Speaker r={{ ...r, split: "half" }} shot={{ ...shot, layout: speakerLayout(shot) }} time={time} />}
       {shot.layout === "full" && !shot.picture && !faceless && <AbsoluteFill style={{ background: "linear-gradient(transparent 50%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.45))" }} />}
@@ -138,20 +155,20 @@ export const Clean: React.FC<Resolved> = (r) => {
 
       {glass && <div style={{ position: "absolute", ...GLASS, borderRadius: 32, background: "rgba(12,18,15,0.66)", backdropFilter: "blur(28px) saturate(1.1)", border: "1.5px solid rgba(245,245,242,0.14)" }} />}
       {r.shots.map((s, i) => {
-        if (!s.visual || s.keep || s.layout === "card") return null;
+        if (!s.visual || s.keep || (s.layout === "card" && s.visual.kind !== "custom")) return null;
         const last = lastKept(r.shots, i);
         const from = Math.round(s.start * r.fps);
         return (
           <Sequence key={`v${i}`} from={from} durationInFrames={Math.max(1, Math.round(r.shots[last].end * r.fps) - from)} premountFor={15} name={`${i + 1} ${s.layout} ${s.visual.kind}`}>
-            <Visual r={r} s={{ ...s, end: r.shots[last].end }} time={time} />
+            <Visual r={r} s={{ ...s, end: r.shots[last].end }} time={time} hooked={underHook(r, s)} />
           </Sequence>
         );
       })}
 
-      {shot.chip && <Chip t={time} at={shot.chip.at} name={shot.chip.name} y={glass ? GLASS.top + 36 : CHIP_Y} />}
+      {shot.chip && <Chip t={time} at={shot.chip.at} name={shot.chip.name} y={glass ? GLASS.top + 36 : underHook(r, shot) ? HOOK_BAND : CHIP_Y} />}
 
       {shot.title && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: 300, ...display(104), color: WHITE }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 300, ...display(104), color: ink }}>
           <div style={{ textAlign: "center" }}><Typed s={shot.title.lines[0]} t={time} at={shot.title.at} per={0.05} /></div>
           <div style={{ textAlign: "center" }}><Typed s={shot.title.lines[1]} t={time} at={shot.title.at + shot.title.lines[0].length * 0.05 + 0.1} per={0.045} /></div>
         </div>
@@ -169,7 +186,7 @@ export const Clean: React.FC<Resolved> = (r) => {
       {beat && (() => {
         const size = beat.size === "huge" ? 250 : beat.size === "mid" ? 150 : 76;
         return (
-          <Center y={960 - size * 0.62} style={{ ...display(size), color: ink }}>
+          <Center y={960 - size * 0.62} style={{ ...display(size), color: ink, ...(beat.cased ? { textTransform: "none" as const } : {}) }}>
             {beat.typed ? <Typed s={beat.text} t={time} at={beat.at} per={0.05} /> : beat.text}
           </Center>
         );
@@ -189,6 +206,8 @@ export const Clean: React.FC<Resolved> = (r) => {
         </>
       )}
 
+      <Hook r={r} shot={shot} time={time} faceless={faceless} />
+
       {capOn && ch && (() => {
         const size = ch.small ? cp.size * 0.6 : cp.size;
         return (
@@ -198,7 +217,11 @@ export const Clean: React.FC<Resolved> = (r) => {
         );
       })()}
 
+      {/* The cover, frame 0 only: Instagram's default cover is the first frame. */}
+      {r.cover && Math.round(time * r.fps) === 0 && <Cover cover={r.cover} />}
+
       <Soundtrack r={r} />
     </AbsoluteFill>
+    </PaletteContext.Provider>
   );
 };

@@ -13,6 +13,45 @@ const Rect = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 
 const Item = z.object({ text: z.string(), at: Anchor.optional() });
 
+// The app mock-ups (effects/apps/): Claude Code and Codex in a terminal, the Claude app and Grok Bot,
+// drawn from the real products' layout, colours and labels. Each plays a script of steps: a step
+// lands on its own spoken words (`at`), else straight after the step before it.
+// `code` spans (in backticks) and **bold** in a step's text are drawn as the app draws them.
+const CliStep = z.object({
+  // prompt: typed into the input, then sent; think: the working line with its verb ("Reading");
+  // tool: a tool call (`name`, `text` its argument) that runs, then shows `out`; text: the agent's
+  // reply; done: the turn's closing line ("Worked for 14s").
+  type: z.enum(["prompt", "think", "tool", "text", "done"]),
+  text: z.string().default(""),
+  name: z.string().optional(),
+  out: z.array(z.string()).max(4).optional(),
+  // On a prompt that starts with "/": the command menu shown while it types (the real commands).
+  menu: z.array(z.object({ name: z.string(), desc: z.string().default("") })).max(4).optional(),
+  at: Anchor.optional(),
+});
+const ChatStep = z.object({
+  // user: typed into the composer, then sent as a bubble; text: the reply streams in; list: a reply's
+  // bullets, one at a time; think: the working line; tool: a folded tool row ("Ran 3 commands");
+  // todo: a checklist whose rows tick one at a time; folder (Code, before the first message): the
+  // folder menu opens on `items` and `text` is picked.
+  type: z.enum(["user", "text", "list", "think", "tool", "todo", "folder"]),
+  text: z.string().default(""),
+  items: z.array(z.string()).max(5).optional(),
+  at: Anchor.optional(),
+});
+// What the window sits on: nothing (the panel or the graphite stage), or light paper with a dot grid.
+const Backdrop = z.enum(["none", "dots"]).default("none");
+// Grok Bot's avatars: a coloured blob with two eyes. The colours and shapes are the app's own.
+const BotColor = z.enum(["white", "green", "orange", "purple", "red"]);
+const BotShape = z.enum(["round", "bean", "egg"]);
+const GrokStep = z.object({
+  // user: typed and sent; bot: the bot's reply lands; status: the bot's working line beside its avatar
+  // ("Finding email address"); time: a day-and-time divider ("Today 7:07 AM").
+  type: z.enum(["user", "bot", "status", "time"]),
+  text: z.string(),
+  at: Anchor.optional(),
+});
+
 export const Visual = z.discriminatedUnion("kind", [
   // A real capture (web page, screenshot, photo). The camera moves from `from` to `to`.
   // `highlight` draws a marker over a region when `at` is spoken.
@@ -138,6 +177,43 @@ export const Visual = z.discriminatedUnion("kind", [
     status: z.string().optional(),
     lines: z.array(z.object({ text: z.string(), style: z.enum(["prompt", "out", "head", "item", "dim", "ok"]).default("out"), at: Anchor.optional() })).min(1).max(12),
     mark: z.object({ line: z.number().int().min(0), phrase: z.string(), at: Anchor.optional() }).optional(),
+  }),
+  // Claude Code or Codex running in a terminal, as the real CLI draws it (captured 2026-11-13): the
+  // welcome header, the history, the working line, the input and its footer. The terminal keeps the
+  // newest rows, as a real one scrolls.
+  z.object({
+    kind: z.literal("cli"),
+    app: z.enum(["claude-code", "codex"]).default("claude-code"),
+    cwd: z.string().default("~/project"),
+    // The model line under the name: "Opus 5.5 · Claude Max", "GPT-6-Astra medium".
+    model: z.string().optional(),
+    welcome: z.boolean().default(true),
+    backdrop: Backdrop,
+    steps: z.array(CliStep).min(1).max(14),
+  }),
+  // The Claude desktop app: a chat (`chat`, replies in the serif) or a Code session (`code`). The
+  // sidebar shows on a wide frame, as the app hides it on a narrow window.
+  z.object({
+    kind: z.literal("claudeapp"),
+    mode: z.enum(["chat", "code"]).default("chat"),
+    title: z.string().optional(),
+    model: z.string().default("Opus 5.5"),
+    effort: z.string().default("High"),
+    recents: z.array(z.string()).max(6).default([]),
+    backdrop: Backdrop,
+    steps: z.array(ChatStep).min(1).max(10),
+  }),
+  // The Grok Bot app (xAI), from Owain's screenshot of it: `chat` with one bot, `bots` (the list, a
+  // new bot arriving on its word) or `profile` (the bot's page, its scheduled tasks switching on).
+  // Sample content only: never the private text in the source screenshot.
+  z.object({
+    kind: z.literal("grokbot"),
+    view: z.enum(["chat", "bots", "profile"]).default("chat"),
+    backdrop: Backdrop,
+    bot: z.object({ name: z.string(), color: BotColor.default("white"), shape: BotShape.optional() }).default({ name: "Gradient Bot", color: "white" }),
+    steps: z.array(GrokStep).max(8).default([]),
+    bots: z.array(z.object({ name: z.string(), preview: z.string().default(""), color: BotColor, shape: BotShape.optional(), group: z.string().optional(), unread: z.boolean().optional(), at: Anchor.optional() })).max(7).default([]),
+    tasks: z.array(z.object({ name: z.string(), when: z.string(), on: z.boolean().default(true), at: Anchor.optional() })).max(5).default([]),
   }),
   z.object({
     kind: z.literal("search"),
@@ -333,7 +409,8 @@ export const Visual = z.discriminatedUnion("kind", [
   // under the last beat (the call to action).
   z.object({
     kind: z.literal("beats"),
-    items: z.array(z.object({ text: z.string(), size: z.enum(["huge", "mid", "small"]).default("huge"), typed: z.boolean().optional(), at: Anchor.optional() })).min(1).max(6),
+    // `cased`: keep the text as written (a call to action like Comment "EGM"); beats are lower case otherwise.
+    items: z.array(z.object({ text: z.string(), size: z.enum(["huge", "mid", "small"]).default("huge"), typed: z.boolean().optional(), cased: z.boolean().optional(), at: Anchor.optional() })).min(1).max(6),
     line: z.object({ text: z.string(), at: Anchor.optional() }).optional(),
   }),
   z.object({
@@ -371,6 +448,9 @@ const Hit = z.object({ text: z.string(), tag: z.string().optional(), at: Anchor.
 export const SfxKind = z.enum(["whoosh", "pop", "impact", "thud", "blip", "chime", "key", "riser"]);
 
 export const Shot = z.object({
+  // The shot's name across versions, for the review, notes and the inspector. Left out, it is made
+  // from the anchor; the editor writes it in when it moves a shot's anchor, so the shot stays itself.
+  id: z.string().min(1).optional(),
   at: Anchor,
   layout: Layout,
   visual: Visual.optional(),
@@ -418,7 +498,12 @@ export const Edit = z.object({
   style: z.string().default("ivory"),
   // The video's theme: the default tone of every graphic. Dark is Graphite on YouTube, Forest on reels.
   // Black (Owain, 2026-10-30: "classier - maybe black"): pure black cards, white type, no sage.
+  // On YouTube a dark shot in a light video (`tone: "dark"`) also takes the Black colours.
   theme: z.enum(["light", "dark", "black"]).default("light"),
+  // The clean style's colours: "forest" (deep green stage, white type, sage) or "light" (Owain,
+  // 2026-11-13: "the green is very muddy... light background + deep green text + occasional black
+  // screens"): a near-white stage, deep green type and lines, black cards.
+  palette: z.enum(["forest", "light"]).default("forest"),
   // YouTube: stretches to leave alone, [start, end] in seconds (demos). No graphics inside them.
   leave: z.array(z.tuple([z.number(), z.number()])).default([]),
   // YouTube: stretches of the original to cut out of the export, [start, end] in seconds (a section
@@ -437,6 +522,14 @@ export const Edit = z.object({
   // The reel's title. It lands large in frame 1 (the on-screen hook) and then docks as a small
   // header above the panel on every split and media shot. Wrap one word in *asterisks* for the accent.
   header: z.string().optional(),
+  // The clean style's text hook (Owain, 2026-11-11): one short headline on screen from the first frame,
+  // set as written, with one *marked* phrase in the accent. It holds until its `until` words; left out,
+  // to the first cut after the first shot or 3 s, whichever is later, and never past 5 s.
+  hook: z.object({ text: z.string().min(1), until: Anchor.optional() }).optional(),
+  // The clean style's cover (Owain, 2026-11-11): frame 0 is a clean card for the Instagram feed, Owain's
+  // blank card (library/covers/<image>.png or .jpg) with the title over it. No logos: Owain, 2026-11-11,
+  // "they look bad. Just text for now". Instagram's default cover is the first frame.
+  cover: z.object({ title: z.string().min(1), image: z.string().default("owain") }).optional(),
   // Where the speaker's face is in the source footage, as fractions of its frame:
   // centre x, centre y, and head height (crown to chin). Used to frame every speaker layout.
   // Required for footage; script projects (no footage) use the placeholder's own.
@@ -454,6 +547,10 @@ export const Edit = z.object({
   grade: z.object({ brightness: z.number().default(1), contrast: z.number().default(1), saturate: z.number().default(1) }).default({ brightness: 1, contrast: 1, saturate: 1 }),
   // Gain for the speaker's own audio track, in dB.
   voiceGain: z.number().default(0),
+  // The video's named parts (intro, part 1, part 2), in order. Each starts on a spoken phrase and
+  // runs to the start of the next; the first starts the video. They change nothing on screen: they
+  // are how a video is edited and test-rendered a part at a time (engine/parts.ts).
+  parts: z.array(z.object({ name: z.string().min(1), at: z.string().min(1) })).default([]),
   shots: z.array(Shot).min(1),
 });
 
@@ -489,6 +586,8 @@ export type Word = { text: string; start: number; end: number };
 // `zooms` and `ticks`: from a recorded screen (media/record.ts), on the timeline.
 export type ResolvedVisual = VisualSpec & { times?: number[]; size?: [number, number]; zooms?: { t: number; x: number; y: number; s: number; ms: number }[]; ticks?: number[] };
 export type ResolvedShot = {
+  // Always set by the resolver: the plan's `id`, or one made from the anchor (resolve.ts, shotIds).
+  id?: string;
   header?: string;
   start: number;
   end: number;
@@ -508,6 +607,8 @@ export type ResolvedShot = {
   chip?: { name: string; at: number };
   inside?: boolean;
 };
+export type ResolvedHook = { text: string; until: number };
+export type ResolvedPart = { name: string; anchor: string; start: number; end: number };
 export type Chunk = { words: { text: string; start: number; end: number; accent: boolean }[]; start: number; end: number };
 // `exact`: play as given (its own gain, never thinned): whooshes, risers and highlight clicks.
 export type SfxEvent = { kind: z.infer<typeof SfxKind>; t: number; gain?: number; dur?: number; exact?: boolean };
@@ -523,6 +624,10 @@ export type Resolved = {
   audio: string | null;
   // Export only: draw the overlays alone on a transparent frame, for Final Cut (reel export).
   alpha?: boolean;
+  // Export of one part only: the flattened picture holds just that part, and starts at this frame of
+  // the timeline. Times everywhere else stay the whole video's.
+  pictureFrom?: number;
+  parts?: ResolvedPart[];
   face: { x: number; y: number; h: number };
   // Stretches cut out of the export (see Edit.remove).
   remove?: [number, number][];
@@ -532,6 +637,7 @@ export type Resolved = {
   style?: string;
   captions: boolean;
   theme?: "light" | "dark" | "black";
+  palette?: "forest" | "light";
   // Light copies for the review board's players: 1080p H.264 video and AAC audio. Renders use the originals.
   preview?: { video?: string; audio?: string };
   // The library only: no footage, but the speaker's place is drawn with the stand-in, where a clean
@@ -542,6 +648,10 @@ export type Resolved = {
   // file first (media/cutrender.ts), so they never see this.
   cut?: { video: string; audio?: string; start: number; end: number; in: number }[];
   shots: ResolvedShot[];
+  // The clean style's text hook, from the first frame to `until`.
+  hook?: ResolvedHook;
+  // The cover on frame 0: the card's file in the project.
+  cover?: { title: string; image: string };
   chunks: Chunk[];
   sfx: SfxEvent[];
 };

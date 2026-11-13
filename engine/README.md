@@ -9,7 +9,7 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 ### `schema.ts`
 
 - `Edit`: zod schema for `edit.json`. Fields: `title`, `canvas`, `style`, `theme`, `leave`, `remove`, `captions`, `format`, `split`, `header`, `face`, `accents`, `music`, `grade`, `voiceGain`, `shots`.
-- `Shot`: fields `at` and `layout` (required), plus `visual`, `shift`, `sfx`, `zoom`, `header`, `keep`, `tone`, `enter`, `picture`, `bg`, `hit`, `title`, `chip`, `inside`, `note`.
+- `Shot`: fields `at` and `layout` (required), plus `id` (the shot's name across versions; made from the anchor when left out), `visual`, `shift`, `sfx`, `zoom`, `header`, `keep`, `tone`, `enter`, `picture`, `bg`, `hit`, `title`, `chip`, `inside`, `note`.
 - `Visual`: discriminated union on `kind`. The list of kinds is in `schema.ts`.
 - `Layout`: `full`, `punch`, `split`, `media`, `cutaway`, `scene`. YouTube only: `side`, `half`, `over`. Clean style only: `card`, `diagram`. On clean reels, `over` is the glass overlay.
 - `Picture`, `SfxKind`.
@@ -33,6 +33,10 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - Sound-aware edges: `quietest`, `snapEdge`, `clippedWords`, `loudJoins`.
 - Types: `Placed`, `Levels`.
 
+### `parts.ts`
+
+`resolveParts(parts, words, duration, fps?, cut?)` turns the plan's `parts` into `{ name, anchor, start, end }` on the timeline. `pickPreview(parts, duration, ask)` reads what `render --part` or `--from --to` asks for. `frameWindow`, `segmentInWindow`, `sectionFrames` and `rangesInWindow` are the frame arithmetic for rendering one stretch. Types `Range`, `FrameWindow`, `Preview`.
+
 ### `qc.ts`
 
 - `qcPlan(r, words, notes, cuts = [])`: plan checks.
@@ -45,6 +49,8 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - `beats.ts`: `reelBeats(shots, words, duration, fps = 30)`, `beatAt(beats, t)`, type `Beat`.
 - `insert.ts`: `wordAt`, `phraseAt`, `mergeShots`, `planIndex`, `stripAnchors`.
 - `tighten.ts`: `tighten(words, opts)`, `wordsRange`, type `Trim`.
+- `api.ts`: `Actions` (one zod schema per editor action), `isAction`, types `ActionName`, `ActionInput`, `ActionData`. Read by `server/index.ts` and `app/api.ts`.
+- `review.ts`: review before render. `reviewItems(r, words)`, `itemHash(r, index, said)`, `reviewable(s)`, `mergeReview(review, items)`, `counts`, `noteTime(note, words)`, `openNotes`, `openChanges`, `formatFeedback(review, items, words)`, `seenPath(id, hash)`, `emptyReview`, `hash`, `stable`, types `Review`, `ItemReview`, `Past`, `Note`, `Item`, `Status`.
 - `reviewmd.ts`: `REVIEW_MD`, `reviewLine`, the example file the `reviewmd` visual shows.
 
 ## Invariants
@@ -61,6 +67,15 @@ The pure core of Studio: the plan schema, word-anchored timing, cut maths, and t
 - Reveal anchors search forward from the shot's word. A miss falls back to the shot's start: an error normally, a warning with `cut = true`.
 - `Edit.shots` needs at least one shot. `Segment` needs `out` greater than `in`.
 - A `reviewmd` mark's `line` must exactly match a line in `REVIEW_MD`.
+
+### Ids and review
+
+- `resolveShots` sets `id` on every shot: the plan's own, else the anchor in lower case with other characters as `-`. A repeat gets `-2`, `-3`. The plain picture that fills the start of a cut is `start`.
+- A review item is a shot that is not kept and is more than plain picture (`reviewable`). It runs to the end of the last shot that keeps its visual.
+- `itemHash` counts times in frames from the item's start, so a re-cut earlier in the video does not change it. It covers the shots' fields, the visual, the words said and the video's look (canvas, style, theme, split, captions, face, grade).
+- `mergeReview`: an item whose hash changed goes back to `waiting` and its status, comment and reply move to `history`. New items start `waiting`. Reviews of items that left the plan move to `removed` and come back if the item does. An item that returns to a version in its history (an undo) takes that decision back.
+- A note's `anchor` is the phrase said from its moment (`phraseAt`); `noteTime` finds it in the words as they are now, else uses `t`.
+- `openChanges` leaves out an item Claude has already answered, until Owain writes on it again.
 
 ### Which lint runs
 

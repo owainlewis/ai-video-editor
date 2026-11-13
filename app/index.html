@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Studio</title>
     <link rel="stylesheet" href="./style.css" />
+    <script>
+      // A kept choice of light or dark, before the first paint (app/ui.tsx).
+      try {
+        const theme = localStorage.getItem("studio-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

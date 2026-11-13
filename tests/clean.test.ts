@@ -2,7 +2,7 @@
 // hold the house rules Owain chose.
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
-import { cleanSfx, lintClean, resolveShots } from "../engine/resolve.ts";
+import { cleanSfx, hookLines, lintClean, lintCover, lintHook, resolveHook, resolveShots } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -41,6 +41,15 @@ describe("clean plans", () => {
     };
     expect(ends({ at: "having", layout: "full" })).toBe(true);
     expect(ends({ at: "having", layout: "card", bg: "paper", visual: { kind: "beats", items: [{ text: "CODE", at: "code" }] } })).toBe(false);
+  });
+
+  it("warns when a reel opens full frame on the face", () => {
+    const opens = (first: unknown) => {
+      const { shots } = resolveShots(plan([first, { at: "having", layout: "split", visual: { kind: "custom", name: "x" } }]), words, 5);
+      return lintClean(shots, 5, false).some((i) => /opens on/.test(i.message));
+    };
+    expect(opens({ at: "If", layout: "full" })).toBe(true);
+    expect(opens({ at: "If", layout: "split", visual: { kind: "custom", name: "y" } })).toBe(false);
   });
 
   it("rejects a hit word too wide for the frame", () => {
@@ -125,5 +134,39 @@ describe("clean plans", () => {
     expect(ev.filter((e) => e.kind === "chime")).toHaveLength(1);
     expect(ev.filter((e) => e.kind === "impact")).toHaveLength(1);
     expect(ev.filter((e) => e.kind === "key").length).toBeGreaterThan(3);
+  });
+
+  it("holds the hook to the first cut after 3 s, or its own words, and never past 5 s", () => {
+    const at = (cuts: string[], hook: { text: string; until?: string }) => {
+      const { shots } = resolveShots(plan(cuts.map((c) => ({ at: c, layout: "full" }))), words, 5);
+      return resolveHook(hook, words, shots, 5);
+    };
+    // Shots at 0, 2.35 ("good", word 8) and 3.55 ("is", word 12): the first cut at or after 3 s.
+    expect(at(["If", "good", "is"], { text: "x" }).hook!.until).toBeCloseTo(12 * 0.3 - 0.05, 1);
+    // No cut between 3 and 5 s: 3 s.
+    expect(at(["If", "good"], { text: "x" }).hook!.until).toBe(3);
+    // A first shot longer than 5 s ends the hook at 5 s.
+    expect(at(["If"], { text: "x" }).hook!.until).toBe(5);
+    // Its own words.
+    expect(at(["If"], { text: "x", until: "having" }).hook!.until).toBeCloseTo(6 * 0.3 - 0.05, 1);
+    expect(at(["If"], { text: "x", until: "nowhere" }).issues[0].level).toBe("error");
+  });
+
+  it("warns when a clean reel has no hook, or a hook that is long or wraps past two lines", () => {
+    const { shots } = resolveShots(plan([{ at: "If", layout: "split", visual: { kind: "custom", name: "y" } }]), words, 5);
+    expect(lintClean(shots, 5, false).map((i) => i.message).join()).toMatch(/no text hook/);
+    expect(lintClean(shots, 5, false, { text: "Google EGM: *better code* with AI." }).map((i) => i.message).join()).not.toMatch(/hook/);
+    // Owain, 2026-11-11: "We should keep the text hook short": six words at most.
+    expect(lintHook({ text: "Google EGM helps you write *better code*." }).map((i) => i.message).join()).toMatch(/7 words/);
+    expect(lintHook({ text: "Professional engineers *review everything* before shipping software." }).map((i) => i.message).join()).toMatch(/about 3 lines/);
+    expect(lintHook({ text: "two *marks* and *more*" }).map((i) => i.message).join()).toMatch(/marks 2 phrases/);
+    expect(hookLines("Google EGM helps you write better code with AI.")).toBe(2);
+  });
+
+  it("warns when a clean reel has no cover, or a cover title that runs past two lines", () => {
+    const { shots } = resolveShots(plan([{ at: "If", layout: "split", visual: { kind: "custom", name: "y" } }]), words, 5);
+    expect(lintClean(shots, 5, false).map((i) => i.message).join()).toMatch(/no cover/);
+    expect(lintCover({ title: "Google's New Tool Improves Your AI Code" })).toEqual([]);
+    expect(lintCover({ title: "Google's Brand New Free Tool Massively Improves Your AI Code" }).map((i) => i.message).join()).toMatch(/10 words.*\n?|lines/);
   });
 });

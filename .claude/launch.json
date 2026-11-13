@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 4747
+    },
+    {
+      "name": "studio-4760",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "studio", "--", "serve", "--port", "4760"],
+      "port": 4760
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contrast, droppedFrames, longestStill, type Measure, qcLayout, qcPlan, saidTwice, visualText, zoomSlivers } from "../engine/qc.ts";
+import { contrast, droppedFrames, longestStill, type Measure, qcCover, qcHook, qcLayout, qcPlan, saidTwice, visualText, zoomSlivers } from "../engine/qc.ts";
 import { zoomAt, zoomClashes } from "../engine/resolve.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 
@@ -177,5 +177,46 @@ describe("recorded screens", () => {
     expect(zoomClashes([zoom, { t: 1.4, x: 0.5, y: 0, s: 1, ms: 300 }])).toEqual([zoom]);
     expect(zoomClashes([zoom, { t: 1.4, x: 0.5, y: 0, s: 1, ms: 0 }])).toEqual([]);
     expect(zoomClashes([zoom, { t: 2, x: 0.5, y: 0, s: 1, ms: 500 }])).toEqual([]);
+  });
+});
+
+describe("qcHook", () => {
+  const reel: [number, number] = [1080, 1920];
+  const ink = [14, 22, 18];
+  const hook = (box: [number, number, number, number], extra: Partial<Measure["texts"][0]> = {}) => text("Google EGM helps you", box, { block: 1, size: 80, color: "rgb(255, 255, 255)", hook: true, ...extra });
+  const lines = (n: number) => Array.from({ length: n }, (_, k) => [0, 1, 2].map(() => ({ block: 1, top: 130 + k * 85, h: 80 }))).flat();
+
+  it("passes two clear lines at the top of an ink panel", () => {
+    expect(qcHook(m([hook([140, 130, 800, 160])], { words: lines(2) }), reel, "h", ink)).toEqual([]);
+  });
+
+  it("errors when the hook is missing, outside the safe area, or on the caption, the panel or the face", () => {
+    expect(msgs(qcHook(m([]), reel, "h", ink))).toMatch(/not on screen/);
+    expect(msgs(qcHook(m([hook([140, 40, 800, 160])]), reel, "h", ink))).toMatch(/safe area/);
+    expect(msgs(qcHook(m([hook([140, 130, 800, 160]), text("egm", [400, 250, 200, 100])]), reel, "h", ink))).toMatch(/runs into "egm"/);
+    expect(msgs(qcHook(m([hook([140, 130, 800, 160])], { paint: [[60, 200, 960, 600]] }), reel, "h", ink))).toMatch(/panel's contents/);
+    expect(msgs(qcHook(m([hook([140, 130, 800, 160])], { faces: [[300, 260, 500, 600]] }), reel, "h", ink))).toMatch(/sits on the face/);
+  });
+
+  it("warns over two lines and errors when it cannot be read", () => {
+    expect(msgs(qcHook(m([hook([140, 130, 800, 250])], { words: lines(3) }), reel, "h", ink))).toMatch(/wraps to 3 lines/);
+    expect(qcHook(m([hook([140, 130, 800, 160])]), reel, "h", [235, 235, 230])[0].level).toBe("error");
+  });
+});
+
+describe("qcCover", () => {
+  const reel: [number, number] = [1080, 1920];
+  const band = { top: 240, height: 1440 };
+  const title = (box: [number, number, number, number]) => text("Google's New Tool", box, { block: 1, size: 96, cover: true });
+  const lines = (n: number) => Array.from({ length: n }, (_, k) => [0, 1, 2].map(() => ({ block: 1, top: 1240 + k * 100, h: 96 }))).flat();
+
+  it("passes a two-line title inside the grid's crop", () => {
+    expect(qcCover(m([title([80, 1240, 920, 200])], { words: lines(2) }), reel, band)).toEqual([]);
+  });
+
+  it("errors outside the crop, and warns past two lines", () => {
+    expect(msgs(qcCover(m([title([80, 1640, 920, 200])]), reel, band))).toMatch(/3:4 crop/);
+    expect(msgs(qcCover(m([title([80, 1240, 920, 300])], { words: lines(3) }), reel, band))).toMatch(/3 lines/);
+    expect(msgs(qcCover(m([]), reel, band))).toMatch(/not on screen/);
   });
 });

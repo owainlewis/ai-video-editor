@@ -50,9 +50,9 @@ const Placeholder: React.FC<{ style: React.CSSProperties }> = ({ style }) => (
   </svg>
 );
 
-// One continuous speaker video. It is never unmounted, so playback never seeks
-// between shots; each layout only changes its box and framing.
-export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }> = ({ r, shot, time }) => {
+// Where the footage sits for a shot at `time`: its box in the frame, and the video's offset and size
+// inside that box.
+export const speakerPlace = (r: Resolved, shot: ResolvedShot, time: number) => {
   const [sw, sh] = r.videoSize;
   const f = framing(shot.layout, r);
   let box = f.box;
@@ -79,6 +79,20 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
   let y = anchorY - r.face.y * vh;
   x = Math.min(0, Math.max(box.width - vw, x));
   y = Math.min(0, Math.max(box.height - vh, y));
+  return { box, x, y, vw, vh, inset, visible: f.visible };
+};
+
+// The speaker's head (crown to chin) in frame pixels, for text that has to keep off it.
+export const faceRect = (r: Resolved, shot: ResolvedShot, time: number) => {
+  const { box, x, y, vw, vh } = speakerPlace(r, shot, time);
+  const h = r.face.h * vh;
+  return { left: box.left + x + r.face.x * vw - h * 0.375, top: box.top + y + r.face.y * vh - h / 2, width: h * 0.75, height: h };
+};
+
+// One continuous speaker video. It is never unmounted, so playback never seeks
+// between shots; each layout only changes its box and framing.
+export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }> = ({ r, shot, time }) => {
+  const { box, x, y, vw, vh, inset, visible } = speakerPlace(r, shot, time);
 
   return (
     <div
@@ -92,7 +106,7 @@ export const Speaker: React.FC<{ r: Resolved; shot: ResolvedShot; time: number }
         // The half split is open at the bottom edge; the inset is a rounded window on all sides.
         borderRadius: inset ? box.radius : `${box.radius}px ${box.radius}px 0 0`,
         boxShadow: inset ? "0 18px 50px rgba(20,20,30,0.18)" : "none",
-        opacity: f.visible ? 1 : 0,
+        opacity: visible ? 1 : 0,
       }}
     >
       {r.cut ? (

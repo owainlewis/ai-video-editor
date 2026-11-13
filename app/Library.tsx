@@ -6,6 +6,7 @@ import { api, type Asset, type BinClip, clock, type Effect, type LibraryClip } f
 import { CLIP, gist, SOURCE, toSentences } from "./Timeline";
 import { Tile } from "./Gallery";
 import { cardPlan, settledTime, shotPlan } from "../effects/preview";
+import { Clock, playhead, usePlayhead } from "./playhead";
 
 // The left panel: the project's clips (its media bin: drag one onto the A-roll track to cut it in),
 // its assets (drop b-roll and images in; click one to mention it in a note) and the script (click a
@@ -14,29 +15,28 @@ export const Library: React.FC<{
   slug: string;
   assets: Asset[];
   words: Word[];
-  time: number;
   onUse: (ref: string) => void;
   onSeek: (t: number) => void;
   canvas: string;
   theme?: Resolved["theme"];
   bin: BinClip[];
   r: Resolved;
-  picked: number | null;
-  onPick: (start: number) => void;
+  picked: string | null;
+  onPick: (id: string) => void;
   cut: CutPlan;
   onCut: (cut: CutPlan) => Promise<unknown>;
   onSelect: (range: { start: number; end: number; label?: string } | null) => void;
-}> = ({ slug, assets, words, time, onUse, onSeek, canvas, theme, bin, r, picked, onPick, cut, onCut, onSelect }) => {
+}> = ({ slug, assets, words, onUse, onSeek, canvas, theme, bin, r, picked, onPick, cut, onCut, onSelect }) => {
   const [tab, setTab] = useState<"clips" | "assets" | "graphics" | "effects" | "script">("graphics");
   // A library card goes in at the playhead and opens in the inspector.
   const place = (card: string) =>
-    api.post(slug, "place", { card, at: time }).then((d) => onPick((d as { start: number }).start)).catch((e) => setError(String(e.message)));
+    api.post(slug, "place", { card, at: playhead.get() }).then((d) => onPick((d as { id: string }).id)).catch((e) => setError(String(e.message)));
   const graphics = useMemo(
     () =>
       r.shots.flatMap((s, i) => {
         if (!s.visual || s.keep) return [];
         const plan = shotPlan(r, i, false);
-        return [{ key: `${s.start}`, start: s.start, title: s.visual.kind === "custom" ? `custom: ${(s.visual as { name?: string }).name}` : s.visual.kind, sub: `${clock(s.start)} · ${gist(s.visual) || s.anchor}`, plan, from: Math.max(0, s.start - 0.3), to: Math.min(r.duration, s.end + 0.3), settled: settledTime(s), visual: s.visual }];
+        return [{ key: `${s.start}`, id: s.id ?? "", start: s.start, title: s.visual.kind === "custom" ? `custom: ${(s.visual as { name?: string }).name}` : s.visual.kind, sub: `${clock(s.start)} · ${gist(s.visual) || s.anchor}`, plan, from: Math.max(0, s.start - 0.3), to: Math.min(r.duration, s.end + 0.3), settled: settledTime(s), visual: s.visual }];
       }),
     [r],
   );
@@ -197,8 +197,8 @@ export const Library: React.FC<{
           {error && <p className="error small">{error}</p>}
           <div className="effects">
             {graphics.map((g) => (
-              <div key={g.key} className={picked !== null && Math.abs(picked - g.start) < 0.02 ? "picked" : ""}>
-                <Tile item={g} onOpen={() => (onPick(g.start), onSeek(Math.min(g.to - 0.4, g.start + 1.5)))} />
+              <div key={g.key} className={picked === g.id ? "picked" : ""}>
+                <Tile item={g} onOpen={() => (onPick(g.id), onSeek(Math.min(g.to - 0.4, g.start + 1.5)))} />
               </div>
             ))}
           </div>
@@ -207,7 +207,7 @@ export const Library: React.FC<{
       ) : tab === "effects" ? (
         <div className="assets">
           <p className="muted small">
-            Every graphic in this video's look ({lookName(canvas, style, theme)}), live. House graphics first. Hover to play; click one to add it at the playhead ({clock(time)}). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
+            Every graphic in this video's look ({lookName(canvas, style, theme)}), live. House graphics first. Hover to play; click one to add it at the playhead (<Clock />). <a href={`#/gallery?canvas=${canvas}&theme=${theme === "dark" || theme === "black" ? "dark" : "light"}`}>Open the gallery</a>
           </p>
           {error && <p className="error small">{error}</p>}
           <div className="effects">
@@ -231,7 +231,7 @@ export const Library: React.FC<{
           )}
         </div>
       ) : (
-        <Script words={words} sentences={sentences} time={time} cut={cut} onCut={onCut} onSeek={onSeek} onSelect={onSelect} />
+        <Script words={words} sentences={sentences} cut={cut} onCut={onCut} onSeek={onSeek} onSelect={onSelect} />
       )}
     </aside>
   );
@@ -247,12 +247,13 @@ const lookName = (canvas: string, style: string | undefined, theme?: Resolved["t
 const Script: React.FC<{
   words: Word[];
   sentences: { start: number; end: number; text: string }[];
-  time: number;
   cut: CutPlan;
   onCut: (cut: CutPlan) => Promise<unknown>;
   onSeek: (t: number) => void;
   onSelect: (range: { start: number; end: number; label?: string } | null) => void;
-}> = ({ words, time, cut, onCut, onSeek, onSelect }) => {
+}> = ({ words, cut, onCut, onSeek, onSelect }) => {
+  // The word being said: the script is redrawn when the playhead reaches the next word.
+  const here = usePlayhead((t) => words.findIndex((w, i) => t >= w.start && t < (words[i + 1]?.start ?? w.end)));
   const [picked, setPicked] = useState<[number, number] | null>(null);
   const [trims, setTrims] = useState<(Trim & { on: boolean })[] | null>(null);
   const [error, setError] = useState("");
@@ -326,9 +327,8 @@ const Script: React.FC<{
       <div className="script" onMouseUp={select}>
         {lines.map((line, n) => {
           const s = words[line[0]];
-          const e = words[line[line.length - 1]];
           return (
-            <p key={n} className={time >= s.start && time < e.end ? "now" : ""}>
+            <p key={n} className={here >= line[0] && here <= line[line.length - 1] ? "now" : ""}>
               <span className="t" onClick={() => onSeek(s.start)}>{clock(s.start)}</span>{" "}
               {line.map((i) => {
                 const t = struck.get(i);
@@ -338,7 +338,7 @@ const Script: React.FC<{
                   <React.Fragment key={i}>
                     <span
                       data-i={i}
-                      className={`w ${t ? `drop ${t.kind} ${t.on ? "" : "off"}` : ""} ${picked && i >= picked[0] && i <= picked[1] ? "sel" : ""} ${time >= words[i].start && time < (words[i + 1]?.start ?? words[i].end) ? "here" : ""}`}
+                      className={`w ${t ? `drop ${t.kind} ${t.on ? "" : "off"}` : ""} ${picked && i >= picked[0] && i <= picked[1] ? "sel" : ""} ${i === here ? "here" : ""}`}
                       title={t ? `${t.kind}: click to ${t.on ? "keep" : "cut"}` : clock(words[i].start)}
                       onClick={() => (t ? toggle(t) : window.getSelection()?.isCollapsed && onSeek(words[i].start + 0.01))}
                     >

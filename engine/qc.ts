@@ -3,7 +3,7 @@
 // footage, numbers that were never said. Layout checks read measurements of real frames, taken in a
 // headless browser by `studio qc` (media/qc.ts): safe area, collisions, orphans, type size, contrast,
 // balance. Errors stop an export; warnings are reported.
-import { type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
+import { COVER, HOOK, type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
 import type { Resolved, Word } from "./schema.ts";
 
 // ---------- plan checks ----------
@@ -12,7 +12,8 @@ const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src
 
 // Every piece of text a visual puts on screen.
 export const visualText = (v: unknown): string[] => {
-  if (typeof v === "string") return [v.replace(/\*/g, "").replace(/\/\//g, "")];
+  // An inlined image (a "logo:" mark becomes a data URL) is a picture, not words on screen.
+  if (typeof v === "string") return v.startsWith("data:") ? [] : [v.replace(/\*/g, "").replace(/\/\//g, "")];
   if (Array.isArray(v)) return v.flatMap(visualText);
   if (v && typeof v === "object") return Object.entries(v).flatMap(([k, x]) => (SKIP.has(k) ? [] : visualText(x)));
   return [];
@@ -111,11 +112,13 @@ export const saidTwice = (words: Word[], remove: [number, number][] = []): Issue
 
 export type Box = [number, number, number, number]; // left, top, width, height
 export type Measure = {
-  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string; clipped?: boolean; label?: boolean }[];
+  texts: { text: string; box: Box; size: number; opacity: number; color: string; block: number; under?: string; clipped?: boolean; label?: boolean; hook?: boolean; cover?: boolean }[];
   marks: { box: Box; opacity: number }[];
   edges?: { points: number[][]; opacity: number }[];
   words: { block: number; top: number; h: number }[];
   paint?: Box[];
+  // The speaker's face, brow to chin, where the clean style's hook is over him.
+  faces?: Box[];
 };
 
 // A panel should not sit still (Owain, 2026-11-08: "quite slow and static"; the reels he pointed to
@@ -252,5 +255,63 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     if (Math.abs(dx) > W * 0.08) warn(`the card sits ${Math.round(Math.abs(dx))}px ${dx > 0 ? "right" : "left"} of centre`);
     if (Math.abs(dy) > H * 0.1) warn(`the card sits ${Math.round(Math.abs(dy))}px ${dy > 0 ? "below" : "above"} centre`);
   }
+  return issues;
+};
+
+// The clean style's text hook on one frame (Owain, 2026-11-11): inside the safe area, two lines at
+// most, clear of the caption, the panel's contents and the speaker's face, and readable on what it sits
+// on. `bg`: that colour as [r, g, b], from the card or panel, or sampled from the footage under it.
+export const qcHook = (m: Measure, size: [number, number], where: string, bg?: number[]): Issue[] => {
+  const [W, H] = size;
+  const issues: Issue[] = [];
+  const err = (message: string) => issues.push({ level: "error", message: `${where}: ${message}` });
+  const warn = (message: string) => issues.push({ level: "warn", message: `${where}: ${message}` });
+  const hook = m.texts.filter((t) => t.hook && visible(t.opacity));
+  if (!hook.length) return [{ level: "error", message: `${where}: the hook is not on screen` }];
+  const others = m.texts.filter((t) => !t.hook && visible(t.opacity));
+  for (const t of hook) {
+    const [x, y, w, h] = t.box;
+    if (x < W * SAFE.x || x + w > W * (1 - SAFE.x) || y < H * SAFE.top || y + h > H * (1 - SAFE.bottom))
+      err(`the hook "${short(t.text)}" is outside the safe area (${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)})`);
+    for (const o of others) if (overlap(t.box, o.box) || gap(t.box, o.box) < MIN_GAP) err(`the hook "${short(t.text)}" runs into "${short(o.text)}"`);
+    if ((m.paint ?? []).some((p) => overlap(t.box, p)) || m.marks.some((k) => visible(k.opacity) && gap(t.box, k.box) < MIN_GAP)) err(`the hook "${short(t.text)}" runs into the panel's contents`);
+    const on = ([px, py]: number[]) => px > x - 4 && px < x + w + 4 && py > y - 4 && py < y + h + 4;
+    if ((m.edges ?? []).some((e) => visible(e.opacity) && e.points.some(on))) err(`the hook "${short(t.text)}" sits on a line in the diagram`);
+    if ((m.faces ?? []).some((f) => overlap(t.box, f))) err(`the hook "${short(t.text)}" sits on the face; keep it above the brow`);
+    if (bg && t.opacity >= 0.9) {
+      const ratio = contrast(rgb(t.color), t.under ? rgb(t.under) : bg);
+      if (ratio < 3) err(`the hook "${short(t.text)}" is hard to read (${ratio.toFixed(1)}:1 on what is under it)`);
+      else if (ratio < 4.5) warn(`the hook "${short(t.text)}" has low contrast (${ratio.toFixed(1)}:1)`);
+    }
+  }
+  // Lines: the hook's words, by where each line starts.
+  const blocks = new Set(hook.map((t) => t.block));
+  const ws = m.words.filter((w) => blocks.has(w.block));
+  const lh = Math.max(...ws.map((w) => w.h), 1);
+  const lines: number[] = [];
+  for (const top of ws.map((w) => w.top).sort((a, b) => a - b)) if (!lines.length || top - lines[lines.length - 1] > lh * 0.6) lines.push(top);
+  if (lines.length > HOOK.lines) warn(`the hook wraps to ${lines.length} lines; keep it to ${HOOK.lines}`);
+  return issues;
+};
+
+// The clean style's cover on frame 0: its title inside the 3:4 band Instagram's grid shows (`band`:
+// top and height in frame pixels), on two lines at most.
+export const qcCover = (m: Measure, size: [number, number], band: { top: number; height: number }, where = "the cover"): Issue[] => {
+  const [W] = size;
+  const issues: Issue[] = [];
+  const title = m.texts.filter((t) => t.cover && visible(t.opacity));
+  if (!title.length) return [{ level: "error", message: `${where}: the title is not on screen` }];
+  const inset = band.height * 0.04;
+  for (const t of title) {
+    const [x, y, w, h] = t.box;
+    if (x < W * SAFE.x || x + w > W * (1 - SAFE.x) || y < band.top + inset || y + h > band.top + band.height - inset)
+      issues.push({ level: "error", message: `${where}: "${short(t.text)}" is outside the grid's 3:4 crop (${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)})` });
+  }
+  const blocks = new Set(title.map((t) => t.block));
+  const ws = m.words.filter((w) => blocks.has(w.block));
+  const lh = Math.max(...ws.map((w) => w.h), 1);
+  const lines: number[] = [];
+  for (const top of ws.map((w) => w.top).sort((a, b) => a - b)) if (!lines.length || top - lines[lines.length - 1] > lh * 0.6) lines.push(top);
+  if (lines.length > COVER.lines) issues.push({ level: "warn", message: `${where}: the title wraps to ${lines.length} lines; keep it to ${COVER.lines}` });
   return issues;
 };

@@ -7,17 +7,22 @@
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
-//   npm run studio -- qc <slug> [--at 12,95]       check every graphic's layout, timing and content before rendering
+//   npm run studio -- qc <slug> [--at 12,95] [--cached]   check every graphic's layout, timing and content before rendering
 //   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
+//   npm run studio -- mix <slug>                   mix the sound as the export will, for the editor to play (build/preview-mix.m4a)
 //   npm run studio -- record <slug>                film the real pages in record.json, timed to the spoken words
 //   npm run studio -- auphonic <slug>              clean the voice with Auphonic (timing unchanged; key in .env)
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
+//   npm run studio -- render <slug> --part <name>  the same for one part only, to renders/part-<name>.mp4
+//   npm run studio -- render <slug> --from <s> --to <s>   the same for a stretch of the timeline
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { cleanProject } from "./media/auphonic.ts";
+import { pickPreview } from "./engine/parts.ts";
 import { resolveProject } from "./media/project.ts";
 import { record } from "./media/record.ts";
+import { previewMix } from "./media/previewmix.ts";
 import { renderFinal, stills } from "./media/render.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
@@ -91,10 +96,37 @@ async function main() {
       }
       const slug = need(target);
       const at = flag("at")?.split(",").map(Number);
-      const { issues, sheets, overview } = await runQc(projects, slug, undefined, (stage) => console.log(`  ${stage}`), at);
+      // From the editor (`--status --cached`): progress goes to status.json, and graphics that have
+      // not changed since they were last measured keep their result.
+      const dir = join(projects, slug);
+      const status = args.includes("--status");
+      if (status) setStatus(dir, "Checking graphics");
+      let result: Awaited<ReturnType<typeof runQc>>;
+      try {
+        result = await runQc(projects, slug, undefined, (stage) => (status ? setStatus(dir, stage) : console.log(`  ${stage}`)), at, undefined, args.includes("--cached"));
+      } catch (e) {
+        if (status) writeJson(join(dir, "status.json"), { stage: "QC failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
+        throw e;
+      }
+      if (status) writeJson(join(dir, "status.json"), { stage: "Checked", done: true, at: new Date().toISOString() });
+      const { issues, sheets, overview } = result;
       for (const i of issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
       console.log(`\n${issues.filter((i) => i.level === "error").length} errors, ${issues.filter((i) => i.level === "warn").length} warnings. ${sheets.length} contact sheets in projects/${slug}/checks/qc/${overview ? "; overview.jpg shows every graphic settled" : ""}`);
       if (issues.some((i) => i.level === "error")) process.exitCode = 1;
+      return;
+    }
+    case "mix": {
+      const slug = need(target);
+      const dir = join(projects, slug);
+      const status = args.includes("--status");
+      try {
+        const out = previewMix(projects, slug, status ? undefined : log, (stage) => (status ? setStatus(dir, stage) : console.log(`  ${stage}`)));
+        if (status) writeJson(join(dir, "status.json"), { stage: "Mixed", done: true, at: new Date().toISOString() });
+        console.log(`Mixed ${out}`);
+      } catch (e) {
+        if (status) writeJson(join(dir, "status.json"), { stage: "Mix failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
+        throw e;
+      }
       return;
     }
     case "record": {
@@ -156,6 +188,13 @@ async function main() {
     case "render": {
       const slug = need(target);
       const dir = join(projects, slug);
+      const ask = { part: flag("part"), from: flag("from"), to: flag("to") };
+      let preview: ReturnType<typeof pickPreview>;
+      if (ask.part !== undefined || ask.from !== undefined || ask.to !== undefined) {
+        const { resolved, issues } = resolveProject(projects, slug);
+        if (!resolved) throw new Error(issues.map((i) => i.message).join("\n") || "the plan does not resolve");
+        preview = pickPreview(resolved.parts ?? [], resolved.duration, ask);
+      }
       // One export at a time: two at once overwrite each other's sections (2026-10-25).
       const lock = join(dir, "build/export.lock");
       if (exists(lock)) {
@@ -171,7 +210,7 @@ async function main() {
       try {
         // QC before anything renders: errors stop the export (--force to override).
         setStatus(dir, "Checking graphics");
-        const qc = await runQc(projects, slug, log, (stage) => setStatus(dir, stage));
+        const qc = await runQc(projects, slug, log, (stage) => setStatus(dir, stage), undefined, preview?.range);
         const errors = qc.issues.filter((i) => i.level === "error");
         for (const i of qc.issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
         if (errors.length && !args.includes("--force")) throw new Error(`QC found ${errors.length} errors; fix them (npm run studio -- qc ${slug}) or render with --force`);
@@ -187,11 +226,11 @@ async function main() {
         const youtube = readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube";
         let last = -1;
         const out = youtube
-          ? await exportOverOriginal(projects, slug, (stage) => setStatus(dir, stage), log)
+          ? await exportOverOriginal(projects, slug, (stage) => setStatus(dir, stage), log, preview)
           : await renderFinal(projects, slug, (done, total) => {
               const pct = Math.floor((100 * done) / total);
               if (pct !== last && pct % 2 === 0) setStatus(dir, `Rendering ${pct}%`), (last = pct);
-            }, log, (stage) => setStatus(dir, stage));
+            }, log, (stage) => setStatus(dir, stage), preview);
         writeJson(join(dir, "status.json"), { stage: "Rendered", done: true, at: new Date().toISOString() });
         console.log(`Rendered ${out}`);
       } catch (e) {
@@ -203,7 +242,7 @@ async function main() {
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--force]");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, render <slug> [--part <name> | --from <s> --to <s>] [--force]");
   }
 }
 

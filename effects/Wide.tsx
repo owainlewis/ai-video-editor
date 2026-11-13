@@ -63,7 +63,10 @@ const Picture: React.FC<{ r: Resolved; style: React.CSSProperties }> = ({ r, sty
   r.cut ? (
     <CutVideo r={r} style={style} />
   ) : getRemotionEnvironment().isRendering ? (
-    <OffthreadVideo src={staticFile(r.video)} muted style={{ position: "absolute", ...style }} />
+    // The render of one part: its flattened picture starts at the part's first frame.
+    <Sequence from={r.pictureFrom ?? 0} layout="none">
+      <OffthreadVideo src={staticFile(r.video)} muted style={{ position: "absolute", ...style }} />
+    </Sequence>
   ) : (
     <Video src={staticFile(r.video)} muted={!!r.audio} style={{ position: "absolute", ...style }} />
   );
@@ -176,7 +179,8 @@ const HalfStage: React.FC<{ r: Resolved; k: number; children: React.ReactNode }>
 
 export const Wide: React.FC<Resolved> = (r) => {
   const black = r.theme === "black";
-  darkIsGraphite(true, black);
+  // Dark cards are neutral Black unless the whole video is the old Graphite theme (Owain, 2026-11-09).
+  darkIsGraphite(true, black, r.theme !== "dark");
   const frame = useCurrentFrame();
   const time = frame / r.fps;
   const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));

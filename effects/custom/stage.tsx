@@ -10,6 +10,8 @@
 //   drift   two sources side by side, a tag walks down them row by row, marking what no longer matches
 //   surge   a flood of dots into a flow, a counter climbing to the said number, the last node gives
 //   scale   a balance: the cost lands and it tips, the payoff lands and it tips back
+//   minds   one agent full of the project drafts a page; empty rings read it from every side
+//   tally   a row of said numbers, each landing on its word
 // Bars stand for text, so nothing on screen is made up; words are real labels from the video. A number
 // shows only when it is said (leave it out and the graphic still works). One accent, on the part that
 // matters. Filled circles remember; empty rings know nothing. Parts arrive at FAST and move at MOVE.
@@ -365,6 +367,65 @@ export const seeded = (i: number) => {
   const x = Math.sin(i * 12.9898) * 43758.5453;
   return x - Math.floor(x);
 };
+// One full mind and many empty ones (the EGM video, 2026-11-09). Props: `knows`, what the full agent
+// holds (up to four), `page`, the document between them, `left`, `right`, `ends`, the closing line.
+// Beats: left, each of `knows`, the page, right, the beams, `ends`.
+export const Minds: React.FC<CustomProps> = (p) => {
+  const k = kit(p), { c, u, cx, cy, t } = k, b = beats(p);
+  const knows = list(p.props.knows, ["One", "Two"]).slice(0, 4), n = knows.length;
+  const ex = cx - 318 * u, r = 136 * u, rx = cx + 345 * u, sw = 230 * u, sh = 280 * u, sx = cx - sw / 2, sy = cy - sh / 2;
+  const page = b(n + 1), right = b(n + 2), beams = b(n + 3), ends = b(n + 4);
+  const held = knows.reduce((m, _, i) => m + prog(t, b(i + 1)), 0) / n;
+  const reach = prog(t, page, MOVE);
+  const rings = [-150, 0, 150].map((d) => cy + d * u);
+  return (
+    <>
+      <Art k={k}>
+        <circle cx={ex} cy={cy} r={r} fill={c.accent} opacity={0.2 * held * prog(t, b(0))} />
+        <circle cx={ex} cy={cy} r={r} fill="none" stroke={c.accent} strokeWidth={3 * u} opacity={prog(t, b(0))} />
+        {reach > 0 && <line x1={ex + r + 10 * u} y1={cy} x2={lerp(ex + r + 10 * u, sx - 12 * u, reach)} y2={cy} stroke={c.ink} strokeWidth={3 * u} strokeLinecap="round" />}
+        {reach >= 1 && <polygon points={`${sx - 6 * u},${cy} ${sx - 20 * u},${cy - 9 * u} ${sx - 20 * u},${cy + 9 * u}`} fill={c.ink} />}
+        {rings.map((y, i) => {
+          const g = prog(t, beams + i * 0.08, FAST), to = lerp(rx - 46 * u, sx + sw + 8 * u, g), a = sy + (i * sh) / 3, z = a + sh / 3;
+          return (
+            <g key={i}>
+              {g > 0 && <polygon points={`${rx - 46 * u},${y} ${to},${lerp(y, a, g)} ${to},${lerp(y, z, g)}`} fill={c.accent} opacity={0.16} />}
+              <Actor k={k} x={rx} y={y} r={40 * u} color={g > 0 ? c.accent : c.muted} o={prog(t, right + i * 0.08)} />
+            </g>
+          );
+        })}
+      </Art>
+      <div style={arrive(k, b(0))}><Word k={k} x={ex - 220 * u} y={cy - r - 54 * u} w={440 * u} align="center" size={32} weight={600}>{text(p.props.left, "Full context")}</Word></div>
+      {knows.map((w, i) => (
+        <div key={i} style={arrive(k, b(i + 1))}><Word k={k} x={ex - r + 10 * u} y={cy + (i - (n - 1) / 2) * 42 * u - 14 * u} w={2 * r - 20 * u} align="center" size={23}>{w}</Word></div>
+      ))}
+      <div style={arrive(k, page)}>
+        <Sheet k={k} x={sx} y={sy} w={sw} h={sh} title={text(p.props.page, "the plan")} />
+        <Lines k={k} x={sx + 24 * u} y={sy + 74 * u} w={sw - 48 * u} n={7} gap={27} />
+      </div>
+      <div style={arrive(k, right)}><Word k={k} x={rx - 160 * u} y={rings[0] - 100 * u} w={320 * u} align="center" size={32} weight={600}>{text(p.props.right, "No context")}</Word></div>
+      <div style={arrive(k, ends)}><Word k={k} x={cx - 280 * u} y={cy + 166 * u} w={560 * u} align="center" size={26} color={c.accent}>{text(p.props.ends)}</Word></div>
+    </>
+  );
+};
+
+// Said numbers in a row, each on its word, the first in the accent. Props: `title`, `items` ({ value, label }).
+export const Tally: React.FC<CustomProps> = (p) => {
+  const k = kit(p), { c, u, cx, cy } = k, b = beats(p);
+  const items = (p.props.items as { value: string; label: string }[]).slice(0, 4), col = 240 * u, x0 = cx - (items.length * col) / 2;
+  return (
+    <>
+      <div style={arrive(k, b(0))}><Word k={k} x={cx - 400 * u} y={cy - 150 * u} w={800 * u} align="center" size={32} color={c.muted}>{text(p.props.title)}</Word></div>
+      {items.map((x, i) => (
+        <div key={i} style={arrive(k, b(i))}>
+          <Word k={k} x={x0 + i * col} y={cy - 70 * u} w={col} align="center" size={124} weight={700} color={i === 0 ? c.accent : c.ink}>{x.value}</Word>
+          <Word k={k} x={x0 + i * col} y={cy + 72 * u} w={col} align="center" size={26}>{x.label}</Word>
+        </div>
+      ))}
+    </>
+  );
+};
+
 // props: { nodes: [3 labels], count?, from?: 0, label?, fail?: 2 }   at: [flow, the flood starts, the number, it gives]
 // `fail` is the node that gives. The counter climbs on an ease-in to a hard stop on the third beat (2.5 s
 // without one), and shows only if `count` is set: use a number that is said.

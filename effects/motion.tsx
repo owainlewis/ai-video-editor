@@ -37,6 +37,8 @@ export const Mark: React.FC<{ t: number; at: number; d?: number; color: string; 
 // The highlighter's colour: the accent, translucent, so the type stays on top.
 export const markColor = (accent: string, light = false) => {
   const [r, g, b] = (accent.match(/[0-9a-f]{2}/gi) ?? ["b7", "cd", "bf"]).map((h) => parseInt(h, 16));
+  // On paper the accent is dark, and translucent it goes a flat grey: the highlighter stays sage there.
+  if (r + g + b < 384) return "rgba(183,205,191,0.6)";
   return `rgba(${r},${g},${b},${light ? 0.55 : 0.32})`;
 };
 

@@ -173,7 +173,7 @@ describe("a plan change that adds an error", () => {
   it("puts an edited shot back, byte for byte, and says why", async () => {
     const { editShot } = await import("../server/insert.ts");
     const { projects, file, plan } = setup();
-    expect(() => editShot(projects, "p", 1.6, { shot: { at: "five six", layout: "cutaway" } })).toThrow(expect.objectContaining({ code: 409, message: expect.stringContaining("cutaway") }));
+    expect(() => editShot(projects, "p", { start: 1.6 }, { shot: { at: "five six", layout: "cutaway" } })).toThrow(expect.objectContaining({ code: 409, message: expect.stringContaining("cutaway") }));
     expect(readFileSync(file, "utf8")).toBe(plan);
   });
   it("puts the plan back when an inserted shot adds an error", async () => {
@@ -185,7 +185,7 @@ describe("a plan change that adds an error", () => {
   it("keeps a change that adds no error", async () => {
     const { editShot } = await import("../server/insert.ts");
     const { projects, file } = setup();
-    editShot(projects, "p", 1.6, { remove: true });
+    editShot(projects, "p", { start: 1.6 }, { remove: true });
     const text = readFileSync(file, "utf8");
     expect(JSON.parse(text).shots[1]).toEqual({ at: "five six", layout: "full" });
     expect(text).toBe(JSON.stringify(JSON.parse(text), null, 2) + "\n");
@@ -194,7 +194,7 @@ describe("a plan change that adds an error", () => {
     const { moveShotEnd } = await import("../server/insert.ts");
     const { projects, file } = setup();
     writeFileSync(file, "{}");
-    expect(() => moveShotEnd(projects, "p", 1.6, 2)).toThrow(expect.objectContaining({ code: 409 }));
+    expect(() => moveShotEnd(projects, "p", { start: 1.6 }, 2)).toThrow(expect.objectContaining({ code: 409 }));
     expect(readFileSync(file, "utf8")).toBe("{}");
   });
 });

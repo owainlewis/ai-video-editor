@@ -62,6 +62,7 @@ None. The TypeScript files only define data and pure functions. They do no file,
 A card is a visual kind (`engine/schema.ts`, drawn by `effects/Visuals.tsx`, `effects/elements.tsx`,
 `effects/soft.tsx`, `effects/cards.tsx`, `effects/house.tsx`, `effects/browser.tsx` (`windows`),
 `effects/ui.tsx` (`claudecode`, `search`, `tiers`, `compose`, `divisions`, `chips`, `runs`),
+`effects/apps/` (`cli`, `claudeapp`, `grokbot`; cards in `blueprint/apps.ts`),
 `effects/clean/Clean.tsx` (`beats`) or `effects/custom/`) as this style offers it: an id
 `<style>.<tier>.<purpose or kind>[.<treatment>]`, a tier (`t1` full frame, `t2` beside the speaker,
 `overlay` over the picture), the layouts it fits, and its slots. Slot limits are typed (`maxChars`,

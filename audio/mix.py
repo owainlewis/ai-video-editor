@@ -1,6 +1,6 @@
 """Mix a reel's audio: the speaker, a music bed ducked under speech, and sound effects.
 
-    python -m audio.mix projects/<slug> [build/audio.export.json]
+    python -m audio.mix projects/<slug> [build/audio.export.json] [build/preview/mix.wav]
 
 Reads build/audio.json (written by `reel validate`) and source/voice.wav (or the
 cut's voice that audio.json names),
@@ -64,11 +64,13 @@ def duck_graph(gain: float, music_db: float) -> str:
     )
 
 
-def main(project: Path, config: str = "build/audio.json") -> None:
+def main(project: Path, config: str = "build/audio.json", out_path: str = "build/mix.wav") -> None:
     cfg = json.loads((project / config).read_text())
     seconds = float(cfg["duration"])
     cache = ROOT / ".cache/audio"
-    work = project / "build/audio"
+    # The editor's preview mix (media/previewmix.ts) writes elsewhere and works in its own folder,
+    # so it never touches an export's files.
+    work = project / ("build/audio" if out_path == "build/mix.wav" else "build/audio-preview")
     work.mkdir(parents=True, exist_ok=True)
     n = int(seconds * SR)
     gain = float(cfg.get("voiceGain", 0))
@@ -126,7 +128,8 @@ def main(project: Path, config: str = "build/audio.json") -> None:
         f"loudnorm=I={TARGET_LUFS}:TP={TRUE_PEAK}:LRA=11:measured_I={s['input_i']}:measured_TP={s['input_tp']}:"
         f"measured_LRA={s['input_lra']}:measured_thresh={s['input_thresh']}:offset={s['target_offset']}:linear=true"
     )
-    out = project / "build/mix.wav"
+    out = project / out_path
+    out.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg(["-i", str(pre), "-af", norm, "-ar", str(SR), "-c:a", "pcm_s24le", str(out)])
     final = loudness(out)
     print(f"  mix: {out.relative_to(project)} at {float(final['input_i']):.1f} LUFS, {float(final['input_tp']):.1f} dBTP")
@@ -134,4 +137,4 @@ def main(project: Path, config: str = "build/audio.json") -> None:
 
 if __name__ == "__main__":
     # An export of a cut passes its own settings (build/audio.export.json), which the editor never rewrites.
-    main(Path(sys.argv[1]).resolve(), *sys.argv[2:3])
+    main(Path(sys.argv[1]).resolve(), *sys.argv[2:4])

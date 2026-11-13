@@ -6,6 +6,8 @@ import { Reel } from "../effects/Reel";
 import { Wide } from "../effects/Wide";
 import type { Resolved } from "../engine/schema";
 import { api, clock, type Effect } from "./api";
+import { NewProject } from "./NewProject";
+import { Side } from "./ui";
 
 // The gallery: every graphic, played live in the browser with the real compositions. Library cards
 // play their samples; project graphics play their own shot from the plan. Nothing is rendered, so a
@@ -29,6 +31,7 @@ export const Gallery: React.FC = () => {
   const [projects, setProjects] = useState<{ slug: string; resolved: Resolved }[]>([]);
   const [open, setOpen] = useState<Item | null>(null);
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams({ tab, canvas, theme, ...(longest ? { text: "longest" } : {}), ...(search ? { q: search } : {}) });
@@ -91,57 +94,60 @@ export const Gallery: React.FC = () => {
   const match = (...text: string[]) => words.every((w) => text.join(" ").toLowerCase().includes(w));
 
   return (
-    <div className="gallery">
-      <header className="bar">
-        <a className="brand" href="#/">Studio</a>
-        <span className="muted">Gallery</span>
-        <div className="seg">
-          <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>Library</button>
-          <button className={tab === "projects" ? "on" : ""} onClick={() => setTab("projects")}>In projects</button>
-        </div>
-        {tab === "library" && (
-          <>
+    <div className="shell gallery">
+      <Side on="gallery" onNew={() => setCreating(true)} />
+      <main className="main">
+        <div className="page">
+          <div className="page-head gallery-head">
+            <h1>Gallery</h1>
             <div className="seg">
-              <button className={canvas === "youtube" ? "on" : ""} onClick={() => setCanvas("youtube")}>YouTube</button>
-              <button className={canvas === "reel" ? "on" : ""} onClick={() => setCanvas("reel")}>Reel</button>
+              <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>Library</button>
+              <button className={tab === "projects" ? "on" : ""} onClick={() => setTab("projects")}>In projects</button>
             </div>
-            {canvas === "youtube" && (
-              <div className="seg">
-                <button className={theme === "dark" ? "on" : ""} onClick={() => setTheme("dark")}>Graphite</button>
-                <button className={theme === "light" ? "on" : ""} onClick={() => setTheme("light")}>Ivory</button>
-              </div>
-            )}
-            <label className="small" title="Fill every text slot to its limit, to check the layout holds">
-              <input type="checkbox" checked={longest} onChange={(e) => setLongest(e.target.checked)} /> Longest text
-            </label>
-          </>
-        )}
-        <input className="search" placeholder="Filter: kind, project, words…" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </header>
-      {error && <p className="error">{error}</p>}
-      <main>
-        {tab === "library" ? (
-          <div className={`tiles ${canvas}`}>
-            {library.filter((i) => match(i.key, i.title, i.sub, String((i.visual as { kind?: string }).kind))).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
-          </div>
-        ) : (
-          groups.map((g) => {
-            const items = g.items.filter((i) => match(g.slug, g.title, i.title, i.sub, JSON.stringify(i.visual)));
-            if (!items.length) return null;
-            return (
-              <section key={g.slug}>
-                <h3>
-                  <a href={`#/p/${g.slug}`}>{g.title}</a> <span className="muted">· {g.canvas === "youtube" ? "YouTube" : "Reel"} · {items.length}</span>
-                </h3>
-                <div className={`tiles ${g.canvas}`}>
-                  {items.map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
+            {tab === "library" && (
+              <>
+                <div className="seg">
+                  <button className={canvas === "youtube" ? "on" : ""} onClick={() => setCanvas("youtube")}>YouTube</button>
+                  <button className={canvas === "reel" ? "on" : ""} onClick={() => setCanvas("reel")}>Reel</button>
                 </div>
-              </section>
-            );
-          })
-        )}
+                {canvas === "youtube" && (
+                  <div className="seg">
+                    <button className={theme === "dark" ? "on" : ""} onClick={() => setTheme("dark")}>Graphite</button>
+                    <button className={theme === "light" ? "on" : ""} onClick={() => setTheme("light")}>Ivory</button>
+                  </div>
+                )}
+                <label className="small" title="Fill every text slot to its limit, to check the layout holds">
+                  <input type="checkbox" checked={longest} onChange={(e) => setLongest(e.target.checked)} /> Longest text
+                </label>
+              </>
+            )}
+            <input className="search" placeholder="Filter: kind, project, words…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          {error && <p className="error">{error}</p>}
+          {tab === "library" ? (
+            <div className={`tiles ${canvas}`}>
+              {library.filter((i) => match(i.key, i.title, i.sub, String((i.visual as { kind?: string }).kind))).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
+            </div>
+          ) : (
+            groups.map((g) => {
+              const items = g.items.filter((i) => match(g.slug, g.title, i.title, i.sub, JSON.stringify(i.visual)));
+              if (!items.length) return null;
+              return (
+                <section key={g.slug}>
+                  <h3>
+                    <a href={`#/p/${g.slug}`}>{g.title}</a> <span className="muted">· {g.canvas === "youtube" ? "YouTube" : "Reel"} · {items.length}</span>
+                  </h3>
+                  <div className={`tiles ${g.canvas}`}>
+                    {items.map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
+                  </div>
+                </section>
+              );
+            })
+          )}
+        </div>
       </main>
       {open && <Big item={open} onClose={() => setOpen(null)} />}
+      {creating && <NewProject onClose={() => setCreating(false)} />}
     </div>
   );
 };

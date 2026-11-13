@@ -12,6 +12,10 @@ import { easeInOut, In, lerp, Mark, MOVE, prog } from "./motion";
 import type { V } from "./soft";
 import { t as type } from "./theme";
 import { CUSTOM, STILL } from "./custom";
+import { BoxCtx, useBox } from "./apps/kit";
+import { ClaudeApp } from "./apps/claude";
+import { Cli } from "./apps/cli";
+import { GrokBot } from "./apps/grokbot";
 
 type Props = { shot: ResolvedShot; time: number };
 
@@ -22,11 +26,7 @@ const MARK = "rgba(183,205,191,0.42)";
 
 // The box a moment is drawn in: the whole frame, or a split's panel (then no stage of its own; the
 // window floats on the paper with its shadow, and the speaker stays on screen below).
-const BoxCtx = React.createContext<{ width: number; height: number; panel: boolean } | null>(null);
-const useBox = () => {
-  const cfg = useVideoConfig();
-  return React.useContext(BoxCtx) ?? { width: cfg.width, height: cfg.height, panel: false };
-};
+// (Shared with the app mock-ups in ./apps.)
 
 // A slow 3D settle for a whole screen: tilted and back at the cut, nearly flat by the end, with a
 // gentle push in. One curve for the shot, so it never stops moving and never jumps.
@@ -469,13 +469,16 @@ const Custom: React.FC<Props & { v: V<"custom"> }> = ({ shot, time, v }) => {
   );
 };
 
-export const UI_KINDS = new Set(["custom", "claudecode", "search", "tiers", "compose", "divisions", "chips", "runs"]);
+export const UI_KINDS = new Set(["custom", "claudecode", "cli", "claudeapp", "grokbot", "search", "tiers", "compose", "divisions", "chips", "runs"]);
 // `box` draws the moment inside a split's panel instead of the whole frame.
 export const UiVisual: React.FC<Props & { box?: { width: number; height: number } }> = ({ shot, time, box }) => {
   const v = shot.visual!;
   const el =
     v.kind === "custom" ? <Custom shot={shot} time={time} v={v} />
     : v.kind === "claudecode" ? <ClaudeCode shot={shot} time={time} v={v} />
+    : v.kind === "cli" ? <Cli shot={shot} time={time} v={v} />
+    : v.kind === "claudeapp" ? <ClaudeApp shot={shot} time={time} v={v} />
+    : v.kind === "grokbot" ? <GrokBot shot={shot} time={time} v={v} />
     : v.kind === "search" ? <Search shot={shot} time={time} v={v} />
     : v.kind === "tiers" ? <Tiers shot={shot} time={time} v={v} />
     : v.kind === "compose" ? <Compose shot={shot} time={time} v={v} />

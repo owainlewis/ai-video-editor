@@ -15,12 +15,12 @@ const IVORY = "#F4F1EA";
 // Graphite: the dark theme for YouTube (Owain, 2026-10-25). A warm near-black a little darker than
 // his wall, so a hard cut from his dark footage to a card keeps the brightness level.
 export const GRAPHITE = {
-  bg: "#1B1B1A",
-  card: "#1B1B1A",
-  chip: "#2A2A28",
+  bg: "#0E1612",
+  card: "#0E1612",
+  chip: "#1B2520",
   ink: "#F7F3EC",
-  muted: "#A3A19C",
-  faint: "#3A3936",
+  muted: "#A3ABA5",
+  faint: "#2C3631",
   line: "rgba(247,243,236,0.16)",
   accent: "#B7CDBF",
   accentText: "#F7F3EC",

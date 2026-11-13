@@ -6,6 +6,7 @@ import { cards } from "../styles/blueprint/style";
 import { api, clock, type Variants } from "./api";
 import { settledTime, shotPlan } from "../effects/preview";
 import { Tile } from "./Gallery";
+import { playhead } from "./playhead";
 
 // The inspector: one graphic, edited by hand. Every change shows in the player at once (the shot is
 // patched in the browser) and is saved to the plan a moment after the last keystroke, where the
@@ -32,18 +33,17 @@ export const Inspector: React.FC<{
   slug: string;
   r: Resolved;
   plan: string;
-  start: number;
+  // The graphic, by its id.
+  id: string;
   words: Word[];
-  time: number;
   onPreview: (shot: ResolvedShot | null) => void;
   onAsk: () => void;
   onClose: () => void;
   onSeek: (t: number) => void;
   variants?: Variants | null;
   working: boolean;
-}> = ({ slug, r, plan, start, words, time, onPreview, onAsk, onClose, onSeek, variants, working }) => {
-  // The shot nearest `start`: a graphic just placed starts where its word does, a hair from the drop.
-  const k = r.shots.reduce((best, s, i) => (Math.abs(s.start - start) < Math.abs((r.shots[best]?.start ?? Infinity) - start) ? i : best), -1);
+}> = ({ slug, r, plan, id, words, onPreview, onAsk, onClose, onSeek, variants, working }) => {
+  const k = r.shots.findIndex((s) => s.id === id);
   const rs = r.shots[k];
   const fromPlan = useMemo(() => {
     try {
@@ -63,7 +63,7 @@ export const Inspector: React.FC<{
   useEffect(() => {
     if (!timer.current) setShot(fromPlan);
   }, [fromPlan]);
-  useEffect(() => () => onPreview(null), [start]);
+  useEffect(() => () => onPreview(null), [id]);
 
   const save = (next: PlanShot) => {
     setShot(next);
@@ -71,13 +71,13 @@ export const Inspector: React.FC<{
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       timer.current = undefined;
-      api.post(slug, "shot", { start: rs.start, shot: next }).then(() => setError("")).catch((e) => setError(String(e.message)));
+      api.post(slug, "shot", { id, shot: next }).then(() => setError("")).catch((e) => setError(String(e.message)));
     }, 700);
   };
   const remove = () => {
     window.clearTimeout(timer.current);
     timer.current = undefined;
-    api.post(slug, "shot", { start: rs.start, remove: true }).then(onClose).catch((e) => setError(String(e.message)));
+    api.post(slug, "shot", { id, remove: true }).then(onClose).catch((e) => setError(String(e.message)));
   };
 
   if (!rs || !shot) return <aside className="chat inspector"><div className="pad muted">That graphic is no longer in the plan. <button className="small" onClick={onClose}>Back</button></div></aside>;
@@ -94,7 +94,7 @@ export const Inspector: React.FC<{
   // Start on the word under the playhead: a phrase from there that the plan finds in place.
   const startHere = () => {
     const prev = k > 0 ? wordAt(words, r.shots[k - 1].start) : -1;
-    const i = wordAt(words, time);
+    const i = wordAt(words, playhead.get());
     const at = i > prev ? phraseAt(words, i, prev) : null;
     if (!at) return setError("Move the playhead onto a word after the previous shot starts.");
     save({ ...shot, at });
@@ -102,7 +102,7 @@ export const Inspector: React.FC<{
   // End on the word under the playhead: the shot after this one starts there instead.
   const endHere = () => {
     if (end >= r.duration - 0.05) return setError("This graphic runs to the end of the video.");
-    api.post(slug, "shot-end", { start: rs.start, to: time }).then(() => setError("")).catch((e) => setError(String(e.message)));
+    api.post(slug, "shot-end", { id, to: playhead.get() }).then(() => setError("")).catch((e) => setError(String(e.message)));
   };
   const swap = (id: string) => {
     const c = cards.find((x) => x.id === id);

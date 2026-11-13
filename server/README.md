@@ -16,6 +16,7 @@ The local API behind the editor. It serves the UI through Vite, serves project f
 - `suggest.ts`: `loadSuggestions`, `checkSuggestions`, `decide`, `SUGGEST`, type `Suggestion`.
 - `variants.ts`: `loadVariants`, `saveVariants`, `clearVariants`, `resolveVariants`, `VARIANTS`, types `Variant`, `Variants`, `ResolvedVariant`.
 - `trash.ts`: `trashProject(projects, slug, busy)`.
+- `review.ts`: the review file (`review.json`): `loadReview(dir, r, words)`, `setItem(dir, r, words, id, hash, change)`, `saveNote(dir, words, change)`, `startSend(dir, slug, r, words)`, `finishSend(dir)`, `REVIEW`, type `ReviewState`. The rules are in `engine/review.ts`.
 
 ### Request order
 
@@ -36,20 +37,20 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | any other | `/api/library` | Returns `{ busy, clips }`. |
 | any | `/api/effects?canvas&style` | Returns the library cards from `effectList`. |
 | any | `/api/gallery` | Projects with a resolved plan and at least one visual, newest first, captions emptied. |
-| any | `/api/projects` | Project summaries, newest first. |
+| any | `/api/projects` | Project summaries, newest first: `slug`, `title`, `canvas`, `duration`, `status`, `modified`, `thumb`, `exported`, `review` (`approved` and `total` from `review.json` as it is). |
 | POST | `/api/projects/<slug>/delete` | Moves the project to `projects/.trash/`. |
-| GET | `/api/projects/<slug>` | `{ slug, status }` until ready, then the full project state. |
+| GET | `/api/projects/<slug>?have` | `{ slug, status }` until ready, then the full project state, with `review`, `qc`, `mix` and `exportCheck`. |
 | GET | `/api/projects/<slug>/clips` | The project's bin. |
 | POST | `/api/projects/<slug>/clips?name` | Saves a clip to the bin, starts a clip job, returns `{ id }`. |
 | POST | `/api/projects/<slug>/assets?name` | Saves an asset, returns `{ path }`. |
 | POST | `/api/projects/<slug>/chat` | `{ note, selection?, playhead? }`. Starts Claude. Returns before it finishes. |
 | POST | `/api/projects/<slug>/suggest` | Starts Claude with the suggestions prompt. |
 | POST | `/api/projects/<slug>/decide` | `{ id, accept, note }`. Accepts or rejects a suggestion. |
-| POST | `/api/projects/<slug>/drop` | `{ ref, at = 0, length = 3 }`. Places a b-roll cutaway. |
+| POST | `/api/projects/<slug>/drop` | `{ ref, at, length = 3 }`. Places a b-roll cutaway. |
 | POST | `/api/projects/<slug>/shot-start` | `{ from, to }`. Re-anchors a shot's start. |
-| POST | `/api/projects/<slug>/shot-end` | `{ start, to }`. Ends a graphic on a word. |
-| POST | `/api/projects/<slug>/shot` | `{ start, shot?, remove? }`. Replaces or removes a graphic. |
-| POST | `/api/projects/<slug>/place` | `{ card, at = 0 }`. Places a library card, returns `{ start }`. |
+| POST | `/api/projects/<slug>/shot-end` | `{ id or start, to }`. Ends a graphic on a word. |
+| POST | `/api/projects/<slug>/shot` | `{ id or start, shot?, remove? }`. Replaces or removes a graphic. |
+| POST | `/api/projects/<slug>/place` | `{ card, at }`. Places a library card, returns `{ start, id }`. |
 | POST | `/api/projects/<slug>/variants` | `{ start, note? }`. Resets takes and starts Claude. |
 | POST | `/api/projects/<slug>/variant-use` | `{ id }`. Applies a take and clears the takes. |
 | POST | `/api/projects/<slug>/variant-clear` | Clears the takes. |
@@ -57,11 +58,23 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | POST | `/api/projects/<slug>/undo` | Returns `{ ok }`, false when there is nothing to undo. |
 | POST | `/api/projects/<slug>/redo` | Returns `{ ok }`, false when there is nothing to redo. |
 | POST | `/api/projects/<slug>/cut` | `{ cut }`. Validates and saves `cut.json`. |
-| POST | `/api/projects/<slug>/render` | Starts a render job. |
+| POST | `/api/projects/<slug>/render` | `{ part?, from?, to?, force? }`. Starts a render job. |
+| POST | `/api/projects/<slug>/qc` | Starts a QC job that keeps unchanged graphics' results. |
+| POST | `/api/projects/<slug>/mix` | Starts a preview mix job. |
+| POST | `/api/projects/<slug>/review` | `{ id, hash, status?, comment? }`. Saves a decision on one review item. |
+| POST | `/api/projects/<slug>/note` | `{ t, text }` adds a timeline note; `{ id, text?, status?, remove? }` changes one. |
+| POST | `/api/projects/<slug>/review-send` | Starts Claude with every open note and change. |
 
 ## Invariants
 
 ### Requests
+
+- Every `POST /api/projects/<slug>/<action>` body is parsed with that action's schema in `engine/api.ts`. An unknown action is 404; a body that fails its schema is 400 with the path and reason.
+- `GET /api/projects/<slug>?have=<wordsKey>` leaves out `words` and `clipWords` when the key still matches (the cut and transcripts have not changed).
+- A shot is addressed by its `id`. `start` (its time on the timeline) still works for `shot` and `shot-end`.
+- `review` returns 409 when `hash` is not the item's current hash, and 404 for an id that is not a review item.
+- `review-send` returns 400 with nothing open and 409 while Claude is working. It marks open notes `sent` before Claude starts.
+- `qc`, `mix` and `render` return 409 while a job is running. `render` passes `--force` only when asked.
 
 - Errors reply `{ error }`. A numeric `code` on the error becomes the HTTP status. Anything else is 500.
 - Project routes other than delete need a slug matching `/^[\w.-]+$/` and an existing `project.json`, or they return 404.
@@ -90,6 +103,11 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 - Bin and b-roll uploads must be mp4, mov, m4v, mkv or webm. Assets accept mp4, mov, m4v and webm video, or png, jpg, jpeg, webp, svg and gif images. `POST /api/upload` has no extension check.
 
 ## Side Effects
+
+- `GET /api/projects/<slug>` also writes `review.json` when the plan's items changed since the last read.
+- `setItem` writes `build/review/<id>-<hash>.json` (the item's resolved shots) the first time a decision is made on that version.
+- `finishSend` reads and deletes `review-replies.json`, which Claude writes.
+- `qc` and `mix` start detached jobs (`cli.ts qc <slug> --status --cached`, `cli.ts mix <slug> --status`) that report in `status.json`.
 
 - Watches `projects/` recursively and `library/broll/` for `index.json`.
 - Holds in memory: event clients, debounce timers, the library busy flag and running Claude processes. A restart loses them.

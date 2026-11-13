@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Beat } from "../engine/beats";
-import { cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, trimEdge } from "../engine/cut";
+import { type Beat, beatAt } from "../engine/beats";
+import { atTime, cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, splitAt, trimEdge } from "../engine/cut";
+import { partFile } from "../engine/parts";
 import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
 import { lastKept } from "../engine/resolve";
 import { type BinClip, clock, type Suggestion } from "./api";
+import { ask } from "./dialog";
+import { Clock, playhead, usePlayhead } from "./playhead";
 
 export type Range = { start: number; end: number; label?: string };
 
@@ -12,9 +15,10 @@ export const CLIP = "application/x-studio-clip";
 // The drag type for a clip from the project's bin, cut in on the A-roll track.
 export const SOURCE = "application/x-studio-source";
 
-// A drag on the timeline: a segment being moved, a segment edge, or a b-roll clip's edge.
+// A drag on the timeline: a segment being moved, a clip from the bin going in, or a b-roll clip's edge.
 type Drag =
   | { kind: "move"; id: string; slot: number }
+  | { kind: "insert"; t: number }
   | { kind: "shot"; from: number; edge: "in" | "out"; t: number };
 
 type Track = { id: string; label: string; height: number; render: (pps: number) => React.ReactNode };
@@ -22,13 +26,12 @@ type Track = { id: string; label: string; height: number; render: (pps: number) 
 // The edit as tracks, like an editor: graphics, text, b-roll, the A-roll (the cut), what is said,
 // captions, music and sound. Click empty space to move the playhead, drag to select a section, click
 // a clip to select it. The selection is what Claude gets as "this".
-// The A-roll track edits the cut: drop a clip from the bin, drag a segment to reorder it, drag its
+// The A-roll track edits the cut: drop a clip from the bin where it should go in, drag a segment to reorder it, drag its
 // edges to trim (snapping to word edges and the pause beside them; hold Alt for frame-accurate). B-roll clips trim the same way.
 // Each change goes to the server as a new cut.json, so it is a version that undo and redo step through.
 export const Timeline: React.FC<{
   r: Resolved;
   words: Word[];
-  time: number;
   selection: Range | null;
   camera?: [number, number][];
   music: boolean;
@@ -44,13 +47,23 @@ export const Timeline: React.FC<{
   onSegment: (id: string | null) => void;
   onCut: (cut: CutPlan) => Promise<unknown>;
   onShotStart: (from: number, to: number) => Promise<unknown>;
-  picked?: number | null;
-  onPick?: (start: number | null) => void;
+  // The graphic open in the inspector, by its id.
+  picked?: string | null;
+  onPick?: (id: string | null) => void;
   // A reel's beats (engine/beats.ts): a strip of markers, the current one lit; a click steps to it.
   beats?: Beat[];
-  beat?: number;
   onBeat?: (i: number) => void;
-}> = ({ r, words, time, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick, beats = [], beat = -1, onBeat }) => {
+  // The review's open notes, each where its words are now.
+  notes?: { id: string; t: number; text: string; status: string }[];
+  // The video's parts: finished renders by file name, a render running, and the edits and renders.
+  previews?: Record<string, { file: string; at: number }>;
+  rendering?: boolean;
+  onParts?: (change: { add?: { name: string; at: number }; rename?: { name: string; to: string }; remove?: string }) => void;
+  onRender?: (ask: { part?: string; from?: number; to?: number }) => void;
+}> = ({ r, words, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick, beats = [], onBeat, notes = [], previews = {}, rendering = false, onParts, onRender }) => {
+  // The timeline is redrawn when the playhead crosses into another beat, not on every frame; the
+  // playhead line, the clock and the sentence being said redraw on their own.
+  const beat = usePlayhead((t) => beatAt(beats, t));
   const [ghost, setGhost] = useState<{ at: number; length: number } | null>(null);
   // A cut being trimmed shows live while the drag lasts, and until the server sends the new one back.
   const [live, setLive] = useState<CutPlan | null>(null);
@@ -108,6 +121,22 @@ export const Timeline: React.FC<{
         else setLive(null);
       },
     );
+  };
+
+  // Where a clip from the bin goes in when dropped at the pointer: on the edge between two segments
+  // when the pointer is near one, else inside the segment under it, split on the pause between words
+  // nearest the pointer. `split` is the timeline time to split at, when there is one.
+  const insertAt = (clientX: number): { t: number; slot: number; split?: number } => {
+    const t = at(clientX);
+    const segs = placed(cut);
+    const edges = [0, ...segs.map((s) => s.end)];
+    const k = edges.reduce((best, e, i) => (Math.abs(e - t) < Math.abs(edges[best] - t) ? i : best), 0);
+    const hit = atTime(cut, t);
+    if (!hit || Math.abs(edges[k] - t) * pps <= 12) return { t: edges[k], slot: k };
+    const local = snapEdge(clipWords[hit.seg.src] ?? [], hit.local, "out", levels[hit.seg.src]);
+    if (local - hit.seg.in < 0.2 || hit.seg.out - local < 0.2) return { t: edges[k], slot: k };
+    const split = hit.seg.start + local - hit.seg.in;
+    return { t: split, slot: hit.index + 1, split };
   };
 
   // Press on a segment: a click selects it, a drag moves it to another place in the cut.
@@ -201,12 +230,12 @@ export const Timeline: React.FC<{
     return (
     <div
       key={`${c.shot.start}`}
-      className={`clip ${cls} ${(picked !== null ? Math.abs(picked - c.shot.start) < 0.01 : selection && Math.abs(selection.start - c.shot.start) < 0.01 && Math.abs(selection.end - c.end) < 0.01) ? "on" : ""}`}
+      className={`clip ${cls} ${(picked !== null ? picked === c.shot.id : selection && Math.abs(selection.start - c.shot.start) < 0.01 && Math.abs(selection.end - c.end) < 0.01) ? "on" : ""}`}
       style={{ left: a * pps, width: Math.max(3, (b - a) * pps - 2) }}
       title={`${clock(c.shot.start)} ${label} · "${c.shot.anchor}"`}
       onClick={() => {
         onSelect({ start: c.shot.start, end: c.end, label: `${label} "${c.shot.anchor}"` });
-        onPick?.(c.shot.start);
+        onPick?.(c.shot.id ?? null);
         // Land where the graphic has settled, so the inspector's changes show as they are typed.
         onSeek(Math.min(c.end - 0.1, c.shot.start + 1.5));
       }}
@@ -219,7 +248,40 @@ export const Timeline: React.FC<{
     );
   };
 
+  const parts = r.parts ?? [];
+  const part = selection ? parts.find((x) => Math.abs(x.start - selection.start) < 0.01 && Math.abs(x.end - selection.end) < 0.01) : undefined;
+  const preview = part ? previews[partFile(part.name)] : undefined;
+  const addPart = async () => {
+    // Where the playhead is now, not when the name has been typed: it may still be playing.
+    const at = playhead.get();
+    const name = await ask({ title: "Name this part", body: `It starts on the next word after ${clock(at)} and runs to the next part.`, value: parts.length ? `part ${parts.length}` : "intro", ok: "Add part" });
+    if (name) onParts?.({ add: { name, at } });
+  };
+
   const tracks: Track[] = [
+    ...(parts.length
+      ? [{
+          id: "parts",
+          label: "Parts",
+          height: 24,
+          render: (pps: number) =>
+            parts.map((x) => (
+              <div
+                key={x.name}
+                className={`clip part ${part?.name === x.name ? "on" : ""}`}
+                style={{ left: x.start * pps, width: Math.max(3, (x.end - x.start) * pps - 2) }}
+                title={`${x.name}, ${clock(x.start)} to ${clock(x.end)} · "${x.anchor}"`}
+                onClick={() => {
+                  onSelect({ start: x.start, end: x.end, label: `part "${x.name}"` });
+                  onSeek(x.start);
+                }}
+              >
+                <b>{x.name}</b>
+                <span>{clock(x.end - x.start)}</span>
+              </div>
+            )),
+        }]
+      : []),
     ...(beats.length
       ? [{
           id: "beats",
@@ -285,6 +347,7 @@ export const Timeline: React.FC<{
               );
             })}
             {slot >= 0 && <div className="slot" style={{ left: (segs[slot]?.start ?? cutLength(shown)) * pps - 1 }} />}
+            {drag?.kind === "insert" && <div className="slot insert" style={{ left: drag.t * pps - 1 }} />}
             {clips.filter((c) => c.shot.layout === "punch").map((c) => <div key={c.shot.start} className="tbar punch" style={{ left: c.shot.start * pps, width: (c.end - c.shot.start) * pps }} title="Punch-in" />)}
           </>
         );
@@ -294,13 +357,21 @@ export const Timeline: React.FC<{
       id: "said",
       label: "Said",
       height: 40,
-      render: (pps) =>
-        sentences.map((x, i) => (
-          <div key={i} className={`sentence ${time >= x.start && time < x.end ? "now" : ""}`} style={{ left: x.start * pps, width: Math.max(4, (x.end - x.start) * pps - 3) }} title={`${clock(x.start)} ${x.text}`}>
-            {x.text}
-          </div>
-        )),
+      render: (pps) => <Said sentences={sentences} pps={pps} />,
     },
+    ...(notes.length
+      ? [{
+          id: "notes",
+          label: "Notes",
+          height: 22,
+          render: (pps: number) =>
+            notes.map((n) => (
+              <div key={n.id} className={`note-pin ${n.status}`} style={{ left: n.t * pps }} title={`${clock(n.t)} ${n.text}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => onSeek(n.t)}>
+                {n.text}
+              </div>
+            )),
+        }]
+      : []),
     ...(music ? [{ id: "music", label: "Music", height: 22, render: (pps: number) => <div className="tbar music" style={{ left: 0, width: r.duration * pps }} /> }] : []),
     ...(r.sfx.length ? [{ id: "sfx", label: "Sound", height: 22, render: (pps: number) => r.sfx.map((s, i) => <div key={i} className="sfx" style={{ left: s.t * pps }} title={s.kind} />) }] : []),
   ];
@@ -312,14 +383,44 @@ export const Timeline: React.FC<{
     <div className="timeline">
       <div className="tl-bar">
         <span className="time">
-          {clock(time)} <span className="muted">/ {clock(r.duration)}</span>
+          <Clock /> <span className="muted">/ {clock(r.duration)}</span>
         </span>
         {selection && (
           <span className="muted small">
             Selected {clock(selection.start)} to {clock(selection.end)}
           </span>
         )}
+        {part ? (
+          <>
+            <button className="small" disabled={rendering} onClick={() => onRender?.({ part: part.name })} title={`Render this part to renders/${partFile(part.name)}, with its graphics and the finished mix`}>
+              Render {part.name}
+            </button>
+            {preview && !rendering && (
+              <a className="button small" href={`/${preview.file}?t=${preview.at}`} target="_blank" rel="noreferrer">
+                Play render
+              </a>
+            )}
+            <button className="quiet small" onClick={async () => {
+              const to = await ask({ title: "Rename this part", value: part.name, ok: "Rename" });
+              if (to && to !== part.name) onParts?.({ rename: { name: part.name, to } });
+            }}>
+              Rename
+            </button>
+            <button className="quiet small" onClick={() => onParts?.({ remove: part.name })}>
+              Remove
+            </button>
+          </>
+        ) : (
+          selection && selection.end - selection.start > 0.04 && (
+            <button className="small" disabled={rendering} onClick={() => onRender?.({ from: +selection.start.toFixed(3), to: +selection.end.toFixed(3) })} title="Render this stretch, with its graphics and the finished mix">
+              Render selection
+            </button>
+          )
+        )}
         <span className="spacer" />
+        <button className="quiet small" onClick={addPart} title="Start a new part on the next word after the playhead">
+          Add part
+        </button>
         <label className="zoom">
           Zoom
           <input type="range" min={Math.log(0.3)} max={Math.log(200)} step={0.01} value={Math.log(pps)} onChange={(e) => setZoom(Math.exp(+e.target.value))} />
@@ -343,10 +444,11 @@ export const Timeline: React.FC<{
           onPointerDown={down}
           onDragOver={(e) => {
             if (e.dataTransfer.types.includes(SOURCE)) {
-              // A clip from the bin goes in between segments, where the line shows.
+              // A clip from the bin goes in where the line shows.
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
-              setDrag({ kind: "move", id: "", slot: slotAt(cut, at(e.clientX)) });
+              const t = insertAt(e.clientX).t;
+              setDrag((d) => (d?.kind === "insert" && d.t === t ? d : { kind: "insert", t }));
               return;
             }
             if (!e.dataTransfer.types.includes(CLIP)) return;
@@ -354,14 +456,16 @@ export const Timeline: React.FC<{
             e.dataTransfer.dropEffect = "copy";
             setGhost((g) => ({ at: at(e.clientX), length: g?.length ?? 3 }));
           }}
-          onDragLeave={() => (setGhost(null), setDrag(null))}
+          // Only when the pointer leaves the timeline, not when it crosses from one track to another.
+          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && (setGhost(null), setDrag(null))}
           onDrop={(e) => {
             const source = e.dataTransfer.getData(SOURCE);
             if (source) {
               e.preventDefault();
               setDrag(null);
               const { src, length } = JSON.parse(source) as { src: string; length: number };
-              const next = insertSegment(cut, src, 0, length, slotAt(cut, at(e.clientX)));
+              const spot = insertAt(e.clientX);
+              const next = insertSegment(spot.split === undefined ? cut : splitAt(cut, spot.split), src, 0, length, spot.slot);
               setLive(next);
               onCut(next).catch(() => setLive(null));
               return;
@@ -383,12 +487,12 @@ export const Timeline: React.FC<{
               ))}
             </div>
             {tracks.map((t) => (
-              <div key={t.id} className={`track ${t.id}`} style={{ height: t.height }}>
+              <div key={t.id} className={`track ${t.id} ${t.id === "aroll" && drag?.kind === "insert" ? "dropping" : ""}`} style={{ height: t.height }}>
                 {t.render(pps)}
               </div>
             ))}
             {selection && <div className="selection" style={{ left: selection.start * pps, width: (selection.end - selection.start) * pps }} />}
-            <div className="playhead" style={{ left: time * pps }} />
+            <Playhead pps={pps} />
             {ghost && <div className="ghost" style={{ left: ghost.at * pps, width: Math.max(6, ghost.length * pps) }} />}
           </div>
         </div>
@@ -396,6 +500,24 @@ export const Timeline: React.FC<{
     </div>
   );
 };
+
+// The playhead line, moved on its own as the video plays.
+const Playhead: React.FC<{ pps: number }> = ({ pps }) => <div className="playhead" style={{ left: usePlayhead() * pps }} />;
+
+// What is said, with the sentence under the playhead lit. Redrawn when the playhead moves to another
+// sentence, and when the zoom changes.
+const Said: React.FC<{ sentences: { start: number; end: number; text: string }[]; pps: number }> = React.memo(({ sentences, pps }) => {
+  const now = usePlayhead((t) => sentences.findIndex((x) => t >= x.start && t < x.end));
+  return (
+    <>
+      {sentences.map((x, i) => (
+        <div key={i} className={`sentence ${i === now ? "now" : ""} ${(x.end - x.start) * pps < 44 ? "mark" : ""}`} style={{ left: x.start * pps, width: Math.max(3, (x.end - x.start) * pps - 3) }} title={`${clock(x.start)} ${x.text}`}>
+          {(x.end - x.start) * pps < 44 ? null : x.text}
+        </div>
+      ))}
+    </>
+  );
+});
 
 // The words a graphic shows, short: its title or text, else its first item. Labels clips on the
 // timeline and rows in the graphics list, where the kind alone ("list") says little.

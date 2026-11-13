@@ -1,6 +1,7 @@
 // Turn an edit plan plus a word-timed transcript into exact times.
 // Pure functions, so they are easy to test.
 import type { Chunk, EditPlan, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
+import { appAnchors, appBeats, isApp, typeRate } from "./apps.ts";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}']+/gu, "");
 
@@ -27,6 +28,20 @@ export const lastKept = (shots: { keep?: boolean }[], i: number) => {
   let last = i;
   while (shots[last + 1]?.keep) last++;
   return last;
+};
+
+const slugify = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
+
+// Every shot's id: its own from the plan, else made from its spoken anchor, which stays put while
+// its look changes. A repeat gets -2, -3. The plain picture that fills the start of a cut is "start".
+export const shotIds = (shots: { id?: string; anchor: string }[]) => {
+  const seen = new Map<string, number>();
+  return shots.map((s) => {
+    const base = s.id ?? (slugify(s.anchor) || "start");
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return n === 1 ? base : `${base}-${n}`;
+  });
 };
 
 // How long the shots matching `pred` stay on screen.
@@ -71,6 +86,9 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "lift": return [v.from, v.to];
     case "reviewmd": return v.marks.map((m) => m.at);
     case "claudecode": return [...v.lines.map((l) => l.at), ...(v.mark ? [v.mark.at] : [])];
+    case "cli":
+    case "claudeapp":
+    case "grokbot": return appAnchors(v);
     case "search": return [v.at, v.result?.at];
     case "tiers": return v.items.flatMap((it) => [it.at, it.markAt]);
     case "custom": return v.at;
@@ -132,9 +150,10 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       issues.push({ level: "error", message: `"${s.at}" keeps the previous visual, so it needs the same layout as a previous shot with a visual and no visual of its own` });
     // A kept shot carries the tone of the scene it continues.
     const tone = s.keep && prev ? prev.tone : s.tone;
-    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, header, ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.enter ? { enter: s.enter } : {}), ...clean(s) });
+    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, header, ...(s.id ? { id: s.id } : {}), ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.enter ? { enter: s.enter } : {}), ...clean(s) });
   }
   for (let k = 0; k < shots.length - 1; k++) shots[k].end = shots[k + 1].start;
+  shotIds(shots).forEach((id, k) => (shots[k].id = id));
 
   // The clean style's words on screen (a hit, a title, a chip) land on their own words, searched
   // from the shot's anchor; a hit holds until its `until` words or the end of the shot.
@@ -317,7 +336,7 @@ export const sfxEvents = (shots: ResolvedShot[]): SfxEvent[] => {
       if (v.mark && v.times?.[0] !== undefined) click(v.times[0]);
       return;
     }
-    if (v.kind === "custom" || v.kind === "claudecode" || v.kind === "search" || v.kind === "tiers" || v.kind === "compose" || v.kind === "divisions" || v.kind === "chips" || v.kind === "runs") {
+    if (v.kind === "custom" || v.kind === "claudecode" || isApp(v) || v.kind === "search" || v.kind === "tiers" || v.kind === "compose" || v.kind === "divisions" || v.kind === "chips" || v.kind === "runs") {
       whoosh(s.start);
       (v.times ?? []).forEach((t, n) => n && click(t));
       return;
@@ -405,6 +424,8 @@ export const lintOnCamera = (shots: ResolvedShot[], ranges: [number, number][], 
     // in over a screen recording (Owain, 2026-10-25: the article sections "might benefit from
     // something"). Demos are fenced off with the plan's `leave` instead (lintLeave).
     if (s.layout === "media") return [];
+    // The title over the opening b-roll (Owain, 2026-11-09: "we normally have a title overlay on the intro").
+    if (s.layout === "over" && s.start < 3) return [];
     const inside = ranges.some(([a, b]) => s.start >= a - slack && s.end <= b + slack);
     if (inside) return [];
     const near = ranges.filter(([a, b]) => b > s.start - 60 && a < s.end + 60).map(([a, b]) => `${a.toFixed(1)}-${b.toFixed(1)}s`).join(", ");
@@ -523,6 +544,84 @@ export const lintShots = (shots: ResolvedShot[], duration: number, format: Forma
 
 // ---------- the clean style (style "clean", research/reels/STUDY.md) ----------
 
+// The text hook (Owain, 2026-11-11: "How could we add a visual hook to all our reels... Like a text
+// hook"): one short headline at the top of the frame from the first frame. Its geometry, shared by the
+// renderer (effects/clean/hook.tsx) and the checks. `top` sits under Instagram's top bar (QC's safe
+// area starts at y 96); `band` is where a split's panel starts again under two lines.
+// Owain, 2026-11-11: "We should keep the text hook short": six words at most.
+export const HOOK = { top: 124, size: 80, lineHeight: 1.06, width: 960, words: 6, lines: 2, min: 3, max: 5 };
+export const HOOK_BAND = Math.round(HOOK.top + HOOK.size * HOOK.lineHeight * HOOK.lines + 36);
+
+// The hook's one *marked* phrase, split out: [plain, marked, plain, ...].
+export const hookParts = (text: string) => text.split("*");
+
+// Helvetica Bold's advance widths, in thousandths of an em, less the display style's tight tracking:
+// enough to tell a hook that wraps to three lines before QC measures it.
+const BOLD: Record<string, number> = Object.fromEntries(
+  ["278 .,:;!il'|ijft ", "333 frt-()[]", "389 r", "500 z", "556 acesvxyk0123456789J", "611 bdghnopquFLTZ?", "667 ESPVXY", "722 ABCDHKNRU", "778 GOQw", "833 M", "889 m", "944 W"]
+    .flatMap((row) => { const [n, cs] = [Number(row.slice(0, 3)), row.slice(4)]; return [...cs].map((c) => [c, n]); }),
+);
+const ems = (s: string) => [...s].reduce((w, c) => w + (BOLD[c] ?? 600) / 1000 - 0.0625, 0);
+// Lines the hook wraps to at `size` in `width`, filled greedily as a browser does.
+export const hookLines = (text: string, size = HOOK.size, width = HOOK.width) => {
+  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
+  let lines = 0, line = "";
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (line && ems(next) * size > width) lines++, (line = w);
+    else line = next;
+  }
+  return lines + (line ? 1 : 0);
+};
+
+// When the hook leaves: on its `until` words, else on the first cut after the first shot or 3 s,
+// whichever is later, so it leaves with the picture; never past 5 s.
+export const resolveHook = (hook: EditPlan["hook"], words: Word[], shots: ResolvedShot[], duration: number, fps = 30, cut = false): { hook?: { text: string; until: number }; issues: Issue[] } => {
+  if (!hook) return { issues: [] };
+  const issues: Issue[] = [];
+  const from = Math.max(shots[0]?.end ?? HOOK.min, HOOK.min);
+  let until = from > HOOK.max ? HOOK.max : (shots.map((s) => s.start).find((t) => t >= from - 1e-6 && t <= HOOK.max) ?? from);
+  if (hook.until) {
+    const j = findPhrase(words, hook.until);
+    if (j < 0) issues.push({ level: cut ? "warn" : "error", message: `hook end "${hook.until}" is not said` });
+    else {
+      until = snap(Math.max(0.5, words[j].start - CUT_LEAD), fps);
+      if (until > HOOK.max) {
+        issues.push({ level: "warn", message: `the hook holds until ${until.toFixed(2)}s ("${hook.until}"); it ends by ${HOOK.max}s, so it was cut there` });
+        until = HOOK.max;
+      }
+    }
+  }
+  return { hook: { text: hook.text, until: Math.min(until, duration) }, issues };
+};
+
+// The cover's title: two lines of big type in the 3:4 band Instagram's grid shows (effects/clean/cover.tsx).
+export const COVER = { size: 96, width: 1000, words: 7, lines: 2 };
+
+export const lintCover = (cover: { title: string } | undefined): Issue[] => {
+  if (!cover) return [{ level: "warn", message: `no cover: every reel starts on the standard cover (Owain, 2026-11-11). Add "cover": { "title": "..." }, the title in Owain's words, so frame 0 is his card and never a face mid-word` }];
+  const issues: Issue[] = [];
+  const n = cover.title.split(/\s+/).filter(Boolean).length;
+  if (n > COVER.words) issues.push({ level: "warn", message: `cover title "${cover.title}" is ${n} words; keep it to ${COVER.words}` });
+  const lines = hookLines(cover.title, COVER.size, COVER.width);
+  if (lines > COVER.lines) issues.push({ level: "warn", message: `cover title "${cover.title}" wraps to about ${lines} lines; keep it to ${COVER.lines}` });
+  return issues;
+};
+
+// The hook's own rules: short, two lines at most, one marked phrase.
+export const lintHook = (hook: { text: string } | undefined): Issue[] => {
+  if (!hook) return [{ level: "warn", message: `no text hook; add "hook": { "text": "..." } with one *marked* phrase, in Owain's own words` }];
+  const issues: Issue[] = [];
+  const n = hook.text.replace(/\*/g, "").split(/\s+/).filter(Boolean).length;
+  if (n > HOOK.words) issues.push({ level: "warn", message: `hook "${hook.text}" is ${n} words; keep it to ${HOOK.words}` });
+  const lines = hookLines(hook.text);
+  if (lines > HOOK.lines) issues.push({ level: "warn", message: `hook "${hook.text}" wraps to about ${lines} lines; keep it to ${HOOK.lines}` });
+  const marks = hookParts(hook.text).length - 1;
+  if (marks % 2) issues.push({ level: "warn", message: `hook "${hook.text}" has an unclosed *; mark one phrase as *this*` });
+  else if (marks > 2) issues.push({ level: "warn", message: `hook "${hook.text}" marks ${marks / 2} phrases; mark one` });
+  return issues;
+};
+
 export const CLEAN_LAYOUTS = ["split", "full", "card", "diagram", "over", "cutaway"] as const;
 
 // Sounds in the clean style: each marks something the eye can see land (Owain, 2026-11-07: "we kept
@@ -574,6 +673,8 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
     if (!v || s.keep) return;
     const times = v.times ?? [];
     if (v.kind === "claudecode") v.lines.forEach((l, n) => { if (l.style === "prompt") typing(times[n] ?? s.start + 0.35, l.text.length, 26); });
+    // Keys under every prompt the app mock-ups type, at the speed they type it.
+    if (isApp(v)) appBeats(v, s.start, times).forEach((b, n) => { const st = v.steps[n]; if (st.type === "prompt" || st.type === "user") typing(b.t0, st.text.length, typeRate(st.text.length)); });
     if (v.kind === "custom" && times.length) diagram.push({ kind: "pop", t: times[0], gain: 0.6, exact: true });
     const each = v.kind === "image" ? "blip" : v.kind === "logos" ? "chime" : v.kind === "list" || v.kind === "beats" ? "pop" : null;
     if (each) times.forEach((t) => ev.push({ kind: each, t, gain: 0.6, exact: true }));
@@ -586,8 +687,8 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
 
 // The clean style's house rules, from the samples Owain chose (2026-11-06). `faceless`: a reel with
 // no footage of the speaker (a voiced script), so every picture comes from b-roll.
-export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boolean): Issue[] => {
-  const issues: Issue[] = [];
+export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boolean, hook?: { text: string }, cover?: { title: string }): Issue[] => {
+  const issues: Issue[] = [...lintHook(hook), ...lintCover(cover)];
   shots.forEach((s, i) => {
     const len = s.end - s.start;
     const label = shotLabel(s, i);
@@ -627,6 +728,9 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
     // Owain, 2026-11-11: "we end the reel with my face in an unflattering shot. Stop on a blank screen or text card."
     const last = shots[shots.length - 1];
     if (last && last.layout === "full" && !faceless) issues.push({ level: "warn", message: `the reel ends on ${shotLabel(last, shots.length - 1)}, full frame on the face; end on a card` });
+    // Owain, 2026-11-13: "Let's avoid opening on a full screen of me as I hate that - I prefer the split screen."
+    const first = shots[0];
+    if (first && first.layout === "full" && !faceless) issues.push({ level: "warn", message: `the reel opens on ${shotLabel(first, 0)}, full frame on the face; open on a split under the hook` });
     // A full-screen diagram only now and then, where it adds value.
     const diagram = timeIn(shots, (s) => s.layout === "diagram") / duration;
     if (diagram > 0.2) issues.push({ level: "warn", message: `diagrams fill ${Math.round(diagram * 100)}% of the reel; use one only now and then` });

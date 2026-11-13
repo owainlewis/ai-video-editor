@@ -75,7 +75,7 @@ A calm product-film look, picked by Owain on 2026-10-21. Use `layout: "scene"` w
 
 ## Frame 1 and the header
 
-- Every reel sets `header`: the hook as a short title. It is on screen, large, from the very first frame, then docks as a small header above the panel on every split and media shot. A muted viewer always knows the topic.
+- Every reel sets `header`: the hook as a short title. It is on screen, large, from the very first frame, then docks as a small header above the panel on every split and media shot. A muted viewer always knows the topic. Clean reels (`"style": "clean"`) set `hook` instead: the headline stays at the top of the frame for the first 3 to 5 s, then cuts out (CLAUDE.md, "Clean reels").
 - Start a new chapter with `header` on a shot ("How it *works*", "How to *use* it"). Three or four chapters in a 30 to 60 s reel.
 - Headers state the topic in plain words, with at most one accent word. They never claim more than the source shows.
 

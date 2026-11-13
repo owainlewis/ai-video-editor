@@ -32,6 +32,7 @@ The Remotion compositions and every visual. The editor plays a resolved plan thr
 - `VisualView` (`Visuals.tsx`): draws one `ResolvedVisual`, switching on its `kind`. Also `Accented` and `Journey`.
 - `FrameVisual`, `isFrame`, `FRAME_KINDS`, `Digits`, `GridStage`, `ReviewMdPage`, and a re-export of `FAST` (`frame.tsx`): full-frame graphics that skip the scaled panel. `isFrame(shot)` is true for a `media` shot with a kind in `FRAME_KINDS`, or a `chapter` with `hit`.
 - `UiVisual`, `UI_KINDS` (`ui.tsx`): product mock-ups, and the `custom` kind.
+- `Cli`, `ClaudeApp`, `GrokBot`, `Blob` (`apps/`): the app kit, the real products drawn to move (`cli`, `claudeapp`, `grokbot`). See `apps/README.md`.
 - `WordsVisual`, `WordsOver`, `FocusVisual`, `MapVisual`, `mapLayout`, `ShiftVisual` (`house.tsx`): the house graphics.
 - `cardGeom`, `Geom`, `Box`, `Fit`, `fit`, and the `*Card` components and `*Geom` functions per card kind (`cards.tsx`): cards laid out by geometry functions. `tests/catalog.test.ts` checks `cardGeom`.
 - `ChartVisual`, `PipelineVisual`, `ConstraintVisual` (`elements.tsx`).

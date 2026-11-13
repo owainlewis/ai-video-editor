@@ -1,10 +1,10 @@
 // Turn a project's plan (edit.json) into what the compositions render (build/edit.resolved.json),
 // with every check the house rules need. The editor runs this on every change to the plan, so
 // the player always shows the plan as it is, and problems show next to it.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Edit, type Resolved, type Word } from "../engine/schema.ts";
-import { type Issue, type ScreenZoom, zoomClashes, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveShots, sfxEvents, shotLabel } from "../engine/resolve.ts";
+import { type Issue, type ScreenZoom, zoomClashes, chunkWords, cleanSfx, lintClean, lintLeave, lintOnCamera, lintShots, resolveHook, resolveShots, sfxEvents, shotLabel } from "../engine/resolve.ts";
 import { qcPlan, saidTwice } from "../engine/qc.ts";
 import { frameRect } from "../effects/camera.ts";
 import { HEADER, MEDIA, splitGeom } from "../effects/theme.ts";
@@ -13,8 +13,9 @@ import { stripAnchors } from "../engine/insert.ts";
 import { BROLL, useClip } from "./broll.ts";
 import { cameraOnTimeline, clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapTimes, placed } from "../engine/cut.ts";
+import { resolveParts } from "../engine/parts.ts";
 import { MAIN } from "../engine/schema.ts";
-import { FPS, imageSize, mediaProbe, readJson, ROOT, writeJson } from "./tools.ts";
+import { ffmpeg, FPS, imageSize, mediaProbe, readJson, ROOT, writeJson } from "./tools.ts";
 
 // Where the placeholder speaker's face sits in its 1080x1920 frame (see effects/Speaker.tsx).
 const PLACEHOLDER_FACE = { x: 0.5, y: 0.3, h: 0.17 };
@@ -41,6 +42,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
 
   const probe = mediaProbe(dir);
   const { shots, issues } = resolveShots(plan, words, meta.duration, FPS, explicit);
+  const { parts, issues: partIssues } = resolveParts(plan.parts, words, meta.duration, FPS, explicit);
+  issues.push(...partIssues);
   if (explicit) {
     // The words can be a tenth of a second off; the sound says whether a join cuts into speech.
     const ids = [...new Set(cut.segments.map((x) => x.src))];
@@ -54,7 +57,22 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   // The video's theme is every graphic's tone unless a shot sets its own.
   if (plan.theme === "dark" || plan.theme === "black") for (const s of shots) s.tone ??= "dark";
   const clean = plan.style === "clean" && !youtube;
-  issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script) : lintShots(shots, meta.duration, plan.format, plan.canvas)));
+  const { hook, issues: hookIssues } = clean ? resolveHook(plan.hook, words, shots, meta.duration, FPS, explicit) : { hook: undefined, issues: [] };
+  issues.push(...hookIssues);
+  issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script, hook, plan.cover) : lintShots(shots, meta.duration, plan.format, plan.canvas)));
+  // The cover's card comes in from the library at the 3:4 band's size (1080 x 1440), so the renderer can
+  // serve it and it loads at once; a full-size photo is several megabytes.
+  let cover: Resolved["cover"];
+  if (clean && plan.cover) {
+    const from = ["png", "jpg"].map((x) => join(LIBRARY, "covers", `${plan.cover!.image}.${x}`)).find((f) => existsSync(f));
+    if (!from) issues.push({ level: "error", message: `no cover card library/covers/${plan.cover.image}.png; drop Owain's blank card there` });
+    else {
+      const rel = `assets/cover-${plan.cover.image}.jpg`;
+      if (!existsSync(join(dir, rel)) || statSync(join(dir, rel)).mtimeMs < statSync(from).mtimeMs)
+        mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1440:force_original_aspect_ratio=increase,crop=1080:1440:(iw-1080)/2:0", "-q:v", "2", join(dir, rel)]);
+      cover = { title: plan.cover.title, image: `${slug}/${rel}` };
+    }
+  }
   const onCamera = youtube ? cameraOnTimeline(dir, cut) : undefined;
   if (onCamera) issues.push(...lintOnCamera(shots, onCamera));
   else if (youtube && !meta.script && shots.some((s) => s.visual)) issues.push({ level: "warn", message: "no camera scan, so graphics cannot be checked against where you are on camera; run frames, then scan" });
@@ -174,6 +192,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     style: plan.style,
     captions: plan.captions ?? !youtube,
     theme: plan.theme,
+    palette: plan.palette,
     preview: explicit
       ? {}
       : {
@@ -185,6 +204,9 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       ? { cut: placed(cut).map((s) => ({ video: `${clipPath(slug, s.src)}/build/preview.mp4`, audio: `${clipPath(slug, s.src)}/build/preview.m4a`, start: s.start, end: s.end, in: s.in })) }
       : {}),
     shots,
+    ...(hook ? { hook } : {}),
+    ...(cover ? { cover } : {}),
+    parts,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...joins(cut)].sort((a, b) => a - b), FPS),
     sfx: clean ? cleanSfx(shots) : sfxEvents(shots),
   };

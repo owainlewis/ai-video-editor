@@ -22,12 +22,16 @@ export { ACCENT };
 let graphite = false;
 // A video with the black theme draws its dark graphics in pure black instead of Graphite.
 let black = false;
-export const darkIsGraphite = (on: boolean, isBlack = false) => {
+// Dark cards in Black's colours, with the video's own marks and moves (a dark card in a light video).
+let neutral = false;
+const NEUTRAL = { ...BLACK, accent: GRAPHITE.accent };
+export const darkIsGraphite = (on: boolean, isBlack = false, neutralDark = isBlack) => {
   graphite = on;
   black = on && isBlack;
+  neutral = on && neutralDark;
 };
 export const isBlack = () => black;
-export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : graphite ? GRAPHITE : style.color.dark) : style.color.light);
+export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : neutral ? NEUTRAL : graphite ? GRAPHITE : style.color.dark) : style.color.light);
 
 // Scene geometry: the headline on top, the visual below, captions low.
 export const SCENE = { headTop: 96, headHeight: 340, top: 470, bottom: 1600, caption: 1752 };

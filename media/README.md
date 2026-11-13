@@ -9,10 +9,11 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`.
 - `ingest.ts`: `ingest(projects, file, slug, log?, choices?)`, `addClip(projects, slug, file, id, log?, name?)`, `transcribe`, `cleanWords`, `starterPlan`, `slugFor`, `projectMeta`, `setStatus`, `liveStatus`, types `Status` and `Choices`.
 - `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `cameraOnTimeline(dir, cut)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
-- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?)`, `prepareExport(projects, slug, onStage, log?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
-- `cutrender.ts`: `renderCut(projects, slug, onStage, log?)` returns `FlatCut`. Also `hasCut`, `segmentFrames`, `XFADE`.
-- `export.ts`: `exportOverOriginal(projects, slug, onStage, log?)`, `sections(r)`, `verifyExport(original, out, files, remove?)`, type `Section`.
-- `qc.ts`: `runQc(projects, slug, log?, onStage?, at?)` and `runLibraryQc(opts, log?, onStage?)` return `QcResult`. Also `footageCuts`, `libraryVariants`, `LIBRARY_QC`.
+- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`.
+- `cutrender.ts`: `renderCut(projects, slug, onStage, log?, range?)` returns `FlatCut`. Also `hasCut`, `segmentFrames`, `XFADE`.
+- `export.ts`: `exportOverOriginal(projects, slug, onStage, log?, preview?)`, `sections(r)`, `verifyExport(original, out, files, remove?, part?)`, type `Section`.
+- `qc.ts`: `runQc(projects, slug, log?, onStage?, at?, range?, cached = false)`, `qcState(dir, r)`, `qcHash(r, i)`, `codeStamp()`, types `QcItem` and `QcReport`, and `runLibraryQc(opts, log?, onStage?)` return `QcResult`. Also `footageCuts`, `libraryVariants`, `LIBRARY_QC`.
+- `previewmix.ts`: `previewMix(projects, slug, log?, onStage?)` writes `build/preview-mix-<key>.m4a`; `mixState(dir, slug)` returns the file and whether it is still fresh.
 - `broll.ts`: `loadLibrary`, `indexLibrary`, `describeLibrary`, `searchLibrary`, `useClip(projectDir, id)`, `BROLL`, type `Clip` (a library shot, not the same as the bin `Clip`).
 - `auphonic.ts`: `cleanVoice(dir, title, log?)`, `cleanProject(projects, slug, log?)`, `ALGORITHMS`, `OUTPUTS`.
 - `scan.ts`: `frameSheets(dir, every = 15, log?)`, `scanCamera(dir, refs)`.
@@ -40,6 +41,10 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 ### QC
 
 - `runQc` returns errors instead of throwing. It renders nothing to video.
+- `runQc` writes `checks/qc/report.json` (with one entry per graphic: id, hash, strip, issues) and `checks/qc/cache.json`. With `cached`, a graphic whose `qcHash` and `codeStamp` match the last run keeps that result and is not measured again. Without it (the CLI default and every export) each wanted graphic is measured afresh. Graphics a partial run leaves out keep their last result if it is still good.
+- `codeStamp` is the newest change time in `effects/`, `styles/`, `engine/qc.ts`, `app/qc.tsx` and `media/qc.ts`. A change there makes every kept result stale.
+- `qcState` lists as `stale` every graphic with no result for its current hash, so an old pass is never read as a pass.
+- `previewMix` is the real mix on the plan as it is, written beside the export's files, never over them (`build/preview/`, `build/audio-preview/`). With a cut it joins the voice from the clips' voice tracks end to end, without the export's crossfades.
 - With no `resolved`, it returns early and leaves `checks/qc/` alone.
 - It checks shots with a visual, not `keep`, and not `full`.
 
@@ -68,7 +73,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
   - `resolveProject`: `build/edit.resolved.json` and `build/audio.json`, or the export pair. It copies b-roll into `assets/broll/`.
   - `clipLevels`: `build/level.json`. `footageCuts`: `build/cuts.json`. `scanCamera`: `build/camera.json`.
   - `mixAudio`, and so `renderFinal` and `exportOverOriginal`, through the `audio.mix` child process: `build/mix.wav` and `build/audio/`.
-  - `renderFinal` and `exportOverOriginal`: `renders/final.mp4`. `exportOverOriginal` also writes `build/export/` and `checks/export-check.json`.
+  - `renderFinal` and `exportOverOriginal`: `renders/final.mp4`, or `renders/part-<name>.mp4` with a `preview`. `exportOverOriginal` also writes `build/export/` and `checks/export-check.json` (with a `preview`, `checks/part-<name>-check.json`).
   - `renderCut`: clears and writes `build/cut/`.
   - `runQc`: clears and writes `checks/qc/`. `stills`: clears and writes `checks/stills/`. `frameSheets`: clears and writes `checks/frames/`, writes contact sheets to `checks/frames-<k>.jpg`, and returns their paths.
   - `cleanVoice`: replaces `source/voice.wav`, and writes `source/voice.original.wav`, `build/auphonic/` and `build/preview.m4a`.

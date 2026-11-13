@@ -3,7 +3,7 @@
 // (2026-10-25). They share effects/motion.tsx.
 import React from "react";
 import { Video } from "@remotion/media";
-import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, Sequence, staticFile, useVideoConfig } from "remotion";
 import { REVIEW_MD } from "../engine/reviewmd";
 import { UI_KINDS, UiVisual } from "./ui";
 import type { Resolved, ResolvedShot } from "../engine/schema";
@@ -22,8 +22,13 @@ export const isFrame = (s: ResolvedShot) => s.layout === "media" && !!s.visual &
 export const Footage: React.FC<{ r: Resolved; from: number; style?: React.CSSProperties }> = ({ r, from, style }) => {
   const s: React.CSSProperties = { position: "absolute", left: 0, top: 0, width: 1920, height: 1080, ...style };
   if (r.cut) return <CutVideo r={r} from={from} style={s} />;
+  // The render of one part: its flattened picture starts at the part's first frame, which can be
+  // after this shot's own start.
+  const first = Math.round(from * r.fps) - (r.pictureFrom ?? 0);
   return getRemotionEnvironment().isRendering ? (
-    <OffthreadVideo src={staticFile(r.video)} startFrom={Math.round(from * r.fps)} muted style={s} />
+    <Sequence from={Math.max(0, -first)} layout="none">
+      <OffthreadVideo src={staticFile(r.video)} startFrom={Math.max(0, first)} muted style={s} />
+    </Sequence>
   ) : (
     <Video src={staticFile(r.video)} trimBefore={Math.round(from * r.fps)} muted style={s} />
   );

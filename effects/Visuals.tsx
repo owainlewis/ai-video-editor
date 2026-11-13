@@ -998,6 +998,9 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
     case "image": return <ImageVisual {...p} v={v} />;
     case "custom":
     case "claudecode":
+    case "cli":
+    case "claudeapp":
+    case "grokbot":
     case "search":
     case "tiers":
     case "compose":

@@ -9,10 +9,10 @@ The Python mix. It takes a finished voice track, a music bed and sound effects, 
 ### Entry point
 
 ```bash
-uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <project_dir> [config]
+uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <project_dir> [config] [out]
 ```
 
-`config` is relative to the project and defaults to `build/audio.json`. `media/project.ts` writes that file.
+`config` is relative to the project and defaults to `build/audio.json`. `media/project.ts` writes that file. `out` defaults to `build/mix.wav`; with any other path (the editor's preview mix) the working files go in `build/audio-preview/` instead of `build/audio/`.
 
 ### Config keys
 
@@ -25,7 +25,7 @@ uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <p
 
 ### Modules
 
-- `mix.py`: `main(project, config)`, `library_root()`, `ffmpeg(args)`, `loudness(path)`, `duck_graph(gain, music_db)`.
+- `mix.py`: `main(project, config, out_path)`, `library_root()`, `ffmpeg(args)`, `loudness(path)`, `duck_graph(gain, music_db)`.
 - `sfx.py`: `render(events, seconds, root_hz, library=None, synth=False, youtube=False)`, `thin(events, min_gap, tap_gain)`.
 - `library.py`: `SoundLibrary(root, cache)`, `decode(path, cache)`, `music_files(root, mood)`, `music_bed(path, seconds, cache, crossfade=2.0, start=0.0)`.
 - `dsp.py`: `SR` and helpers (`lowpass`, `highpass`, `bandpass`, `stereo`, `place`, `reverb`, `fade`, `rms_db`, `to_rms`, `t_axis`, `midi_hz`).

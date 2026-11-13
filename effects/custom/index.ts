@@ -12,22 +12,24 @@ import { CcrDrop, CcrFifty, CcrFlood, CcrRounds } from "./ccreview";
 import { Egm } from "./egm";
 import { EffAssume, EffBench, EffCost, EffTurns } from "./effort";
 import { EgmAgents, EgmBrainstorm, EgmDraft, EgmDrift, EgmGaps, EgmHandoff, EgmOneAgent, EgmPick, EgmReviewers } from "./egmclean";
+import { PanelLens, PanelMinds } from "./panels";
+import { GbAsk, GbInbox, GbWork } from "./grokbot";
 import { Migrate } from "./migrate";
 import { OrgChart } from "./orgchart";
 import { Points } from "./points";
 import { Skills } from "./skills";
 import { AutoFlood, AutoMorning } from "./automations";
 import { SlowDeep, SlowEager, SlowFeedback, SlowGoldfish, SlowTradeoffs, SlowTwo } from "./egmslow";
-import { NatAngles, NatFull, NatGoldfish, NatKnows, NatReview, NatTwo } from "./egmnatural";
+import { NatAngles, NatCast, NatDelegate, NatEnd, NatFull, NatGoldfish, NatGoogle, NatKnows, NatReview, NatStrike, NatTwo } from "./egmnatural";
 import { RmdFile, RmdLoop, RmdRepo, RmdRules } from "./reviewmd";
 import { SubAlive, SubLife, SubReopen, SubSame, SubZero } from "./subtasks";
-import { Drain, Drift, Gaps, Lens, Scale, Surge, Thread, Wall } from "./stage";
+import { Drain, Drift, Gaps, Lens, Minds, Scale, Surge, Tally, Thread, Wall } from "./stage";
 import { Blueprint, Commits, Swap, Three } from "./threethings";
 import { Tools } from "./tools";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
 // Drawn to hold still: the frame stays put and only the parts change (measured in the study).
-export const STILL = new Set(["drain", "lens", "wall", "thread", "gaps", "drift", "surge", "scale"]);
+export const STILL = new Set(["drain", "lens", "wall", "thread", "gaps", "drift", "surge", "scale", "minds", "panelminds", "panellens", "tally"]);
 export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   orgchart: OrgChart,
   migrate: Migrate,
@@ -84,6 +86,15 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   "nat-angles": NatAngles,
   "nat-review": NatReview,
   "nat-knows": NatKnows,
+  // egm-reel-v3, second cut: the real marks as the cast.
+  "nat-cast": NatCast,
+  "nat-delegate": NatDelegate,
+  "nat-strike": NatStrike,
+  "nat-google": NatGoogle,
+  "nat-end": NatEnd,
+  "gb-inbox": GbInbox,
+  "gb-ask": GbAsk,
+  "gb-work": GbWork,
   // EGM, "it forces you to slow down" (2026-11-08).
   "slow-two": SlowTwo,
   "slow-deep": SlowDeep,
@@ -103,4 +114,8 @@ export const CUSTOM: Record<string, React.FC<CustomProps>> = {
   drift: Drift,
   surge: Surge,
   scale: Scale,
+  minds: Minds,
+  panelminds: PanelMinds,
+  panellens: PanelLens,
+  tally: Tally,
 };

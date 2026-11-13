@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { api, clock, type ProjectSummary } from "./api";
+import { confirmIt } from "./dialog";
 import { NewProject } from "./NewProject";
+import { ago, Side } from "./ui";
 
-// Projects, newest first, and a drop zone for a new clip.
+type Kind = "all" | "reel" | "youtube";
+
+// Projects, newest first: a frame of each, what it is, and where it has got to. New project takes
+// a finished cut.
 export const Home: React.FC = () => {
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<Kind>("all");
 
   const load = () => api.projects().then(setProjects).catch((e) => setError(String(e.message)));
   useEffect(() => {
@@ -14,49 +21,95 @@ export const Home: React.FC = () => {
     return api.events((e) => e.type === "status" && load());
   }, []);
 
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = (projects ?? []).filter((p) => (kind === "all" || p.canvas === kind) && words.every((w) => `${p.title} ${p.slug}`.toLowerCase().includes(w)));
+
   return (
-    <div className="home">
-      <header className="bar">
-        <span className="brand">Studio</span>
-        <a href="#/gallery">Gallery</a>
-      </header>
-      <main>
-        <div className="home-head">
-          <h1>Projects</h1>
-          <button className="primary" onClick={() => setCreating(true)}>
-            New project
-          </button>
-        </div>
-        {projects.length === 0 && (
-          <button className="drop" onClick={() => setCreating(true)}>
-            Start your first project
-          </button>
-        )}
-        {error && <p className="error">{error}</p>}
-        <ul className="projects">
-          {projects.map((p) => (
-            <li key={p.slug}>
-              <button
-                className="delete"
-                title="Delete this project"
-                onClick={() => api.remove(p.slug, p.title).then((done) => { if (done) load(); }).catch((e) => setError(String(e.message)))}
-              >
-                Delete
+    <div className="shell">
+      <Side on="projects" count={projects?.length} onNew={() => setCreating(true)} />
+      <main className="main">
+        <div className="page">
+          <div className="page-head">
+            <h1>Projects</h1>
+            {projects && projects.length > 0 && <span className="count">{shown.length}</span>}
+            <span className="spacer" />
+            {projects && projects.length > 0 && (
+              <>
+                <input className="search" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <div className="seg">
+                  {(["all", "reel", "youtube"] as const).map((k) => (
+                    <button key={k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>
+                      {k === "all" ? "All" : k === "reel" ? "Reels" : "YouTube"}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          {error && <p className="error">{error}</p>}
+          {projects?.length === 0 && (
+            <div className="empty">
+              <p>No projects yet. Start one from a finished cut.</p>
+              <button className="primary" onClick={() => setCreating(true)}>
+                New project
               </button>
-              <a href={`#/p/${p.slug}`}>
-                <strong>{p.title}</strong>
-                <span>
-                  {p.canvas === "youtube" ? "YouTube" : "Reel"}
-                  {p.duration ? ` · ${clock(p.duration)}` : ""}
-                  {p.status && !p.status.done ? ` · ${p.status.stage}…` : ""}
-                  {p.status?.error ? " · failed" : ""}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+          {projects && projects.length > 0 && shown.length === 0 && <p className="empty">No project matches that.</p>}
+          <div className="cards">
+            {shown.map((p) => (
+              <Card
+                key={p.slug}
+                p={p}
+                onDelete={() =>
+                  confirmIt({ title: `Delete "${p.title}"?`, body: "It moves to projects/.trash, so you can get it back from there.", ok: "Delete", danger: true })
+                    .then((yes) => (yes ? api.remove(p.slug).then(load) : undefined))
+                    .catch((e) => setError(String(e.message)))
+                }
+              />
+            ))}
+          </div>
+        </div>
       </main>
       {creating && <NewProject onClose={() => setCreating(false)} />}
+    </div>
+  );
+};
+
+// Where a project has got to, in a word or two, or nothing while it is simply being edited.
+const state = (p: ProjectSummary): { text: string; cls: string } | null =>
+  p.status?.error
+    ? { text: "Import failed", cls: "failed" }
+    : p.status && !p.status.done
+      ? { text: `${p.status.stage}…`, cls: "busy" }
+      : p.exported
+        ? { text: "Exported", cls: "done" }
+        : p.review?.approved
+          ? { text: `${p.review.approved} of ${p.review.total} approved`, cls: "" }
+          : null;
+
+const Card: React.FC<{ p: ProjectSummary; onDelete: () => void }> = ({ p, onDelete }) => {
+  const s = state(p);
+  const kind = p.canvas === "youtube" ? "youtube" : "reel";
+  return (
+    <div className="card">
+      <a className="hit" href={`#/p/${p.slug}`}>
+        <div className={`thumb ${kind}`}>
+          {p.thumb ? <img src={`/${p.thumb}`} alt="" loading="lazy" /> : <i className="blank" />}
+          {s && <span className={`state ${s.cls}`}>{s.text}</span>}
+        </div>
+        <span className="name" title={p.title}>{p.title}</span>
+        <span className="about">
+          <span>
+            {kind === "youtube" ? "YouTube" : "Reel"}
+            {p.duration ? `, ${clock(p.duration).replace(/\.\d$/, "")}` : ""}
+          </span>
+          <span>{ago(p.modified)}</span>
+        </span>
+      </a>
+      <button className="delete" title="Move this project to projects/.trash" onClick={onDelete}>
+        Delete
+      </button>
     </div>
   );
 };

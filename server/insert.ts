@@ -15,6 +15,14 @@ import { timeline } from "../media/bin.ts";
 const brollLength = (id: string) => loadLibrary().find((c) => c.id === id)?.duration ?? 0;
 
 type Shot = { at: string; layout: string; [k: string]: unknown };
+type Part = { name: string; at: string };
+// A shot by its id, or by where it starts on the timeline (a few frames either way: a shot leads its word slightly).
+export type ShotRef = { id?: string; start?: number };
+const shotAt = (shots: { id?: string; start: number }[], ref: ShotRef) => {
+  if (ref.id !== undefined) return shots.findIndex((s) => s.id === ref.id);
+  const start = ref.start ?? NaN;
+  return shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(shots[best].start - start)) ? i : best), -1);
+};
 
 // The plan, ready to change. `save` writes the change; if it adds an error, the plan goes back byte
 // for byte and the reason is thrown.
@@ -25,7 +33,7 @@ function openPlan(projects: string, slug: string) {
   const { resolved, issues } = resolveProject(projects, slug);
   if (!resolved) throw Object.assign(new Error("the plan has errors; fix them first"), { code: 409 });
   const errorsBefore = new Set(issues.filter((i) => i.level === "error").map((i) => i.message));
-  const plan = JSON.parse(before) as { shots: Shot[] };
+  const plan = JSON.parse(before) as { shots: Shot[]; parts?: Part[] };
   const save = () => {
     writeJson(file, plan);
     const fresh = resolveProject(projects, slug).issues.filter((i) => i.level === "error" && !errorsBefore.has(i.message));
@@ -62,6 +70,34 @@ export function insertAt(projects: string, slug: string, added: { start: number;
     return { index, shot: a.shot };
   });
   plan.shots = mergeShots(words, existing, placed);
+  save();
+}
+
+// The editor's edits to the video's parts: add one on the next word after a time, rename one, or take
+// one out (the part before it runs on). Parts cover the video, so the first one added past the first
+// word brings an "intro" with it.
+export function changeParts(projects: string, slug: string, change: { add?: { name: string; at: number }; rename?: { name: string; to: string }; remove?: string }) {
+  const { dir, plan, save } = openPlan(projects, slug);
+  const parts = plan.parts ?? [];
+  const words = timeline(dir).words;
+  if (change.remove !== undefined) plan.parts = parts.filter((p) => p.name !== change.remove);
+  if (change.rename) plan.parts = parts.map((p) => (p.name === change.rename!.name ? { ...p, name: change.rename!.to } : p));
+  if (change.add) {
+    const index = wordAt(words, change.add.at);
+    if (index < 0) throw Object.assign(new Error("nothing is said after that point to start a part on"), { code: 400 });
+    let cursor = 0;
+    const anchored = parts.map((part) => {
+      const i = findPhrase(words, part.at, cursor);
+      if (i >= 0) cursor = i + 1;
+      return { index: i < 0 ? Number.MAX_SAFE_INTEGER : i, part };
+    });
+    if (anchored.some((a) => a.index === index)) throw Object.assign(new Error("a part already starts on that word"), { code: 409 });
+    const after = anchored.reduce((last, a) => (a.index < index ? Math.max(last, a.index) : last), -1);
+    const at = phraseAt(words, index, after);
+    if (at === null) throw Object.assign(new Error(`no unique phrase at "${words[index].text}" to start a part on`), { code: 409 });
+    const opening = !parts.length && index > 0 ? [{ index: 0, part: { name: change.add.name === "intro" ? "opening" : "intro", at: phraseAt(words, 0, -1)! } }] : [];
+    plan.parts = [...opening, ...anchored, { index, part: { name: change.add.name, at } }].sort((a, b) => a.index - b.index).map((a) => a.part);
+  }
   save();
 }
 
@@ -122,7 +158,8 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
   if (target < 0) throw Object.assign(new Error(`no shot "${resolved.shots[k].anchor}" in the plan`), { code: 409 });
   // A b-roll clip on either side of the edge is slowed to fill its new length, as on a drop.
   const video = [k - 1, k].map((j) => planIndex(plan.shots, resolved.shots, j)).filter((p) => p >= 0 && (plan.shots[p] as { visual?: { kind?: string } }).visual?.kind === "video");
-  plan.shots[target] = { ...plan.shots[target], at };
+  // The shot stays itself when its words move: its id is written in once the anchor changes.
+  plan.shots[target] = { id: resolved.shots[k].id, ...plan.shots[target], at };
   if (video.length) {
     writeJson(file, plan);
     const moved = resolveProject(projects, slug).resolved;
@@ -140,13 +177,12 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
   save();
 }
 
-// A change made in the inspector to the graphic that starts at timeline time `start`: `shot`
+// A change made in the inspector to one graphic: `shot`
 // replaces its shot in the plan, `remove` takes the graphic off (and the shots that keep it), so the
 // picture plays as cut. Like any insert, a change that adds an error is put back and the reason returned.
-export function editShot(projects: string, slug: string, start: number, change: { shot?: Shot; remove?: boolean }) {
+export function editShot(projects: string, slug: string, ref: ShotRef, change: { shot?: Shot; remove?: boolean }) {
   const { plan, resolved, save } = openPlan(projects, slug);
-  // The shot starting nearest `start`, a few frames either way (a shot leads its word slightly).
-  const k = resolved.shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(resolved.shots[best].start - start)) ? i : best), -1);
+  const k = shotAt(resolved.shots, ref);
   const target = planIndex(plan.shots, resolved.shots, k);
   if (target < 0) throw Object.assign(new Error("no graphic starts there"), { code: 404 });
   if (change.remove) {
@@ -155,13 +191,14 @@ export function editShot(projects: string, slug: string, start: number, change: 
     plan.shots.splice(target, 1 + kept, { at: plan.shots[target].at, layout: "full" });
   } else if (change.shot) {
     if (!change.shot.at || !change.shot.layout) throw Object.assign(new Error("a shot needs its words (at) and a layout"), { code: 400 });
-    plan.shots[target] = change.shot;
+    // New words to start on do not make it a new shot: it keeps the id it had.
+    plan.shots[target] = change.shot.at !== plan.shots[target].at && !change.shot.id ? { id: resolved.shots[k].id, ...change.shot } : change.shot;
   }
   save();
 }
 
 // A library card at the playhead: its sample, without the sample's own anchors, on plain picture
-// for about four seconds, in the layout the card takes on this canvas. Returns where it starts.
+// for about four seconds, in the layout the card takes on this canvas. Returns the new shot's id and where it starts.
 export function placeCard(projects: string, slug: string, cardId: string, at: number) {
   const card = cards.find((c) => c.id === cardId);
   if (!card?.sample) throw Object.assign(new Error(`no library card ${cardId}`), { code: 404 });
@@ -175,16 +212,17 @@ export function placeCard(projects: string, slug: string, cardId: string, at: nu
   const from = placeOver(projects, slug, { at: "", layout, visual, ...look }, at, 4, 1.6);
   // Where the new shot really starts: a shot leads its word by a few frames.
   const shots = resolveProject(projects, slug).resolved?.shots ?? [];
-  return shots.reduce((best, s) => (Math.abs(s.start - from) < Math.abs(best - from) ? s.start : best), shots[0]?.start ?? from);
+  const shot = shots.reduce((best, s) => (Math.abs(s.start - from) < Math.abs(best.start - from) ? s : best), shots[0] ?? { start: from });
+  return { start: shot.start, id: shot.id };
 }
 
-// End the graphic that starts at `start` on the word at `to`: the shot after it starts there. With no
+// End a graphic on the word at `to`: the shot after it starts there. With no
 // word left to start on (the graphic should run to the end), a plain shot after it is taken out, so
 // the graphic runs on to the shot after that.
-export function moveShotEnd(projects: string, slug: string, start: number, to: number) {
+export function moveShotEnd(projects: string, slug: string, ref: ShotRef, to: number) {
   const { dir, plan, resolved, save } = openPlan(projects, slug);
   const shots = resolved.shots;
-  const k = shots.reduce((best, s, i) => (Math.abs(s.start - start) < 0.3 && (best < 0 || Math.abs(s.start - start) < Math.abs(shots[best].start - start)) ? i : best), -1);
+  const k = shotAt(shots, ref);
   if (k < 0) throw Object.assign(new Error("no graphic starts there"), { code: 404 });
   const last = lastKept(shots, k);
   const next = shots[last + 1];

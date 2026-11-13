@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
+import { frameWindow, overlayEnable, type Preview, rangesInWindow, sectionFrames } from "../engine/parts.ts";
 import { type Issue, lastKept } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { prepareExport } from "./render.ts";
@@ -30,9 +31,12 @@ export function sections(r: Resolved): Section[] {
   return out;
 }
 
-export async function exportOverOriginal(projects: string, slug: string, onStage: (stage: string) => void, log?: Log): Promise<string> {
+// `preview`: one part only, to its own file. Every step is the final export's, limited to the part:
+// the plan keeps the whole video's times, so graphics draw exactly the frames they will in the
+// finished video, and only the overlay pass moves them to the part's own time.
+export async function exportOverOriginal(projects: string, slug: string, onStage: (stage: string) => void, log?: Log, preview?: Preview): Promise<string> {
   const dir = join(projects, slug);
-  const { flat, resolved: r } = await prepareExport(projects, slug, onStage, log);
+  const { flat, resolved: r } = await prepareExport(projects, slug, onStage, log, preview?.range);
   const meta = readJson<{ original: string }>(join(dir, "project.json"));
   const original = flat?.picture ?? meta.original;
   const [num, den] = probeRate(original);
@@ -40,34 +44,42 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   const [w] = probeSize(original);
   const comp = compositionFor(r.canvas);
   const scale = Math.max(1, Math.round(w / comp.width));
+  // Where the part starts on the timeline, and how long it is. A flattened part's picture already
+  // starts there; an uncut original, and the whole mix, are read from there.
+  const win = preview ? frameWindow(preview.range, fps) : null;
+  const base = win ? win.a / fps : 0;
+  const length = win ? (win.b - win.a) / fps : probeDuration(original);
+  const stretch = win ? ["-ss", base.toFixed(6), "-t", length.toFixed(6)] : [];
 
   const work = join(dir, "build/export");
   mkdirSync(work, { recursive: true });
   for (const f of readdirSync(work)) rmSync(join(work, f), { recursive: true });
-  const parts = sections(r);
+  const parts = sections(r).flatMap((s) => {
+    const f = sectionFrames(s, fps, win);
+    return f ? [{ s, ...f }] : [];
+  });
   const files: { file: string; s: Section }[] = [];
-  for (const [k, s] of parts.entries()) {
+  for (const [k, { s, from, to }] of parts.entries()) {
     onStage(`Rendering graphics ${k + 1}/${parts.length}`);
     const props = join(work, `props-${k}.json`);
-    writeJson(props, { ...r, fps, alpha: s.alpha });
+    writeJson(props, { ...r, fps, alpha: s.alpha, ...(win && flat ? { pictureFrom: win.a } : {}) });
     const file = join(work, `${String(k).padStart(2, "0")}.mov`);
-    const from = Math.round(s.start * fps), to = Math.max(from, Math.round(s.end * fps) - 1);
     run("npx", ["remotion", "render", "effects/index.ts", comp.id, file, `--props=${props}`, `--frames=${from}-${to}`, `--scale=${scale}`, "--muted", "--codec=prores", "--log=error",
       // Seeking deep into a long 4K working copy can take longer than Remotion's 30 s default (2026-10-30).
       "--timeout=180000",
       ...(s.alpha ? ["--prores-profile=4444", "--pixel-format=yuva444p10le", "--image-format=png"] : ["--prores-profile=hq"])], { env: { REEL_PRORES: "1" }, log });
-    files.push({ file, s: { ...s, start: from / fps } });
+    files.push({ file, s: { ...s, start: from / fps - base, end: win ? (to + 1) / fps - base : s.end } });
   }
 
   // Each section is a timed input laid over the original from its first frame; outside its time it
   // passes the picture through untouched.
   const inputs = files.flatMap(({ file, s }) => ["-itsoffset", s.start.toFixed(6), "-i", file]);
-  const chain = files.map(({ s }, k) => `[v${k}][${k + 1}:v]overlay=eof_action=pass:enable='between(t,${s.start.toFixed(3)},${(s.end + 1 / fps).toFixed(3)})'[v${k + 1}]`);
+  const chain = files.map(({ s }, k) => `[v${k}][${k + 1}:v]overlay=eof_action=pass:enable='${overlayEnable(s, fps)}'[v${k + 1}]`);
   const graph = files.length ? `[0:v]null[v0];${chain.join(";")}` : "[0:v]null[v0]";
   // Stretches cut out (a section said twice): the overlaid picture and the mix are cut at the same
   // points and joined, in the same pass.
-  const remove = [...(r.remove ?? [])].sort((x, y) => x[0] - y[0]);
-  const total = probeDuration(original);
+  const remove = (win ? rangesInWindow(r.remove ?? [], base, length) : [...(r.remove ?? [])]).sort((x, y) => x[0] - y[0]);
+  const total = length;
   const keep: [number, number][] = [];
   let at = 0;
   for (const [a, b] of remove) {
@@ -88,12 +100,12 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     aOut = "[acut]";
   }
   const audio = join(dir, "build/mix.wav");
-  const out = join(dir, "renders/final.mp4");
+  const out = join(dir, "renders", preview?.file ?? "final.mp4");
   mkdirSync(join(dir, "renders"), { recursive: true });
   const hw = hasHardwareH264();
   let last = -1;
   await ffmpegProgress([
-    "-i", original, ...inputs, "-i", audio,
+    ...(flat ? [] : stretch), "-i", original, ...inputs, ...stretch, "-i", audio,
     "-filter_complex", graphFull, "-map", vOut, "-map", aOut,
     ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
     "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", out,
@@ -102,8 +114,8 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
     if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
   }, log);
   onStage("Checking the export");
-  const check = verifyExport(original, out, files, remove);
-  writeJson(join(dir, "checks/export-check.json"), { at: new Date().toISOString(), ...check });
+  const check = verifyExport(original, out, files, remove, win ? { length, seek: flat ? 0 : base } : undefined);
+  writeJson(join(dir, preview ? `checks/${preview.file.replace(/\.mp4$/, "")}-check.json` : "checks/export-check.json"), { at: new Date().toISOString(), ...check });
   for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
   return out;
 }
@@ -114,11 +126,12 @@ const thumb = (file: string, t: number) =>
 const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.reduce((sum, x, k) => sum + Math.abs(x - b[k]), 0) / a.length : 255);
 
 // After an export: the same length as the original, every graphic where it should be, and the
-// loudness, so a bad export is caught before Owain watches it (2026-10-25).
-export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = []) {
+// loudness, so a bad export is caught before Owain watches it (2026-10-25). `part`: the export is one
+// part, `length` seconds, read from `seek` seconds into `original`.
+export function verifyExport(original: string, out: string, files: { file: string; s: Section }[], remove: [number, number][] = [], part?: { length: number; seek: number }) {
   const issues: Issue[] = [];
   const cutOut = remove.reduce((sum, [x, y]) => sum + (y - x), 0);
-  const [a, b] = [probeDuration(original) - cutOut, probeDuration(out)];
+  const [a, b] = [(part?.length ?? probeDuration(original)) - cutOut, probeDuration(out)];
   if (Math.abs(a - b) > 0.15) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; expected ${a.toFixed(2)}s (the original less ${cutOut.toFixed(2)}s removed)` });
   // A time in the original, as it falls in the export after removals (null if it was removed).
   const mapped = (t: number) => (remove.some(([x, y]) => t >= x && t < y) ? null : t - remove.filter(([, y]) => y <= t).reduce((sum, [x, y]) => sum + (y - x), 0));
@@ -132,7 +145,7 @@ export function verifyExport(original: string, out: string, files: { file: strin
     const final = thumb(out, there);
     if (s.alpha) {
       // A title over the picture: the export must differ from the original there.
-      if (differ(final, thumb(original, mid)) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
+      if (differ(final, thumb(original, mid + (part?.seek ?? 0))) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
     } else if (differ(final, thumb(file, mid - s.start)) > 10) {
       issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
     }

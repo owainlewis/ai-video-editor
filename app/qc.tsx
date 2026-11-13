@@ -91,7 +91,9 @@ function measure() {
   const W = root.getBoundingClientRect().width, H = root.getBoundingClientRect().height;
   // Everything drawn (cards, dots, lines, svg shapes), for balance: is the graphic as a whole centred?
   const paint: number[][] = [];
-  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string; clipped: boolean; label: boolean }[] = [];
+  const texts: { text: string; box: number[]; size: number; opacity: number; color: string; block: number; under: string; clipped: boolean; label: boolean; hook: boolean; cover: boolean }[] = [];
+  // The clean style's text hook keeps off the speaker's face (effects/clean/hook.tsx marks it).
+  const faces: number[][] = [];
   const marks: { box: number[]; opacity: number }[] = [];
   const edges: { points: number[][]; opacity: number }[] = [];
   const blocks = new Map<Element, number>();
@@ -100,15 +102,30 @@ function measure() {
     // Ambient motion (a marquee of names drifting past the frame edges) is texture, not text to read.
     if (el.closest('[data-qc="ambient"]')) continue;
     if (el.closest('[data-qc="canvas"]')) continue;
+    if (el.getAttribute("data-qc") === "face") {
+      const b = el.getBoundingClientRect();
+      faces.push([b.left, b.top, b.width, b.height]);
+      continue;
+    }
     const o = opacity(el);
     if (o < 0.05) continue;
-    {
+    // The hook's own plate and scrim are what it sits on, not something it could run into.
+    if (!el.closest('[data-qc="hook-plate"]') && !el.closest('[data-qc="cover"]')) {
       const cs = getComputedStyle(el);
       const bgA = parseFloat((cs.backgroundColor.match(/[\d.]+/g) ?? [])[3] ?? (cs.backgroundColor.startsWith("rgb(") ? "1" : "0"));
       const drawn = (bgA > 0.05 && cs.backgroundColor !== "rgba(0, 0, 0, 0)") || parseFloat(cs.borderTopWidth) > 0 || el instanceof SVGGraphicsElement && !(el instanceof SVGSVGElement) || el.tagName === "IMG";
       const b = el.getBoundingClientRect();
+      // What shows of it: a capture zoomed inside its window is cut to the window.
+      let [l, t, r, btm] = [b.left, b.top, b.right, b.bottom];
+      if (drawn)
+        for (let e = el.parentElement; e && e !== root; e = e.parentElement) {
+          const ov = getComputedStyle(e);
+          if (ov.overflowX === "visible" && ov.overflowY === "visible") continue;
+          const c = e.getBoundingClientRect();
+          [l, t, r, btm] = [Math.max(l, c.left), Math.max(t, c.top), Math.min(r, c.right), Math.min(btm, c.bottom)];
+        }
       // Skip the canvas and footage itself: anything nearly as big as the frame.
-      if (drawn && b.width && b.height && !(b.width > W * 0.85 && b.height > H * 0.85) && el.tagName !== "VIDEO") paint.push([b.left, b.top, b.width, b.height]);
+      if (drawn && r > l && btm > t && !(b.width > W * 0.85 && b.height > H * 0.85) && el.tagName !== "VIDEO") paint.push([l, t, r - l, btm - t]);
     }
     if (el.getAttribute("data-qc") === "mark") {
       const b = el.getBoundingClientRect();
@@ -189,7 +206,7 @@ function measure() {
       if (r.width > W * 0.85 && r.height > H * 0.85) continue;
       if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)" && !e.closest('[data-qc="canvas"]')) under = c;
     }
-    texts.push({ label: el.getAttribute("data-qc") === "label", text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: textColor(el), block: id, under, clipped });
+    texts.push({ label: el.getAttribute("data-qc") === "label", hook: !!el.closest('[data-qc="hook"]'), cover: !!el.closest('[data-qc="cover"]'), text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: textColor(el), block: id, under, clipped });
     // Each word's line, to find a last line with a single word on it.
     for (const n of nodes) {
       const s = n.textContent!;
@@ -204,7 +221,7 @@ function measure() {
       }
     }
   }
-  return { texts, marks, edges, words, paint };
+  return { texts, marks, edges, words, paint, faces };
 }
 
 const root = createRoot(document.getElementById("root")!);

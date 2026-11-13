@@ -11,6 +11,7 @@ import type { VisualSpec } from "../../engine/schema";
 import { atMax, slotIssuesIn, slotValues, type Card, type Slot, type StyleDef } from "../catalog";
 export { atMax, slotValues, type Card, type Slot };
 import { tokens } from "./tokens";
+import { appCards } from "./apps";
 import { sampleArticle, sampleLogo, samplePage, sampleRepo, SAMPLE_ARTICLE_SIZE, SAMPLE_PAGE_SIZE, SAMPLE_REPO_SIZE, sampleThumb } from "./samples";
 
 const T = (maxChars = 32): Slot => ({ name: "title", type: "text", maxChars, optional: true });
@@ -83,6 +84,8 @@ const catalog: Card[] = [
     slots: [{ name: "lines", type: "list", minItems: 1, maxItems: 12 }, { name: "lines[].text", type: "text", maxChars: 70 }, at("lines[].at")],
     noSample: "Shows a real session's words; there is no stand-in session.",
   },
+  // ---- the app mock-ups (effects/apps/): the real products, drawn to move ----
+  ...appCards(),
   {
     id: "blueprint.t1.search",
     kind: "search",
