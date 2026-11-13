@@ -40,7 +40,7 @@ When Owain flags a layout or pacing problem, add it to `engine/qc.ts` as a check
 
 ## Reels
 
-Owain (2026-11-13): "I want our reels to be best in the world." Few rules, held well. Every reel is `"style": "clean"`, 9:16. The working examples are `projects/a1-reel-1` and `projects/a1-reel-2`.
+Owain (2026-11-13): "I want our reels to be best in the world." Few rules, held well. **The look is locked** ("Ok I like our style now. Lock this in."): build every reel in it, and change the look only when Owain asks; make the kit better freely. Every reel is `"style": "clean"`, 9:16. The working examples are `projects/a1-reel-1` and `projects/a1-reel-2`.
 
 **The kit comes first.** Reels are built from a small kit of high quality components with real layout:
 

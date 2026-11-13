@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Visual } from "../engine/schema.ts";
 import { FLOW, flowBeats, flowIssues, flowTimes, layoutFlow, textWidth, type Box, type Flow, type FlowLayout } from "../engine/flow.ts";
-import { CODE, codeBeats, codeIssues, codeLayout, codeTimes, langOf, tokenize, typeSecs, type Code } from "../engine/code.ts";
+import { CODE, codeBeats, codeChars, codeIssues, codeLayout, codePans, codeTimes, langOf, tokenize, typeSecs, type Code } from "../engine/code.ts";
 import { resolveShots, cleanSfx } from "../engine/resolve.ts";
 import { Edit } from "../engine/schema.ts";
 import { cards } from "../styles/blueprint/style.ts";
@@ -233,18 +233,77 @@ describe("code timing", () => {
   });
 });
 
+// The code window's boxes: the reel's, and YouTube's side panel as Wide.tsx lays it out (900 px wide,
+// then scaled up).
+const CODE_BOXES: [string, number, number, boolean][] = [...BOXES.slice(0, 3).map(([n, w, h]) => [n, w, h, false] as [string, number, number, boolean]), ["youtube side", 900, 666, true]];
+
 describe("the code window", () => {
-  it("fills its box, keeps type readable and fits the longest line", () => {
+  it("is its box, keeps type at 30 px or more and fits the longest line", () => {
     for (const c of cards.filter((x) => x.kind === "code"))
       for (const longest of [false, true])
-        for (const [name, w, h] of BOXES) {
+        for (const [name, w, h, wide] of CODE_BOXES) {
           const v = Visual.parse((longest ? atMax(c) : c.sample)!.visual) as Code;
-          const L = codeLayout(v, w, h);
+          const L = codeLayout(v, w, h, { wide });
           expect(L.fits, `${c.id} ${name}`).toBe(true);
-          expect(L.font).toBeGreaterThanOrEqual(CODE.min);
-          expect(L.height / h, `${c.id} ${name} fills`).toBeGreaterThanOrEqual(CODE.fill - 0.01);
-          expect(L.y + L.height / 2).toBeCloseTo(h / 2);
+          expect(L.font, `${c.id} ${name}`).toBeGreaterThanOrEqual(wide ? CODE.wideMin : CODE.min);
+          expect([L.x, L.y, L.width, L.height]).toEqual([0, 0, w, h]);
+          expect(L.scrolls, `${c.id} ${name}`).toBe(false);
         }
+  });
+  it("sets the code as large as its longest line and its line count allow", () => {
+    const short = codeLayout(code([{ text: "npm test" }]), 960, 724);
+    expect(short.font).toBe(CODE.max);
+    expect(codeLayout(code([{ text: "npm test" }]), 1350, 860, { wide: true }).font).toBe(CODE.wideMax);
+    // Wider lines set smaller, down to 30 px at the longest a line may be.
+    const long = codeLayout(code([{ text: "x".repeat(CODE.chars) }]), 960, 724);
+    expect(long.font).toBe(CODE.min);
+    expect(long.fits).toBe(true);
+    // More lines than fit at the widest size set smaller, down to 30 px; then the file scrolls.
+    const tall = (n: number) => codeLayout(code(Array.from({ length: n }, (_, i) => ({ text: `line${i}();` }))), 960, 494);
+    expect(tall(4).font).toBeGreaterThan(tall(6).font);
+    expect(tall(16).font).toBe(CODE.min);
+    expect(tall(16).scrolls).toBe(true);
+    expect(tall(16).view % tall(16).row).toBe(0);
+  });
+  it("pans a long file to the line being typed, changed or marked, a whole row at a time", () => {
+    const lines = Array.from({ length: 16 }, (_, i) => ({ text: `step${i}();` }));
+    const v = code(lines, { marks: [{ from: 2, to: 3, at: "x" }] } as Partial<Code>);
+    const L = codeLayout(v, 960, 494);
+    const b = codeBeats(v, 0, []);
+    const pans = codePans(v, L, b, 0);
+    expect(pans.length).toBe(17);
+    for (const p of pans) expect(p.y % L.row).toBe(0);
+    const rows = L.view / L.row;
+    // Each line typed is in view as it types; the last ends at the viewport's bottom.
+    lines.forEach((_, i) => {
+      const y = pans[i].y;
+      expect(i * L.row).toBeGreaterThanOrEqual(y);
+      expect((i + 1) * L.row).toBeLessThanOrEqual(y + L.view);
+    });
+    expect(pans[15].y).toBe((16 - rows) * L.row);
+    // The mark, on lines 2 and 3, brings the view back up to them, in the middle where it can be.
+    expect(pans[16].y).toBe(0);
+    const late = code(lines, { marks: [{ from: 9, to: 9, at: "x" }] } as Partial<Code>);
+    const y = codePans(late, L, codeBeats(late, 0, []), 0)[16].y;
+    expect(y + L.view / 2).toBeGreaterThan(8 * L.row);
+    expect(y + L.view / 2).toBeLessThan(9 * L.row + L.row);
+    // A file that fits never pans.
+    expect(codePans(code([{ text: "a();" }]), codeLayout(code([{ text: "a();" }]), 960, 494), codeBeats(code([{ text: "a();" }]), 0, []), 0)).toEqual([]);
+  });
+  it("pans a long diff to each change before it lands", () => {
+    const lines: Parameters<typeof code>[0] = [...Array.from({ length: 12 }, (_, i) => ({ text: `keep${i}();` })), { text: "old();", diff: "del" }, { text: "fresh();", diff: "add", at: "new" }, { text: "end();" }];
+    const v = code(lines);
+    const L = codeLayout(v, 960, 494);
+    const b = codeBeats(v, 0, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3]);
+    const pans = codePans(v, L, b, 0);
+    expect(pans.map((p) => p.t)).toEqual([b.lines[12].t0 - 0.3, b.lines[13].t0 - 0.3]);
+    expect(13 * L.row).toBeLessThanOrEqual(pans[0].y + L.view);
+    expect(14 * L.row).toBeLessThanOrEqual(pans[1].y + L.view);
+  });
+  it("lets a diff's lines be shorter by its sign column", () => {
+    expect(codeChars(code([{ text: "a" }]))).toBe(CODE.chars);
+    expect(codeChars(code([{ text: "a", diff: "add" }]))).toBe(CODE.chars - 2);
+    expect(codeIssues(code([{ text: "x".repeat(CODE.chars - 1), diff: "add" }]))[0]).toMatch(/in a diff/);
   });
 });
 

@@ -5,6 +5,7 @@
 // balance. Errors stop an export; warnings are reported.
 import { COVER, HOOK, type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
 import type { Resolved, Word } from "./schema.ts";
+import { isApp } from "./apps.ts";
 
 // ---------- plan checks ----------
 
@@ -33,7 +34,8 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     // second's grace for rounding.
     const n = text.split(/\s+/).filter(Boolean).length;
     const need = r.canvas === "reel" ? 0.6 + 0.2 * n : 1 + 0.22 * n;
-    if (s.layout !== "side" && len < need - 0.1 && v.kind !== "chapter" && v.kind !== "stat")
+    // An app window's chrome (menus, times, labels) is not read word by word; its steps pace it.
+    if (s.layout !== "side" && len < need - 0.1 && v.kind !== "chapter" && v.kind !== "stat" && !isApp(v))
       issues.push({ level: "warn", message: `${label(s, i)}: ${n} words on screen for ${len.toFixed(1)}s; about ${need.toFixed(1)}s to read` });
     // Lingering: once the last part has landed, a graphic has made its point. Hold about two seconds,
     // then cut back (Owain, 2026-10-25: "sometimes the graphics linger a bit too long").

@@ -10,6 +10,7 @@ export const APPROVED: ReadonlySet<string> = new Set<string>([
   "blueprint.t1.cli.command",
   "blueprint.t1.claudeapp",
   "blueprint.t1.claudeapp.code",
+  "blueprint.t1.claudeapp.light",
   "blueprint.t1.grokbot",
   "blueprint.t1.grokbot.bots",
   "blueprint.t1.grokbot.profile",

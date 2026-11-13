@@ -184,10 +184,12 @@ export const Visual = z.discriminatedUnion("kind", [
     steps: z.array(CliStep).min(1).max(14),
   }),
   // The Claude desktop app: a chat (`chat`, replies in the serif) or a Code session (`code`). The
-  // sidebar shows on a wide frame, as the app hides it on a narrow window.
+  // sidebar shows on a wide frame, as the app hides it on a narrow window. `theme`: the app's dark
+  // mode (the default) or its light mode, in claude.ai's own colours for each.
   z.object({
     kind: z.literal("claudeapp"),
     mode: z.enum(["chat", "code"]).default("chat"),
+    theme: z.enum(["dark", "light"]).default("dark"),
     title: z.string().optional(),
     model: z.string().default("Opus 5.5"),
     effort: z.string().default("High"),

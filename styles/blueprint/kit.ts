@@ -28,12 +28,12 @@ export const kitCards = (): Card[] => [
     kind: "code",
     tier: "t2",
     purpose: "code",
-    summary: "An editor window in a light theme: the file's tab, line numbers, syntax colours. Lines type on as they are said; a line or range lights on its word.",
+    summary: "An editor window in a light theme that fills its panel: the file's tab, line numbers, syntax colours, the status bar. Lines type on as they are said; a line or range lights on its word; a long file pans to the line that lands.",
     layouts: LAYOUTS,
     slots: [
       { name: "file", type: "text", maxChars: 40 },
       { name: "lines", type: "list", minItems: 1, maxItems: 16 },
-      { name: "lines[].text", type: "text", maxChars: 48 },
+      { name: "lines[].text", type: "text", maxChars: 46 },
       { name: "marks", type: "list", maxItems: 4, optional: true },
       at("lines[].at"),
       at("marks[].at"),
@@ -47,7 +47,7 @@ export const kitCards = (): Card[] => [
         lines: [
           { text: "export async function review(diff: string) {" },
           { text: "  const issues = await findIssues(diff);" },
-          { text: "  if (issues.length === 0) return \"Looks good\";" },
+          { text: "  if (issues.length === 0) return \"All good\";" },
           { text: "  return summarize(issues);" },
           { text: "}" },
         ],
@@ -68,7 +68,7 @@ export const kitCards = (): Card[] => [
     slots: [
       { name: "file", type: "text", maxChars: 40 },
       { name: "lines", type: "list", minItems: 2, maxItems: 16 },
-      { name: "lines[].text", type: "text", maxChars: 48 },
+      { name: "lines[].text", type: "text", maxChars: 44 },
       at("lines[].at"),
       at("marks[].at"),
     ],

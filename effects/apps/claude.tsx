@@ -1,4 +1,4 @@
-// The Claude desktop app, dark: the sidebar (New, Search, Projects, Artifacts, Scheduled, Customize,
+// The Claude desktop app, dark (the default) or light: the sidebar (New, Search, Projects, Artifacts, Scheduled, Customize,
 // then recent chats), the conversation and the composer, as the app lays them out (Owain's screen
 // recordings of it, 2026-11-12, and the Code session in research/reels/nmdvmu2dyyhl). A chat's
 // replies are set in the serif, a Code session's in the sans. On a narrow window the app hides its
@@ -15,7 +15,11 @@ import { bodyRange, Caret, fit, Lights, MONO, pan, px, SANS, segs, SERIF, Shimme
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, Math.max(1, n - 1)) + "…" : s);
 
-const C = {
+// The app's colours, light and dark: claude.ai's own theme tokens (its "claude" theme, read from the
+// site's stylesheet on 2026-11-13), each part in the token the dark recordings matched: the
+// conversation on bg-100, the sidebar on bg-200, your bubble on bg-300, the composer on bg-000, type
+// in text-000 and text-400, the send button in brand-000.
+const DARK = {
   bg: "#262624",
   side: "#1F1E1D",
   line: "rgba(250,249,245,0.09)",
@@ -29,11 +33,39 @@ const C = {
   green: "#3FA45B",
   // The selected row in the sidebar (solid, so the text is read against it).
   hover: "#2E2D2A",
+  // The folder menu, its picked row, the avatar, the thinking line's shimmer, the shadows.
+  menu: "#2A2927",
+  pick: "#3A3936",
+  avatar: "#3A3936",
+  shimmer: ["#8F8C84", "#E8E6DC"] as [string, string],
+  fieldShadow: "0 6px 20px rgba(0,0,0,0.2)",
+  menuShadow: "0 18px 40px rgba(0,0,0,0.45)",
 };
+const LIGHT: typeof DARK = {
+  bg: "#FAF9F5",
+  side: "#F5F4ED",
+  line: "rgba(31,30,29,0.15)",
+  ink: "#141413",
+  body: "#141413",
+  muted: "#73726C",
+  bubble: "#F0EEE6",
+  field: "#FFFFFF",
+  code: "#F5F4ED",
+  clay: "#C6613F",
+  green: "#3FA45B",
+  hover: "#E8E6DC",
+  menu: "#FFFFFF",
+  pick: "#F0EEE6",
+  avatar: "#E8E6DC",
+  shimmer: ["#73726C", "#141413"],
+  fieldShadow: "0 4px 20px rgba(31,30,29,0.06)",
+  menuShadow: "0 18px 40px rgba(31,30,29,0.14)",
+};
+const Tone = React.createContext(DARK);
 
 // The app's thin line icons.
-const Icon: React.FC<{ d: string; s: number; color?: string; w?: number }> = ({ d, s, color = C.muted, w = 1.7 }) => (
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}>
+const Icon: React.FC<{ d: string; s: number; color?: string; w?: number }> = ({ d, s, color, w = 1.7 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={color ?? React.useContext(Tone).muted} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}>
     <path d={d} />
   </svg>
 );
@@ -57,7 +89,9 @@ const ICON = {
 type Props = { shot: ResolvedShot; time: number; v: V<"claudeapp"> };
 
 // Text with `code` spans and **bold**, as the app sets them.
-const Rich: React.FC<{ text: string; u: number }> = ({ text, u }) => (
+const Rich: React.FC<{ text: string; u: number }> = ({ text, u }) => {
+  const C = React.useContext(Tone);
+  return (
   <>
     {segs(text).map((g, k) =>
       g.code ? (
@@ -67,7 +101,8 @@ const Rich: React.FC<{ text: string; u: number }> = ({ text, u }) => (
       ),
     )}
   </>
-);
+  );
+};
 
 // The sizes everything is set at, from the body size `u`.
 const sizes = (u: number, chat: boolean) => ({
@@ -97,6 +132,7 @@ const heightOf = (it: Item, u: number, colW: number, chat: boolean) => {
 };
 
 export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
+  const C = v.theme === "light" ? LIGHT : DARK;
   const box = useBox();
   const { winW, winH } = windowSize(box, v.backdrop, 1720);
   const wide = winW >= 1300 && !box.panel;
@@ -244,7 +280,7 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
     // think: shown only while it is the newest step.
     if (it.next && time >= it.next.t0) continue;
     const word = cut(it.text || "Thinking", Math.floor(colW / (z.small * 0.52)));
-    msgs.push({ key: it.i, at: b.t0, h, el: () => <div style={{ fontFamily: SANS, fontSize: z.small, lineHeight: 1.5, color: C.muted }}><Shimmer text={word} time={time} base="#8F8C84" hi="#E8E6DC" speed={10} /></div> });
+    msgs.push({ key: it.i, at: b.t0, h, el: () => <div style={{ fontFamily: SANS, fontSize: z.small, lineHeight: 1.5, color: C.muted }}><Shimmer text={word} time={time} base={C.shimmer[0]} hi={C.shimmer[1]} speed={10} /></div> });
   }
 
   // The scroll: when the list outgrows the window, it eases up as each message lands, far enough to
@@ -278,7 +314,7 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
   );
   const composer = (
     <div style={{ width: fieldW, display: "flex", flexDirection: "column", alignItems: "stretch" }}>
-      <div style={{ background: C.field, border: `1px solid ${C.line}`, borderRadius: u * 0.75, padding: `${u * 0.5}px ${u * 0.55}px`, boxShadow: "0 6px 20px rgba(0,0,0,0.2)", fontFamily: SANS }}>
+      <div style={{ background: C.field, border: `1px solid ${C.line}`, borderRadius: u * 0.75, padding: `${u * 0.5}px ${u * 0.55}px`, boxShadow: C.fieldShadow, fontFamily: SANS }}>
         {chat ? (
           <>
             {fieldText}
@@ -328,9 +364,9 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
         {chip(ICON.laptop, "Local")}
         {chip(ICON.folder, picked ?? "Select folder", !!open)}
         {open && folder && (
-          <div style={{ position: "absolute", left: u * 3.9, bottom: u * 2.0, minWidth: u * 9.5, background: "#2A2927", border: `1px solid ${C.line}`, borderRadius: u * 0.45, padding: u * 0.25, boxShadow: "0 18px 40px rgba(0,0,0,0.45)", fontSize: z.small, color: C.ink, opacity: Math.min(1, (time - folder.t0) / 0.15), translate: `0 ${(1 - Math.min(1, (time - folder.t0) / 0.15)) * u * 0.3}px` }}>
+          <div style={{ position: "absolute", left: u * 3.9, bottom: u * 2.0, minWidth: u * 9.5, background: C.menu, border: `1px solid ${C.line}`, borderRadius: u * 0.45, padding: u * 0.25, boxShadow: C.menuShadow, fontSize: z.small, color: C.ink, opacity: Math.min(1, (time - folder.t0) / 0.15), translate: `0 ${(1 - Math.min(1, (time - folder.t0) / 0.15)) * u * 0.3}px` }}>
             {menuItems.map((f, k) => (
-              <div key={k} style={{ display: "flex", alignItems: "center", gap: u * 0.4, padding: `${u * 0.3}px ${u * 0.4}px`, borderRadius: u * 0.3, whiteSpace: "nowrap", background: k === hi ? "#3A3936" : undefined, color: k === folder.items.length ? C.muted : C.ink }}>
+              <div key={k} style={{ display: "flex", alignItems: "center", gap: u * 0.4, padding: `${u * 0.3}px ${u * 0.4}px`, borderRadius: u * 0.3, whiteSpace: "nowrap", background: k === hi ? C.pick : undefined, color: k === folder.items.length ? C.muted : C.ink }}>
                 <Icon d={ICON.folder} s={u * 0.75} color={k === folder.items.length ? C.muted : C.ink} />
                 {f}
               </div>
@@ -346,6 +382,7 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
   const handover = hasFolder ? Math.min(1, Math.max(0, (time - since) / 0.3)) : 1;
 
   return (
+    <Tone.Provider value={C}>
     <Stage backdrop={v.backdrop}>
       <Window w={winW} h={winH} r={Math.max(16, u * 0.6)} bg={C.bg} edge={C.line} time={time} start={shot.start} end={shot.end} column={false}>
         {wide && (
@@ -363,7 +400,7 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
             ))}
             <div style={{ flex: 1 }} />
             <div style={{ display: "flex", alignItems: "center", gap: u * 0.4, paddingLeft: u * 0.3 }}>
-              <div style={{ width: Math.max(40, u * 1.2), height: Math.max(40, u * 1.2), borderRadius: u, background: "#3A3936", display: "flex", alignItems: "center", justifyContent: "center", fontSize: px(u * 0.62), color: C.ink }}>O</div>
+              <div style={{ width: Math.max(40, u * 1.2), height: Math.max(40, u * 1.2), borderRadius: u, background: C.avatar, display: "flex", alignItems: "center", justifyContent: "center", fontSize: px(u * 0.62), color: C.ink }}>O</div>
               <span>Owain</span>
               <span style={{ color: C.muted }}>· Max</span>
             </div>
@@ -390,5 +427,6 @@ export const ClaudeApp: React.FC<Props> = ({ shot, time, v }) => {
         </div>
       </Window>
     </Stage>
+    </Tone.Provider>
   );
 };

@@ -22,7 +22,7 @@ The clean reel style, the only reel style. `Clean.tsx` draws every resolved reel
 **Laid-out kinds (`flow.tsx`, `code.tsx`)**
 
 - `FlowView` draws a `flow` from `layoutFlow` (`../../engine/flow.ts`): card outlines and arrows carry `data-qc="edge"`, so QC measures every label's clearance. `cardTone(palette)`, `Glyph` (the line icons).
-- `CodeView` draws a `code` visual from `codeLayout`, `codeBeats` and `tokenize` (`../../engine/code.ts`), in GitHub Light's colours whatever the palette.
+- `CodeView` draws a `code` visual from `codeLayout`, `codeBeats`, `codePans` and `tokenize` (`../../engine/code.ts`), in GitHub Light's colours whatever the palette. Like the app windows, the window is its box edge to edge, with a status bar (the caret's line and column, the indent, the language); the code takes one size for the shot, the largest at which its longest line and every line fit (30 to 46 px on a reel, 24 to 38 in YouTube's 900 px panel, which is scaled up), and a file too long for the box at the least size pans a whole row at a time to the line being typed or changed, and centres a mark. Lines are at most 46 characters (44 in a diff).
 - Both size themselves to the box `Clean.tsx` gives them: the safe panel on a split, the glass's inside on `over` (in the forest palette), the middle of the frame otherwise. `../Visuals.tsx` draws them on YouTube in the shot's tone.
 
 **Text kit (`text.tsx`)**

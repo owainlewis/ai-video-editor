@@ -54,6 +54,13 @@ describe("app mock-ups", () => {
     const [b] = appBeats(v as never, 0);
     expect(b.t1 - b.t0).toBeLessThanOrEqual(0.75);
   });
+
+  it("draw the Claude app dark unless the plan asks for its light mode", () => {
+    const steps = [{ type: "user", text: "Hello" }];
+    expect((Visual.parse({ kind: "claudeapp", steps }) as { theme: string }).theme).toBe("dark");
+    expect((Visual.parse({ kind: "claudeapp", theme: "light", steps }) as { theme: string }).theme).toBe("light");
+    expect(() => Visual.parse({ kind: "claudeapp", theme: "sepia", steps })).toThrow();
+  });
 });
 
 describe("the app window's camera", () => {

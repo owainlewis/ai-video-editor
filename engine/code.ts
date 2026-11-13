@@ -174,34 +174,91 @@ export const codeIssues = (v: Code): string[] => {
     if (m.from > v.lines.length || to > v.lines.length || to < m.from) out.push(`mark ${j + 1} runs from line ${m.from} to ${to}, outside the ${v.lines.length} lines in the plan`);
   });
   const longest = Math.max(...v.lines.map((l) => l.text.replace(/\t/g, "  ").length));
-  if (longest > CODE.chars) out.push(`a line is ${longest} characters; the editor sets ${CODE.chars} at most at a readable size, so break it`);
+  const most = codeChars(v);
+  if (longest > most) out.push(`a line is ${longest} characters; the editor sets ${most} at most at a readable size${isDiff(v) ? " in a diff" : ""}, so break it`);
   return out;
 };
 
 // ---------- the window ----------
 
-// The editor's geometry, in the box it is given. Monospace advance: 0.61 em (Menlo, SF Mono).
-export const CODE = { em: 0.61, max: 38, min: 24, chars: 48, fill: 0.62, row: 1.6 };
-export const codeLayout = (v: Pick<Code, "lines" | "start">, w: number, h: number) => {
+// The editor's geometry. Like the app windows (effects/apps/kit.tsx), the window is its box, edge to
+// edge, and the camera picks one type size for the shot: the largest at which the longest line and
+// every line fit, never under 30 px (so code reads on a phone), at most 46 on a reel's panel. A wide
+// (YouTube) frame lays its panel out 900 px wide and scales it up by about 1.3 (effects/Wide.tsx), so
+// there 24 to 38 px in the box is 31 to 49 in the frame. A file too long for its box at the least size
+// scrolls, and the view pans to the line being typed, changed or marked (`codePans`).
+// `em`: the monospace's advance (SF Mono and JetBrains Mono: 0.6). `row`: the line height.
+// `chars`: the longest line a 960 px box sets at 30 px; a diff's sign column takes two of them.
+export const CODE = { em: 0.6, min: 30, max: 46, wideMin: 24, wideMax: 38, chars: 46, row: 1.5 };
+export const codeChars = (v: Pick<Code, "lines">) => CODE.chars - (isDiff(v) ? 2 : 0);
+
+// The parts' sizes at body size `f`: the tab bar, the status bar, the side and top padding.
+const parts = (f: number) => ({
+  bar: Math.round(Math.max(60, f * 1.9)),
+  status: Math.round(Math.max(52, f * 1.6)),
+  padX: Math.round(f * 0.7),
+  padY: Math.round(f * 0.6),
+  row: Math.round(f * CODE.row),
+});
+
+export type CodeLayout = ReturnType<typeof codeLayout>;
+export const codeLayout = (v: Pick<Code, "lines" | "start">, w: number, h: number, opts: { wide?: boolean } = {}) => {
   const diff = isDiff(v);
   const n = v.lines.length;
   const numbers = v.start + v.lines.filter((l) => l.diff !== "del").length - 1;
   const digits = Math.max(2, String(numbers).length);
   const chars = Math.max(12, ...v.lines.map((l) => l.text.replace(/\t/g, "  ").length));
-  // Columns: the numbers, a space, the sign (diff only), then the code.
-  const cols = digits + 1.5 + (diff ? 2 : 0) + chars;
-  const padX = 28;
-  const byWidth = (w - 2 * padX) / (cols * CODE.em);
-  // Height: the tab bar (2.1 em), the padding above and below (0.7 em each), the rows.
-  const byHeight = h / (2.1 + 1.4 + n * CODE.row);
-  const font = Math.floor(Math.max(CODE.min, Math.min(CODE.max, byWidth, byHeight)));
-  const bar = Math.round(Math.max(64, font * 2.1));
-  const padY = Math.round(font * 0.7);
-  const row = Math.round(font * CODE.row);
-  const need = bar + 2 * padY + n * row;
-  // An editor window keeps its size with room below the last line, so the panel never looks empty.
-  const height = Math.min(h, Math.max(need, CODE.fill * h));
-  const gutter = Math.round((digits + 1.5) * CODE.em * font);
-  const sign = diff ? Math.round(2 * CODE.em * font) : 0;
-  return { font, bar, padX, padY, row, gutter, sign, width: w, height, x: 0, y: (h - height) / 2, fits: font * CODE.em * cols + 2 * padX <= w + 0.5 && need <= h + 0.5 };
+  // Columns: the numbers and a gap, the sign (diff only), then the code.
+  const gutterCols = digits + 1.4;
+  const signCols = diff ? 1.6 : 0;
+  const cols = gutterCols + signCols + chars;
+  const fitsW = (f: number) => cols * CODE.em * f + 2 * parts(f).padX <= w + 0.5;
+  const need = (f: number) => { const p = parts(f); return p.bar + p.status + 2 * p.padY + n * p.row; };
+  const lo = opts.wide ? CODE.wideMin : CODE.min;
+  const hi = Math.floor(Math.max(lo, Math.min(opts.wide ? CODE.wideMax : CODE.max, h / 12)));
+  let font = lo;
+  for (let f = hi; f >= lo; f--)
+    if (fitsW(f) && need(f) <= h + 0.5) { font = f; break; }
+  const { bar, status, padX, padY, row } = parts(font);
+  // The code's viewport: whole rows only, so a file that scrolls never rests on half a line.
+  const room = h - bar - status - 2 * padY;
+  const scrolls = n * row > room + 0.5;
+  const view = scrolls ? Math.max(row, Math.floor(room / row) * row) : room;
+  return {
+    font, bar, status, padX, padY, row, view, scrolls,
+    gutter: Math.round(gutterCols * CODE.em * font),
+    sign: Math.round(signCols * CODE.em * font),
+    width: w, height: h, x: 0, y: 0,
+    fits: fitsW(font),
+  };
+};
+
+// The camera's pans for a file taller than its viewport: before each line types, each change lands
+// and each mark sweeps in, the view moves the least it can to show that line or range whole (a range
+// taller than the view shows from its top). Offsets are whole rows. Before an added line lands its
+// row is closed, so the rows above it are measured as they are at that moment.
+export const codePans = (v: Pick<Code, "lines" | "marks" | "typed">, L: Pick<CodeLayout, "row" | "view" | "scrolls">, b: ReturnType<typeof codeBeats>, start: number) => {
+  if (!L.scrolls) return [];
+  const diff = isDiff(v);
+  const top = (i: number, at: number) => L.row * v.lines.slice(0, i).filter((l, j) => !(l.diff === "add" && b.lines[j].t0 > at + 1e-6)).length;
+  const lead = 0.3; // the pan arrives as the thing lands, not after it
+  const asks: { t: number; from: number; to: number; mark?: boolean }[] = [];
+  v.lines.forEach((l, i) => {
+    const { t0 } = b.lines[i];
+    if (diff ? !!l.diff : v.typed || (l.at && t0 > start)) asks.push({ t: Math.max(start, t0 - lead), from: i, to: i });
+  });
+  v.marks.forEach((m, j) => asks.push({ t: Math.max(start, b.marks[j] - lead), from: m.from - 1, to: (m.to ?? m.from) - 1, mark: true }));
+  asks.sort((a, c) => a.t - c.t);
+  let y = 0;
+  return asks.map((a) => {
+    const at = a.t + lead;
+    const y0 = top(a.from, at), y1 = top(a.to, at) + L.row;
+    // A mark out of view comes to the middle, with its lines around it, as an editor reveals a line.
+    if (y1 - y0 > L.view) y = y0;
+    else if (a.mark && (y0 < y || y1 > y + L.view)) y = Math.round(((y0 + y1) / 2 - L.view / 2) / L.row) * L.row;
+    else if (y0 < y) y = y0;
+    else if (y1 > y + L.view) y = Math.ceil((y1 - L.view) / L.row) * L.row;
+    y = Math.max(0, Math.min(y, top(v.lines.length, at) - L.view));
+    return { t: a.t, y };
+  });
 };
