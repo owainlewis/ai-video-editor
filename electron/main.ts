@@ -34,7 +34,10 @@ app.on("second-instance", (_e, argv) => {
 });
 
 // studio:// links. In development the link has to name this app's entry, or macOS would open a bare Electron.
-if (app.isPackaged) app.setAsDefaultProtocolClient("studio");
+// Studio.app keeps Electron's executable name, so app.isPackaged (which reads that name) is false
+// there. What tells the two apart: `npm run app` runs through Electron's default app.
+const packaged = !process.defaultApp;
+if (packaged) app.setAsDefaultProtocolClient("studio");
 else app.setAsDefaultProtocolClient("studio", process.execPath, [resolve(process.argv[1] ?? ".")]);
 app.on("open-url", (e, link) => (e.preventDefault(), openLink(link)));
 
@@ -53,7 +56,7 @@ const saveSettings = (s: Partial<Settings>) => writeFileSync(settingsFile(), JSO
 
 // Open at login applies to the copy in /Applications only: in development it would register a bare
 // Electron, and a build in dist/ is about to be replaced.
-const installed = () => app.isPackaged && app.getPath("exe").startsWith("/Applications/");
+const installed = () => packaged && app.getPath("exe").startsWith("/Applications/");
 function applyLogin() {
   if (installed()) app.setLoginItemSettings({ openAtLogin: settings().openAtLogin });
 }
