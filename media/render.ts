@@ -37,11 +37,14 @@ export function stills(projects: string, slug: string, times: number[], log?: Lo
   });
 }
 
-// The cover: frame 0 at full size, the card Instagram shows on the grid. Written to `file` (a .jpg).
-// Async, so the server stays responsive while Remotion bundles and draws it.
+// The plain cover card as an image (a .jpg), drawn from the plan's `cover`: the stand-in when a reel
+// has no cover.png from Higgsfield. It is not part of the reel. Async, so the server stays
+// responsive while Remotion bundles and draws it.
 export function coverStill(projects: string, slug: string, file: string, log?: Log): Promise<void> {
   const resolved = ensureResolved(projects, slug);
-  const argv = ["remotion", "still", "effects/index.ts", compositionFor(resolved.canvas).id, file, `--props=${join(projects, slug, "build/edit.resolved.json")}`,
+  const props = join(projects, slug, "build/cover.props.json");
+  writeJson(props, { ...resolved, asCover: true });
+  const argv = ["remotion", "still", "effects/index.ts", compositionFor(resolved.canvas).id, file, `--props=${props}`,
     "--frame=0", "--scale=1", "--image-format=jpeg", "--jpeg-quality=95", "--log=error"];
   log?.(`$ npx ${argv.join(" ")}`.slice(0, 200));
   return new Promise((ok, fail) => {

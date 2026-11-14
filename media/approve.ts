@@ -1,17 +1,17 @@
-// Approving a finished reel: its final export and its cover are copied to the approved folder
-// (~/Reels/Approved), where Owain picks them up for his content system (2026-11-13). The rules on
+// Approving a finished reel: its final export and its cover are copied, together in one folder per
+// reel, to the approved folder (STUDIO_APPROVED; on Owain's Mac, My Drive/Content/Reels/Approved in Google Drive), where Owain picks them up for his content system (2026-11-13). The rules on
 // when a reel can be approved are in engine/approve.ts; this file reads the project and moves files.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { type ApprovalFacts, type ApprovalRecord, type ApprovalState, approvalState, day, exportReady, fileTitle, thisWeek, WEEKLY_TARGET } from "../engine/approve.ts";
 import type { Issue } from "../engine/resolve.ts";
+import { uploadCover } from "./coverkit.ts";
+import { handCover } from "./project.ts";
 import { coverStill } from "./render.ts";
-import { envValue, ffmpeg, type Log, readJson, writeJson } from "./tools.ts";
+import { envValue, type Log, readJson, writeJson } from "./tools.ts";
 
-// A cover image Owain made himself and dropped into the project, if there is one.
-export const handCover = (dir: string): string | undefined =>
-  ["cover.png", "cover.jpg", "cover.jpeg", "cover.webp"].map((f) => join(dir, f)).find((f) => existsSync(f));
+export { handCover };
 
 export { WEEKLY_TARGET, thisWeek, fileTitle };
 export type { ApprovalRecord, ApprovalState };
@@ -20,6 +20,10 @@ const home = (p: string) => (p === "~" ? homedir() : p.startsWith("~/") ? join(h
 
 // Where approved reels go: STUDIO_APPROVED (environment or .env), else ~/Reels/Approved.
 export const approvedFolder = () => home(envValue("STUDIO_APPROVED") ?? "~/Reels/Approved");
+// The approved folder as the editor and the CLI show it: Google Drive's synced folder as
+// "Google Drive/...", the home folder as "~".
+export const folderLabel = (folder = approvedFolder()) =>
+  folder.replace(/^.*\/Library\/CloudStorage\/GoogleDrive-[^/]+\/My Drive(?=\/|$)/, "Google Drive").replace(homedir(), "~");
 // Where unapproved files go: the macOS Trash. STUDIO_TRASH points it elsewhere, for tests.
 export const trashFolder = () => home(envValue("STUDIO_TRASH") ?? "~/.Trash");
 
@@ -28,7 +32,7 @@ export type Options = {
   trash?: string;
   now?: Date;
   log?: Log;
-  // Draws the cover into `file`. Remotion's still of frame 0 by default; tests pass their own.
+  // Draws the plain cover card into `file` when the reel has no cover.png; tests pass their own.
   cover?: (projects: string, slug: string, file: string) => Promise<void>;
 };
 
@@ -75,15 +79,18 @@ export function approvalFacts(dir: string): ApprovalFacts {
 // A reel's approval as the editor and the CLI show it.
 export function approval(dir: string) {
   const record = loadRecord(dir);
-  return { ...approvalState(approvalFacts(dir)), record };
+  // Where this reel's files are, which is not the approved folder when that has moved since.
+  const where = record ? folderLabel(record.folder ?? dirname(record.video)) : null;
+  return { ...approvalState(approvalFacts(dir)), record, where };
 }
 
 const isReel = (dir: string) => readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas !== "youtube";
 
-// Copy a reel's current final export and its cover into the approved folder, as
-// "<YYYY-MM-DD> <title>.mp4" and "<same> cover.jpg". A name that is taken by another reel's files
-// gets " (2)", " (3)" and so on; this reel's own earlier files are replaced (moved to the Trash
-// once the new ones are in place, so a failure never leaves it with neither).
+// Copy a reel's current final export and its cover into its own folder in the approved folder:
+// "<YYYY-MM-DD> <title>/reel.mp4", "image.jpg" and, when the project has one, "caption.txt"
+// (Owain, 2026-11-13: "reel-name/ caption.txt, reel.mp4, image.jpg"). A folder name taken by anything else gets " (2)", " (3)" and so on; this reel's own
+// earlier folder is reused, or moved to the Trash once the new one is in place, so a failure never
+// leaves it with neither.
 export async function approve(projects: string, slug: string, opts: Options = {}): Promise<ApprovalRecord> {
   const dir = join(projects, slug);
   if (!existsSync(join(dir, "edit.json"))) throw fail(`no project ${slug}`, 404);
@@ -96,42 +103,56 @@ export async function approve(projects: string, slug: string, opts: Options = {}
   const folder = opts.folder ?? approvedFolder();
   mkdirSync(folder, { recursive: true });
   const title = readJson<{ title?: string }>(join(dir, "edit.json")).title ?? slug;
+  // The Instagram caption, kept beside the plan (not in it, so writing it never makes the export
+  // out of date).
+  const caption = existsSync(join(dir, "caption.txt")) ? readFileSync(join(dir, "caption.txt"), "utf8").trim() : "";
   const prev = facts.record;
-  const own = new Set([prev?.video, prev?.cover].filter(Boolean));
   const stem = `${day(now)} ${fileTitle(title, slug)}`;
-  let base = stem;
-  const free = (b: string) => [`${b}.mp4`, `${b} cover.jpg`].every((f) => !existsSync(join(folder, f)) || own.has(join(folder, f)));
-  for (let n = 2; !free(base); n++) base = `${stem} (${n})`;
-  const video = join(folder, `${base}.mp4`);
-  const cover = join(folder, `${base} cover.jpg`);
+  let name = stem;
+  const free = (n: string) => !existsSync(join(folder, n)) || join(folder, n) === prev?.folder;
+  for (let n = 2; !free(name); n++) name = `${stem} (${n})`;
+  const into = join(folder, name);
+  const video = join(into, "reel.mp4");
+  const cover = join(into, "image.jpg");
 
   // The cover is made in the project first, then each file is copied in under a hidden name and
   // renamed, so the folder never shows half a file. A cover Owain made (Higgsfield, 2026-11-13: "Use
-  // Higgsfield") and dropped in as projects/<slug>/cover.png or .jpg wins; else frame 0 is drawn.
+  // Higgsfield") and dropped in as projects/<slug>/cover.png or .jpg wins; else the plain card is drawn.
   const drawn = join(dir, "build/cover.jpg");
   mkdirSync(join(dir, "build"), { recursive: true });
   rmSync(drawn, { force: true });
   const made = handCover(dir);
   if (made) {
     opts.log?.(`Using the cover ${basename(made)}`);
-    ffmpeg(["-i", made, "-q:v", "2", drawn], opts.log);
+    uploadCover(made, drawn, opts.log);
   } else {
-    opts.log?.("Drawing the cover (frame 0)");
+    opts.log?.("Drawing the plain cover card (no cover.png)");
     await (opts.cover ?? ((p, s, f) => coverStill(p, s, f, opts.log)))(projects, slug, drawn);
   }
   if (!existsSync(drawn)) throw fail("the cover was not drawn", 500);
   // The export must still be the one that was checked: a render may have started meanwhile.
   if (mtime(join(dir, "renders/final.mp4")) !== facts.video) throw fail("the export changed while approving; try again");
+  mkdirSync(into, { recursive: true });
   const place = (from: string, to: string) => {
-    const part = join(folder, `.${basename(to)}.partial`);
+    const part = join(into, `.${basename(to)}.partial`);
     copyFileSync(from, part);
     renameSync(part, to);
   };
   place(join(dir, "renders/final.mp4"), video);
   place(drawn, cover);
-  if (prev) for (const f of [prev.video, prev.cover]) if (f !== video && f !== cover && existsSync(f)) moveToTrash(f, opts.trash);
+  // The caption to post with it, when the project has one.
+  const text = join(into, "caption.txt");
+  if (caption) {
+    writeFileSync(join(into, ".caption.txt.partial"), `${caption}\n`);
+    renameSync(join(into, ".caption.txt.partial"), text);
+  } else rmSync(text, { force: true });
+  // The earlier approval, when it was somewhere else: its folder (or, from before folders, its two
+  // loose files) to the Trash.
+  if (prev?.folder) {
+    if (prev.folder !== into && existsSync(prev.folder)) moveToTrash(prev.folder, opts.trash);
+  } else if (prev) for (const f of [prev.video, prev.cover]) if (existsSync(f)) moveToTrash(f, opts.trash);
 
-  const record: ApprovalRecord = { at: now.toISOString(), video, cover, title };
+  const record: ApprovalRecord = { at: now.toISOString(), folder: into, video, cover, title };
   writeJson(recordFile(dir), record);
   return record;
 }
@@ -141,12 +162,14 @@ export function unapprove(projects: string, slug: string, opts: Pick<Options, "t
   const dir = join(projects, slug);
   const record = loadRecord(dir);
   if (!record) throw fail(`${slug} is not approved`, 404);
-  for (const f of [record.video, record.cover]) if (existsSync(f)) moveToTrash(f, opts.trash);
+  if (record.folder) {
+    if (existsSync(record.folder)) moveToTrash(record.folder, opts.trash);
+  } else for (const f of [record.video, record.cover]) if (existsSync(f)) moveToTrash(f, opts.trash);
   rmSync(recordFile(dir));
   return record;
 }
 
-// Move a file to the Trash. A name already there gets the time added, as Finder does.
+// Move a file or a folder to the Trash. A name already there gets the time added, as Finder does.
 export function moveToTrash(file: string, trash = trashFolder()): string {
   mkdirSync(trash, { recursive: true });
   const ext = extname(file);
@@ -161,8 +184,8 @@ export function moveToTrash(file: string, trash = trashFolder()): string {
     renameSync(file, dest);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
-    copyFileSync(file, dest);
-    unlinkSync(file);
+    cpSync(file, dest, { recursive: true });
+    rmSync(file, { recursive: true, force: true });
   }
   return dest;
 }

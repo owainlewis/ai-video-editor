@@ -25,7 +25,7 @@ export type ProjectSummary = {
 };
 // A reel's approval (engine/approve.ts). `ready`: the final export is current and passed its check.
 // `reason` says why not, or what the state means. `reveal`: the server can show files in Finder.
-export type Approval = { state: ApprovalState; ready: boolean; reason: string; record: ApprovalRecord | null; folder: string; reveal: boolean };
+export type Approval = { state: ApprovalState; ready: boolean; reason: string; record: ApprovalRecord | null; where: string | null; folder: string; reveal: boolean };
 // Review before render (engine/review.ts): the decisions and notes, the items they are about, and
 // how many notes and changes are waiting to go to Claude.
 export type ReviewState = { review: Review; items: Item[]; counts: { approved: number; change: number; waiting: number }; open: number };

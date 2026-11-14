@@ -339,9 +339,14 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
     if (cover) {
       onStage?.("Checking the cover");
       const file = join(out, "000-cover.jpg");
+      // The cover card is its own image, not a frame of the reel: show it alone, then the reel again.
+      const load = (plan: Resolved) => opened!.page.evaluate((p: Resolved) => window.qcLoad!(p), plan as never);
+      const reel = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
+      await load({ ...reel, asCover: true });
       await shoot(opened!.page, r, 0, file);
       const m = (await opened!.page.evaluate(() => window.qcMeasure!())) as Measure;
       hookIssues.push(...qcCover(m, [comp.width, comp.height], BAND));
+      await load(reel);
       sheets.unshift(file);
       settledShots.unshift(file);
     }

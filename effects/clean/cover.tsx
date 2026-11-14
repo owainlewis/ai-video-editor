@@ -17,14 +17,14 @@ const FEATHER = "linear-gradient(transparent, black 4%)";
 
 // Where his head sits on the blank card, in frame pixels, measured on library/covers/owain.png as
 // drawn below (ear to ear, crown to chin): the tiles stay clear of it and of the frame's edges.
-// Remeasured for the black-ground card (2026-11-13), which sits his head lower with more room above.
-const HEAD = { left: 310, right: 723, top: 705, bottom: 1197 };
-// With no logos the title sits over his shirt, below the collar.
-const SHIRT = 0.79;
+// Remeasured for the 9:16 slate-ground card (2026-11-13, 2160x3840, drawn at half size).
+const HEAD = { left: 270, right: 753, top: 728, bottom: 1310 };
+// With no logos the title sits over his shirt, below the collar (frame y 1434).
+const SHIRT = 0.85;
 const TILE = 240;
 // Left tile beside his temple, right tile below his jaw over the shoulder, each turned a little.
 const TILES = [
-  { x: 52, y: HEAD.top + 80, turn: -10 },
+  { x: 36, y: HEAD.top + 40, turn: -10 },
   { x: 770, y: HEAD.bottom + 40, turn: 8 },
 ];
 

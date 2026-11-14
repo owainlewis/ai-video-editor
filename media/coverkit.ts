@@ -2,12 +2,13 @@
 // portrait card, each of the cover's logos as a PNG to attach as a reference (the official files, so
 // the model copies them rather than drawing its own), and his prompt with this reel's title in it.
 // He makes the image there and drops it into the project as cover.png; approval then uses it.
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openBrowser } from "@remotion/renderer";
 import type { EditPlan } from "../engine/schema.ts";
 import { useLogo } from "./project.ts";
-import type { Log } from "./tools.ts";
+import { ffmpeg, type Log, probeSize } from "./tools.ts";
 
 const LIBRARY = join(import.meta.dirname, "../library");
 
@@ -17,7 +18,8 @@ const NAMES: Record<string, string> = {
   xai: "xAI", grok: "Grok", "claude-code": "Claude Code", "egm-elephant": "EGM", "egm-goldfish": "EGM", "gradient-bot": "Grok Bot",
 };
 
-// Owain's own prompt (2026-11-13), with the title and the logos for this reel.
+// Owain's own prompt (2026-11-13), with the title and the logos for this reel, made at 9:16 with the
+// text and logos inside the middle 3:4 the profile grid shows (a 3:4 cover needed empty space added).
 export const coverPrompt = (title: string, logos: string[]) => `This is an Instagram reel cover. Add text at the top that says, in plain white Helvetica using Title Case:
 
 > ${title}
@@ -25,6 +27,8 @@ export const coverPrompt = (title: string, logos: string[]) => `This is an Insta
 Add these logos in the background, copied exactly from the attached logo images: ${logos.join(" and ")}. Do not add any other logo, brand or product. Be careful not to place anything on my head. Each logo should have a box or border around it. Avoid any tech cliches. Angle them so that they are visually interesting and fit the scene. They can sit slightly behind me if needed.
 
 Keep the background plain. Go for high-quality and classy, not cheap, tacky AI slop. Professional and tasteful.
+
+This is a tall 9:16 image. Extend the plain background to fill the frame. Keep the text and the logos within the middle three quarters of the height: nothing important in the top eighth or the bottom eighth, which Instagram's grid crops off. Leave clear empty space above the title: the top of the first line should sit about a fifth of the way down the image, not near the top edge.
 `;
 
 // Each logo drawn by Chrome on a dark 1024 px tile, the official file at its own colours. Many of
@@ -68,4 +72,36 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
   await logoTiles(tiles, out);
   writeFileSync(join(out, "prompt.txt"), coverPrompt(cover.title, names));
   return out;
+}
+
+// The cover as Instagram wants it: 1080x1920 (9:16). The picture sits at the bottom of the frame at
+// full width, so the portrait runs off the bottom edge as a photo does, and the space above it is
+// filled with its top edge's colour (the plain dark background, so there is no seam). The profile
+// grid shows the middle 3:4 (y 240 to 1680): the title and the logos, near the top of the picture,
+// stay in it, and only the bottom of the shirt falls below. Owain's first upload was the 3:4 image
+// itself, and the grid cut the top of the title; a band under the shirt in a flat colour showed as a
+// grey strip (both 2026-11-13).
+export const UPLOAD = { width: 1080, height: 1920 };
+
+// The average colour of a strip along the top edge, as ffmpeg's hex (0xRRGGBB).
+function topColour(file: string): string {
+  const out = spawnSync("ffmpeg", ["-v", "error", "-i", file, "-vf", "crop=iw:max(2\\,ih/100):0:0,scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"]);
+  const [r = 0, g = 0, b = 0] = out.stdout ?? [];
+  return `0x${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function uploadCover(src: string, out: string, log?: Log): void {
+  const { width: W, height: H } = UPLOAD;
+  const [w, h] = probeSize(src);
+  // Made at 9:16 already (Higgsfield's 9:16 is 1520x2688, a hair wider): filled to the frame, the
+  // few pixels over trimmed from the sides.
+  if (Math.abs(w / h / (W / H) - 1) < 0.02) {
+    ffmpeg(["-i", src, "-vf", `scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H}`, "-q:v", "2", out], log);
+    return;
+  }
+  // At full width, or full height for anything taller than 9:16 (then centred across).
+  const wide = w / h > W / H;
+  const fw = wide ? W : Math.round((H * w) / h / 2) * 2;
+  const fh = wide ? Math.round((W * h) / w / 2) * 2 : H;
+  ffmpeg(["-i", src, "-vf", `scale=${fw}:${fh}:flags=lanczos,pad=${W}:${H}:${(W - fw) / 2}:${H - fh}:color=${topColour(src)}`, "-q:v", "2", out], log);
 }

@@ -304,7 +304,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             </button>
           )}
           {toApprove && (
-            <button className="primary" disabled={!!approve.busy} onClick={approve.approve} title={`Copy the export and its cover to ${approval!.folder}`}>
+            <button className="primary" disabled={!!approve.busy} onClick={approve.approve} title={`Put the export, its image and its caption in a folder in ${approval!.folder}`}>
               {approve.busy === "approve" ? "Approving…" : approval!.state === "stale" ? "Approve again" : "Approve"}
             </button>
           )}

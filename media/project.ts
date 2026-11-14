@@ -62,8 +62,13 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const { hook, issues: hookIssues } = clean ? resolveHook(plan.hook, words, shots, meta.duration, FPS, explicit) : { hook: undefined, issues: [] };
   issues.push(...hookIssues);
   issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script, hook, plan.cover) : lintWide(shots, meta.duration)));
-  // The cover's card comes in from the library at the 3:4 band's size (1080 x 1440), so the renderer can
-  // serve it and it loads at once; a full-size photo is several megabytes.
+  // The cover is its own image, made in Higgsfield and uploaded apart from the video (2026-11-13).
+  // The Instagram caption, posted with the reel; approval copies it beside the video.
+  if (clean && !existsSync(join(dir, "caption.txt"))) issues.push({ level: "warn", message: `no caption: write projects/${slug}/caption.txt, the Instagram text posted with the reel` });
+  if (clean && plan.cover && !handCover(dir)) issues.push({ level: "warn", message: `no cover image yet: run \`cover ${slug} --prompt\`, make it in Higgsfield and save it as projects/${slug}/cover.png; until then approval uses the plain card` });
+  // The cover's card comes in from the library at the size it is drawn (1080 x 1680, the grid's band to the
+  // frame's foot, top aligned), so the renderer can serve it, it loads at once and it is never scaled up; a
+  // full-size photo is several megabytes.
   let cover: Resolved["cover"];
   if (clean && plan.cover) {
     const from = ["png", "jpg"].map((x) => join(LIBRARY, "covers", `${plan.cover!.image}.${x}`)).find((f) => existsSync(f));
@@ -71,7 +76,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     else {
       const rel = `assets/cover-${plan.cover.image}.jpg`;
       if (!existsSync(join(dir, rel)) || statSync(join(dir, rel)).mtimeMs < statSync(from).mtimeMs)
-        mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1440:force_original_aspect_ratio=increase,crop=1080:1440:(iw-1080)/2:0", "-q:v", "2", join(dir, rel)]);
+        mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1680:force_original_aspect_ratio=increase,crop=1080:1680:(iw-1080)/2:0", "-q:v", "2", join(dir, rel)]);
       const logos = plan.cover.logos.flatMap((l) => {
         const name = typeof l === "string" ? l : l.logo;
         const src = useLogo(name);
@@ -246,6 +251,10 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
   return { resolved, issues };
 }
+
+// The reel's cover image, made in Higgsfield and saved in the project, if there is one.
+export const handCover = (dir: string): string | undefined =>
+  ["cover.png", "cover.jpg", "cover.jpeg", "cover.webp"].map((f) => join(dir, f)).find((f) => existsSync(f));
 
 const LIBRARY_LOGOS = join(BROLL, "..", "logos");
 // A library logo as a data URL, so any visual can draw it without knowing the project's folder.

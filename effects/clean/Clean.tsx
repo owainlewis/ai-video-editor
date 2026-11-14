@@ -5,7 +5,7 @@
 //   overlay (the diagram in a dark glass panel over a full-frame picture).
 //   Text is one style (display in text.tsx) in six parts: caption sized by weight, hit, two-line
 //   title, caption inside the diagram, bracketed list, card beats. One at a time. Over the first
-//   seconds, the text hook (./hook.tsx) sits at the top of the frame; frame 0 is the cover (./cover.tsx).
+//   seconds, the text hook (./hook.tsx) sits at the top of the frame; the cover card (./cover.tsx) is never part of the reel: effects/Reel.tsx draws it alone as the cover image (asCover).
 // Fixed geometry: one centre line (x 540), the panel 0 to 864, the caption band 864 to 1056, the
 // footage from 1056, the glass panel at 60, 380, 960 x 880,
 // chips at y 120.
@@ -24,7 +24,6 @@ import { VisualView } from "../Visuals";
 import { C, H, lerp, move, type Palette, PALETTES, PaletteContext, usePalette, W } from "./kit";
 import { blurIn, Center, Chip, chunkClean, display, GREEN, Typed, WHITE } from "./text";
 import { HOOK_BAND } from "../../engine/resolve";
-import { Cover } from "./cover";
 import { Hook, underHook } from "./hook";
 import { CodeView } from "./code";
 import { FlowView } from "./flow";
@@ -237,8 +236,6 @@ export const Clean: React.FC<Resolved> = (r) => {
         );
       })()}
 
-      {/* The cover, frame 0 only: Instagram's default cover is the first frame. */}
-      {r.cover && Math.round(time * r.fps) === 0 && <Cover cover={r.cover} />}
 
       <Soundtrack r={r} />
     </AbsoluteFill>

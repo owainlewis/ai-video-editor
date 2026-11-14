@@ -4,7 +4,7 @@
 //   npm run studio -- clip <slug> <file> [--id c] [--name n]   add a clip to a project's bin (cut it in from the editor)
 //   npm run studio -- check <slug>                 resolve the plan, print the shots and every issue
 //   npm run studio -- stills <slug> --at 3.2,8    render stills at those seconds to checks/stills/
-//   npm run studio -- cover <slug> [--prompt]     the reel's cover: renders/cover.jpg and cover-grid.jpg, or --prompt for the Higgsfield kit
+//   npm run studio -- cover <slug> [--prompt]     the plain cover card (renders/cover.jpg, cover-grid.jpg), or --prompt for the Higgsfield kit
 //   npm run studio -- frames <slug> [--every 15]   YouTube: contact sheets of the video with timestamps
 //   npm run studio -- scan <slug> --ref 6,1215     YouTube: where the speaker is on camera (graphics only go there)
 //   npm run studio -- broll [words]                search the shared b-roll library (broll index: add new clips)
@@ -18,7 +18,7 @@
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
 //   npm run studio -- render <slug> --part <name>  the same for one part only, to renders/part-<name>.mp4
 //   npm run studio -- render <slug> --from <s> --to <s>   the same for a stretch of the timeline
-//   npm run studio -- approve <slug>              copy a reel's current export and cover to ~/Reels/Approved (STUDIO_APPROVED)
+//   npm run studio -- approve <slug>              copy a reel's export, image and caption to the approved folder (STUDIO_APPROVED)
 //   npm run studio -- unapprove <slug>            move them to the Trash again
 //   npm run studio -- approved                    approved reels, newest first, and this week's count
 import { existsSync, mkdirSync } from "node:fs";
@@ -40,7 +40,7 @@ import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
 import { readJson, ROOT, run, writeJson } from "./media/tools.ts";
-import { approve, approvedFolder, listApproved, unapprove, weekCount } from "./media/approve.ts";
+import { approve, folderLabel, listApproved, unapprove, weekCount } from "./media/approve.ts";
 import { day } from "./engine/approve.ts";
 import { startServer } from "./server/index.ts";
 
@@ -296,7 +296,7 @@ async function main() {
     case "approved": {
       const list = listApproved(projects);
       const w = weekCount(projects);
-      if (!list.length) console.log(`No approved reels yet. They go to ${approvedFolder()}.`);
+      if (!list.length) console.log(`No approved reels yet. They go to ${folderLabel()}.`);
       for (const { slug, record, state } of list)
         console.log(`  ${day(new Date(record.at))}  ${record.title}  (${slug})${state === "stale" ? "  OUT OF DATE: changed since it was approved" : ""}\n              ${record.video}`);
       console.log(`\nThis week: ${w.count} of ${w.target} approved.`);

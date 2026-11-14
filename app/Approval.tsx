@@ -10,14 +10,12 @@ export const LABEL: Record<ApprovalState, string> = { draft: "Draft", exported: 
 
 export const shortDate = (at: string) => new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
-const name = (path: string) => path.split("/").pop() ?? path;
-
 // What each state means, in a sentence, for a title or a line on the export sheet.
 export function explain(a: Approval): string {
   const r = a.record;
-  if (a.state === "approved" && r) return `Approved ${shortDate(r.at)}: ${name(r.video)} is in ${a.folder}.`;
+  if (a.state === "approved" && r) return `Approved ${shortDate(r.at)}: in ${a.where ?? a.folder}.`;
   if (a.state === "stale" && r) return `Approved ${shortDate(r.at)}, but ${a.reason}. ${a.ready ? "The new export is ready to approve again." : "Export again, then approve it again."}`;
-  if (a.state === "exported") return `The export is current and its check passed. Approving copies it and its cover to ${a.folder}.`;
+  if (a.state === "exported") return `The export is current and its check passed. Approving puts it, its image and its caption in one folder in ${a.folder}.`;
   return `Not ready to approve: ${a.reason}.`;
 }
 
@@ -41,7 +39,7 @@ export function useApproval(slug: string, onError: (message: string) => void) {
     busy,
     approve: () => act("approve", () => api.post(slug, "approve")),
     unapprove: () =>
-      confirmIt({ title: "Unapprove this reel?", body: "Its video and cover move from the approved folder to the Trash.", ok: "Unapprove" }).then((yes) =>
+      confirmIt({ title: "Unapprove this reel?", body: "Its folder (video, image and caption) moves to the Trash.", ok: "Unapprove" }).then((yes) =>
         yes ? act("unapprove", () => api.post(slug, "unapprove")) : undefined,
       ),
     reveal: () => api.post(slug, "reveal").catch((e) => onError(String(e.message))),
@@ -67,7 +65,7 @@ export const ApprovalLine: React.FC<{ slug: string; a: Approval; running: boolea
           </button>
         )}
         {a.record && (
-          <button className="small quiet" disabled={!!busy} onClick={unapprove} title="Move its video and cover to the Trash">
+          <button className="small quiet" disabled={!!busy} onClick={unapprove} title="Move its folder to the Trash">
             {busy === "unapprove" ? "Unapproving…" : "Unapprove"}
           </button>
         )}

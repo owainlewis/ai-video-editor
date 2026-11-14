@@ -503,7 +503,7 @@ export const resolveHook = (hook: EditPlan["hook"], words: Word[], shots: Resolv
 export const COVER = { size: 96, width: 1000, words: 7, lines: 2 };
 
 export const lintCover = (cover: { title: string } | undefined): Issue[] => {
-  if (!cover) return [{ level: "warn", message: `no cover: every reel starts on the standard cover (Owain, 2026-11-11). Add "cover": { "title": "..." }, the title in Owain's words, so frame 0 is his card and never a face mid-word` }];
+  if (!cover) return [{ level: "warn", message: `no cover: every reel has a cover image, uploaded apart from the video (Owain, 2026-11-13). Add "cover": { "title": "..." }, the title in Owain's words, then make the image with \`cover <slug> --prompt\`` }];
   const issues: Issue[] = [];
   const n = cover.title.split(/\s+/).filter(Boolean).length;
   if (n > COVER.words) issues.push({ level: "warn", message: `cover title "${cover.title}" is ${n} words; keep it to ${COVER.words}` });

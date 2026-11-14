@@ -117,7 +117,7 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 - Watches `projects/` recursively and `library/broll/` for `index.json`. A change to a project's `status.json` or `approved.json` sends a `status` event.
 - Holds in memory: event clients, debounce timers, the library busy flag and running Claude processes. A restart loses them.
 - Spawns `npx tsx cli.ts` detached for `ingest`, `clip`, `render` and `broll index`. Output goes to `<project>/job.log` or `library/broll/job.log`. Restarting the server does not stop them.
-- `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`) and `unapprove` moves files to the Trash. `reveal` spawns `open`.
+- `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`; the editor shows it through `folderLabel`) and `unapprove` moves files to the Trash. `reveal` spawns `open`.
 - Spawns `claude -p --output-format stream-json --verbose --permission-mode acceptEdits` in the repo root, with `--resume` when a session exists.
 - Reads and writes in a project: `edit.json`, `cut.json`, `chat.json`, `suggestions.json`, `variants.json`, `history/`, `assets/`, and `clips/<id>/status.json` (`POST clips`).
 - `GET /api/projects/<slug>` can write: the first version, asset thumbnails, `build/level.json` for each ready clip, and everything `resolveProject` writes. It is not read-only.

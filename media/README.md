@@ -9,7 +9,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 - `project.ts`: `resolveProject(projects, slug, exportCut?)` returns `{ resolved?, issues }`. Also `LIBRARY`, and `useLogo(name)`: `library/logos/<name>.svg` (else `.png`) as a data URL.
 - `ingest.ts`: `ingest(projects, file, slug, log?, choices?)`, `addClip(projects, slug, file, id, log?, name?)`, `transcribe`, `cleanWords`, `starterPlan`, `slugFor`, `projectMeta`, `setStatus`, `liveStatus`, types `Status` and `Choices`.
 - `bin.ts`: `clips(dir)` (main first), `clipDir`, `clipPath`, `loadCut(dir)`, `clipWords`, `timeline(dir)`, `cameraOnTimeline(dir, cut)`, `clipLevels(dir, id)`, type `Clip` (a bin clip).
-- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`, `coverStill(projects, slug, file, log?)` (frame 0 at full size, async), `verifyReel(out, length, size)`.
+- `render.ts`: `renderFinal(projects, slug, onProgress, log?, onStage?, preview?)`, `prepareExport(projects, slug, onStage, log?, range?)`, `mixAudio(projects, slug, log?, flat?)`, `stills(projects, slug, times, log?)`, `coverStill(projects, slug, file, log?)` (the plain cover card as an image, never part of the reel; async), `verifyReel(out, length, size)`.
 - `approve.ts`: `approve(projects, slug, opts?)` (async) returns the `ApprovalRecord`; `unapprove(projects, slug, opts?)`, `approval(dir)` (`state`, `ready`, `reason`, `record`), `approvalFacts(dir)`, `listApproved(projects)`, `weekCount(projects, now?)`, `moveToTrash(file, trash?)`, `loadRecord`, `approvedFolder()`, `trashFolder()`. Options: `folder`, `trash`, `now`, `log`, `cover`. The pure rules are in `engine/approve.ts`.
 - `cutrender.ts`: `renderCut(projects, slug, onStage, log?, range?)` returns `FlatCut`. Also `hasCut`, `segmentFrames`, `XFADE`.
 - `export.ts`: `exportOverOriginal(projects, slug, onStage, log?, preview?)`, `sections(r)`, `verifyExport(original, out, files, remove?, part?)`, type `Section`.
@@ -54,7 +54,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
 ### Approving
 
 - `approve` refuses (409) a YouTube project, a reel with no `renders/final.mp4`, an export not newer than both `edit.json` and `cut.json`, an export check older than the export or with errors, and a reel whose export is running (`build/export.lock` held by a live pid).
-- Files are named `<YYYY-MM-DD> <title>.mp4` and `<same> cover.jpg`, the date local and the title from `edit.json` through `fileTitle` (no `/ \ : * ? " < > |` or control characters, single spaces, no dots at either end, 80 characters at most). When either name is taken by a file that is not this reel's own, ` (2)`, ` (3)` and so on is added.
+- Each reel gets its own folder, `<YYYY-MM-DD> <title>/`, holding `reel.mp4`, `image.jpg` (the cover) and, when the project has one, `caption.txt`. The date is local and the title comes from `edit.json` through `fileTitle` (no `/ \ : * ? " < > |` or control characters, single spaces, no dots at either end, 80 characters at most). When the folder name is taken by anything that is not this reel's own folder, ` (2)`, ` (3)` and so on is added. Unapproving moves the folder to the Trash.
 - Each file is copied in under a hidden `.<name>.partial` and renamed, so the folder never holds half a file. The reel's earlier files go to the Trash only after the new ones are in place; a file with the same name is replaced in place.
 - `approve` fails if `renders/final.mp4` changed while the cover was drawn.
 - `approved.json` is the record: `{ at, video, cover, title }`, paths absolute. The week count reads these records, not the folder, so moving files on from the folder does not change it.
@@ -100,7 +100,7 @@ Everything that touches footage on disk: import, transcription, turning a plan i
   - `renderCut`: clears and writes `build/cut/`.
   - `runQc`: clears and writes `checks/qc/`. `stills`: clears and writes `checks/stills/`. `frameSheets`: clears and writes `checks/frames/`, writes contact sheets to `checks/frames-<k>.jpg`, and returns their paths.
   - `cleanVoice`: replaces `source/voice.wav`, and writes `source/voice.original.wav`, `build/auphonic/` and `build/preview.m4a`.
-- Writes outside the repo: `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`, made if missing); `approve` and `unapprove` move files to the Trash (`STUDIO_TRASH`, else `~/.Trash`).
+- Writes outside the repo: `approve` writes to the approved folder (`STUDIO_APPROVED`, else `~/Reels/Approved`, made if missing; on Owain's Mac, Google Drive's `My Drive/Content/Reels/Approved`); `approve` and `unapprove` move files to the Trash (`STUDIO_TRASH`, else `~/.Trash`).
 - Writes in the library: `library/broll/index.json`, `library/broll/.clips/`, and `library/qc/` (cleared by `runLibraryQc`).
 
 ## Verification

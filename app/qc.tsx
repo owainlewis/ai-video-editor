@@ -209,7 +209,7 @@ function measure() {
       if (r.width > W * 0.85 && r.height > H * 0.85) continue;
       if (c && c !== "transparent" && c !== "rgba(0, 0, 0, 0)" && !e.closest('[data-qc="canvas"]')) under = c;
     }
-    texts.push({ label: el.getAttribute("data-qc") === "label", hook: !!el.closest('[data-qc="hook"]'), cover: !!el.closest('[data-qc="cover"]'), text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: textColor(el), block: id, under, clipped });
+    texts.push({ label: el.getAttribute("data-qc") === "label", hook: !!el.closest('[data-qc="hook"]'), cover: !!el.closest('[data-qc="cover"]') && !el.closest('[data-qc="cover-tile"]'), text: nodes.map((n) => n.textContent).join("").trim(), box: [ink.l, ink.t, ink.r - ink.l, ink.b - ink.t], size: parseFloat(getComputedStyle(el).fontSize) * scale, opacity: o, color: textColor(el), block: id, under, clipped });
     // Each word's line, to find a last line with a single word on it.
     for (const n of nodes) {
       const s = n.textContent!;
@@ -228,6 +228,15 @@ function measure() {
 }
 
 const root = createRoot(document.getElementById("root")!);
+// One plan after another, each mounted fresh; ready again once the new one has mounted. A project's
+// QC uses it to show the cover card (`asCover`) and then its reel again.
+let n = 0;
+window.qcLoad = async (r) => {
+  window.qcReady = false;
+  window.qcError = null;
+  root.render(<App key={++n} r={r} />);
+  while (!window.qcReady) await new Promise((ok) => setTimeout(ok, 20));
+};
 if (slug)
   fetch(`/${slug}/build/edit.resolved.json`, { cache: "no-store" })
     .then((r) => r.json())
@@ -236,14 +245,4 @@ if (slug)
       const playable = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
       root.render(<App r={playable} />);
     });
-else {
-  // One plan after another, each mounted fresh; ready again once the new one has mounted.
-  let n = 0;
-  window.qcLoad = async (r) => {
-    window.qcReady = false;
-    window.qcError = null;
-    root.render(<App key={++n} r={r} />);
-    while (!window.qcReady) await new Promise((ok) => setTimeout(ok, 20));
-  };
-  window.qcReady = true;
-}
+else window.qcReady = true;

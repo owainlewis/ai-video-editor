@@ -11,8 +11,10 @@ export const WEEKLY_TARGET = 7;
 //   stale:    approved, but the plan changed (or it was exported again) after
 export type ApprovalState = "draft" | "exported" | "approved" | "stale";
 
-// What `approved.json` holds. `video` and `cover` are absolute paths in the approved folder.
-export type ApprovalRecord = { at: string; video: string; cover: string; title: string };
+// What `approved.json` holds, as absolute paths. Each approved reel has its own folder in the
+// approved folder, "<YYYY-MM-DD> <title>", holding `reel.mp4`, `image.jpg` and `caption.txt` (Owain, 2026-11-13).
+// `folder` is missing on a record from before then, when the two files sat loose.
+export type ApprovalRecord = { at: string; folder?: string; video: string; cover: string; title: string };
 
 // The facts the state is read from, as file times in ms.
 export type ApprovalFacts = {

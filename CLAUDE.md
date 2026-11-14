@@ -57,7 +57,7 @@ Owain's topics are Claude Code, Codex, OpenAI, Google, GitHub, Grok Bot, DeepSee
 1. Write custom code only when nothing in the kit shows the idea, and build it from the kit's parts. A part that earns its place twice joins the kit.
 2. Show the real product, never a symbol for it. No abstract shapes standing in for an agent, no rings filled with dots.
 3. No scaled-up screenshots: they look pixelated. Render a component or fetch the page.
-4. Frame 0 is the cover: `"cover": { "title": "..." }`, Owain's blank card with the title in his words (seven at most, two lines, no logos). `stills <slug> --at 0` gives it as an image to upload.
+4. The cover is its own image, uploaded to Instagram apart from the video; the reel's first frame is the reel (Owain, 2026-11-13). `"cover": { "title": "...", "logos": [...] }` holds the title in his words (seven at most, two lines) and up to two real logos. `cover <slug> --prompt` builds the Higgsfield kit (his portrait, the logos, his prompt); the result is saved as `projects/<slug>/cover.png` (`check` warns until it is). `cover <slug>` draws the plain card as a stand-in.
 5. The hook: `"hook": { "text": "Give AI agents *their own email*." }`, six words at most, two lines at most, from frame 1. The marked phrase is set apart by colour. It leaves on a hard cut on the first cut after 3 s (`until` to choose the words), never past 5 s.
 6. Open on a split under the hook, never full frame on Owain's face. End on a card, never on his face.
 7. The split is the main view, half the reel or more: the visual on top, a caption band in the middle with a hairline, the footage below (45 / 10 / 45). Captions never sit on dark footage.
@@ -133,9 +133,9 @@ Owain reviews every graphic in the editor before he exports (`#/p/<slug>/review`
 
 ## Approving reels
 
-Owain records about ten ideas a week, we edit them, and about seven get approved. Approved reels go to one folder, `~/Reels/Approved` (`STUDIO_APPROVED` in `.env` or the environment), and he uploads them from there to his content system.
+Owain records about ten ideas a week, we edit them, and about seven get approved. Approved reels go to one folder in Google Drive, `My Drive/Content/Reels/Approved` beside his reel scripts, through Drive's sync folder on this Mac (`STUDIO_APPROVED` in `.env`; `~/Reels/Approved` when unset). He uploads them from there.
 
-- `npm run studio -- approve <slug>` copies `renders/final.mp4` there as `<YYYY-MM-DD> <title>.mp4`, with `<same name> cover.jpg` (frame 0 at full size), and records it in `approved.json`. It refuses unless the export is newer than `edit.json` and `cut.json` and `checks/export-check.json` has no errors. A name taken by another reel gets ` (2)`; approving again replaces only that reel's own files.
+- `npm run studio -- approve <slug>` puts each reel in its own folder there, `<YYYY-MM-DD> <title>/`: `reel.mp4` (the export), `image.jpg` (the cover, 1080x1920, ready to upload: `cover.png` at the bottom of the frame, its title and logos inside the middle 3:4 the profile grid shows, the space above in its top colour; or the plain card when there is none) and `caption.txt` (the Instagram caption, from the project's `caption.txt`), and records it in `approved.json`. It refuses unless the export is newer than `edit.json` and `cut.json` and `checks/export-check.json` has no errors. A folder name taken by anything else gets ` (2)`; approving again replaces only that reel's own folder.
 - `npm run studio -- unapprove <slug>` moves its files to the Trash. `npm run studio -- approved` lists them, newest first, with this week's count against 7 (Monday to Sunday).
 - In the editor a reel is Draft, Exported (ready: the Approve button), Approved, or Out of date (the plan changed after it was approved). The projects page shows each reel's state and "This week: N of 7 approved".
 - Only Owain approves. Never approve, unapprove or write to the approved folder unless he asks.

@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { approvalState, fileTitle, thisWeek, weekStart } from "../engine/approve.ts";
-import { approval, approve, approvedFolder, listApproved, loadRecord, unapprove, weekCount } from "../media/approve.ts";
+import { approval, approve, approvedFolder, folderLabel, listApproved, loadRecord, unapprove, weekCount } from "../media/approve.ts";
 
 // Every test approves into a temporary folder through STUDIO_APPROVED, and trashes into another.
 let root: string, projects: string, folder: string, trash: string;
@@ -28,13 +28,14 @@ const cover = async (_p: string, slug: string, file: string) => writeFileSync(fi
 const day = (iso: string) => new Date(iso);
 
 // A reel with its plan at T, and (unless told otherwise) an export a minute later with a clean check.
-function reel(slug: string, o: { title?: string; canvas?: string; video?: number | null; check?: number | null; errors?: number; cut?: number } = {}) {
+function reel(slug: string, o: { title?: string; caption?: string; canvas?: string; video?: number | null; check?: number | null; errors?: number; cut?: number } = {}) {
   const dir = join(projects, slug);
   mkdirSync(join(dir, "renders"), { recursive: true });
   mkdirSync(join(dir, "checks"), { recursive: true });
   writeFileSync(join(dir, "project.json"), "{}");
   writeFileSync(join(dir, "edit.json"), JSON.stringify({ title: o.title ?? "Two types of agent", canvas: o.canvas ?? "reel", shots: [] }));
   at(join(dir, "edit.json"), T);
+  if (o.caption !== undefined) writeFileSync(join(dir, "caption.txt"), o.caption);
   if (o.cut !== undefined) {
     writeFileSync(join(dir, "cut.json"), '{"segments":[]}');
     at(join(dir, "cut.json"), o.cut);
@@ -52,7 +53,8 @@ function reel(slug: string, o: { title?: string; canvas?: string; video?: number
   }
   return dir;
 }
-const files = () => (existsSync(folder) ? readdirSync(folder).sort() : []);
+// Every file in the approved folder, as "<reel folder>/<file>".
+const files = () => (existsSync(folder) ? readdirSync(folder, { recursive: true }).map(String).filter((f) => f.includes("/")).sort() : []);
 
 describe("approving a reel", () => {
   it("refuses with no export", async () => {
@@ -89,11 +91,21 @@ describe("approving a reel", () => {
     expect(approvedFolder()).toBe(folder);
     expect(approval(dir).state).toBe("exported");
     const r = await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
-    expect(files()).toEqual(["2026-11-13 Google EGM better code with AI cover.jpg", "2026-11-13 Google EGM better code with AI.mp4"]);
+    expect(files()).toEqual(["2026-11-13 Google EGM better code with AI/image.jpg", "2026-11-13 Google EGM better code with AI/reel.mp4"]);
     expect(readFileSync(r.video, "utf8")).toBe("video of a");
     expect(readFileSync(r.cover, "utf8")).toBe("cover of a");
-    expect(loadRecord(dir)).toEqual({ at: day("2026-11-13T12:00:00").toISOString(), video: r.video, cover: r.cover, title: "Google EGM: better code / with AI?" });
+    expect(loadRecord(dir)).toEqual({ at: day("2026-11-13T12:00:00").toISOString(), folder: join(folder, "2026-11-13 Google EGM better code with AI"), video: r.video, cover: r.cover, title: "Google EGM: better code / with AI?" });
     expect(approval(dir).state).toBe("approved");
+  });
+
+  it("puts the project's caption beside the reel, and none when it has none", async () => {
+    reel("a", { caption: "Comment AGENT and I'll send the link.  " });
+    reel("b", { title: "Other" });
+    const now = day("2026-11-13T12:00:00");
+    const a = await approve(projects, "a", { cover, now });
+    await approve(projects, "b", { cover, now });
+    expect(readFileSync(join(a.folder!, "caption.txt"), "utf8")).toBe("Comment AGENT and I'll send the link.\n");
+    expect(files()).toEqual(["2026-11-13 Other/image.jpg", "2026-11-13 Other/reel.mp4", "2026-11-13 Two types of agent/caption.txt", "2026-11-13 Two types of agent/image.jpg", "2026-11-13 Two types of agent/reel.mp4"]);
   });
 
   it("is out of date once the plan changes after approving", async () => {
@@ -104,12 +116,12 @@ describe("approving a reel", () => {
     expect(approval(dir)).toMatchObject({ state: "stale", ready: false });
   });
 
-  it("replaces only its own earlier files when approved again", async () => {
+  it("replaces only its own earlier folder when approved again", async () => {
     const dir = reel("a");
     await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
-    // Approved again the same day: the same names, replaced in place.
+    // Approved again the same day: the same folder, its files replaced in place.
     await approve(projects, "a", { cover, now: day("2026-11-13T13:00:00") });
-    expect(files()).toEqual(["2026-11-13 Two types of agent cover.jpg", "2026-11-13 Two types of agent.mp4"]);
+    expect(files()).toEqual(["2026-11-13 Two types of agent/image.jpg", "2026-11-13 Two types of agent/reel.mp4"]);
     // A new export, approved the next day: the new files in, the old ones to the Trash.
     writeFileSync(join(dir, "renders/final.mp4"), "video of a, take 2");
     at(join(dir, "renders/final.mp4"), Date.parse("2026-11-14T09:00:00"));
@@ -117,22 +129,22 @@ describe("approving a reel", () => {
     expect(approval(dir).state).toBe("stale");
     expect(approval(dir).ready).toBe(true);
     const r = await approve(projects, "a", { cover, now: day("2026-11-14T10:00:00") });
-    expect(files()).toEqual(["2026-11-14 Two types of agent cover.jpg", "2026-11-14 Two types of agent.mp4"]);
+    expect(files()).toEqual(["2026-11-14 Two types of agent/image.jpg", "2026-11-14 Two types of agent/reel.mp4"]);
     expect(readFileSync(r.video, "utf8")).toBe("video of a, take 2");
-    expect(readdirSync(trash).sort()).toEqual(["2026-11-13 Two types of agent cover.jpg", "2026-11-13 Two types of agent.mp4"]);
+    expect(readdirSync(trash)).toEqual(["2026-11-13 Two types of agent"]);
   });
 
-  it("never overwrites another reel's approved files", async () => {
+  it("never overwrites another reel's approved folder", async () => {
     reel("a");
     reel("b");
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, "2026-11-13 Two types of agent.mp4"), "Owain's own file");
+    mkdirSync(join(folder, "2026-11-13 Two types of agent"), { recursive: true });
+    writeFileSync(join(folder, "2026-11-13 Two types of agent/reel.mp4"), "Owain's own file");
     const now = day("2026-11-13T12:00:00");
     const a = await approve(projects, "a", { cover, now });
     const b = await approve(projects, "b", { cover, now });
-    expect(a.video).toBe(join(folder, "2026-11-13 Two types of agent (2).mp4"));
-    expect(b.video).toBe(join(folder, "2026-11-13 Two types of agent (3).mp4"));
-    expect(readFileSync(join(folder, "2026-11-13 Two types of agent.mp4"), "utf8")).toBe("Owain's own file");
+    expect(a.video).toBe(join(folder, "2026-11-13 Two types of agent (2)/reel.mp4"));
+    expect(b.video).toBe(join(folder, "2026-11-13 Two types of agent (3)/reel.mp4"));
+    expect(readFileSync(join(folder, "2026-11-13 Two types of agent/reel.mp4"), "utf8")).toBe("Owain's own file");
     expect(readFileSync(b.cover, "utf8")).toBe("cover of b");
   });
 
@@ -141,7 +153,8 @@ describe("approving a reel", () => {
     const r = await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
     unapprove(projects, "a");
     expect(files()).toEqual([]);
-    expect(readdirSync(trash).sort()).toEqual([r.cover, r.video].map((f) => f.split("/").pop()).sort());
+    expect(readdirSync(trash)).toEqual([r.folder!.split("/").pop()]);
+    expect(readdirSync(join(trash, readdirSync(trash)[0])).sort()).toEqual(["image.jpg", "reel.mp4"]);
     expect(loadRecord(dir)).toBeNull();
     expect(approval(dir).state).toBe("exported");
     expect(() => unapprove(projects, "a")).toThrow(/not approved/);
@@ -158,6 +171,12 @@ describe("approving a reel", () => {
     expect(weekCount(projects, day("2026-11-15T23:59:00"))).toEqual({ count: 2, target: 7 });
     expect(weekCount(projects, day("2026-11-16T00:00:00")).count).toBe(0);
   });
+});
+
+it("shows Google Drive's synced folder by its short name", () => {
+  expect(folderLabel(join(homedir(), "Library/CloudStorage/GoogleDrive-someone@example.com/My Drive/Content/Reels/Approved"))).toBe("Google Drive/Content/Reels/Approved");
+  expect(folderLabel(join(homedir(), "Reels/Approved"))).toBe("~/Reels/Approved");
+  expect(folderLabel("/Volumes/Disk/Approved")).toBe("/Volumes/Disk/Approved");
 });
 
 describe("approval rules", () => {

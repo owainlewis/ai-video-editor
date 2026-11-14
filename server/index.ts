@@ -19,7 +19,7 @@ import { qcState } from "../media/qc.ts";
 import { mixState } from "../media/previewmix.ts";
 import { planIndex } from "../engine/insert.ts";
 import { trashProject } from "./trash.ts";
-import { approval, approve, approvedFolder, loadRecord, unapprove } from "../media/approve.ts";
+import { approval, approve, approvedFolder, folderLabel, loadRecord, unapprove } from "../media/approve.ts";
 import { changeParts, dropBroll, editShot, moveShotEnd, moveShotStart, placeCard } from "./insert.ts";
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
@@ -282,7 +282,7 @@ export async function startServer(port = 4747) {
         },
         exportCheck: existsSync(checkFile) ? readJson(checkFile) : null,
         // A reel's approval: draft, exported (ready), approved or stale, and where its files went.
-        approval: readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube" ? null : { ...approval(dir), folder: approvedFolder(), reveal: process.platform === "darwin" },
+        approval: readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube" ? null : { ...approval(dir), folder: folderLabel(), reveal: process.platform === "darwin" },
         // The sound as the export will mix it, when it has been mixed for the editor.
         mix: resolved ? mixState(dir, slug) : null,
         plan: readFileSync(join(dir, "edit.json"), "utf8"),

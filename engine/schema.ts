@@ -632,6 +632,9 @@ export type Resolved = {
   hook?: ResolvedHook;
   // The cover on frame 0: the card's file in the project.
   cover?: { title: string; image: string; logos?: { src: string; name?: string }[] };
+  // Draw the cover card alone, as the cover image (`cover`, QC, approval). The reel itself never
+  // shows it: the cover is uploaded to Instagram as its own image (Owain, 2026-11-13).
+  asCover?: boolean;
   chunks: Chunk[];
   sfx: SfxEvent[];
 };
