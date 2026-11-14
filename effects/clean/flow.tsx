@@ -14,7 +14,7 @@ type FlowV = Extract<ResolvedVisual, { kind: "flow" }>;
 export const cardTone = (p: Palette) =>
   p.name === "light"
     ? { fill: "#FFFFFF", line: p.line, text: p.text, sub: "#46665B", accent: p.accent, accentFill: "#EAF3ED", item: "#FFFFFF", itemLine: "rgba(18,58,46,0.32)" }
-    : { fill: "#15211B", line: p.line, text: "#FFFFFF", sub: "#BFCCC5", accent: p.accent, accentFill: "#203A2F", item: "#15211B", itemLine: "rgba(245,245,242,0.34)" };
+    : { fill: p.node?.fill ?? "#15211B", line: p.line, text: "#FFFFFF", sub: p.node?.sub ?? "#BFCCC5", accent: p.accent, accentFill: p.node?.accentFill ?? "#203A2F", item: p.node?.fill ?? "#15211B", itemLine: "rgba(245,245,242,0.34)" };
 
 // ---------- line icons, on a 48 grid ----------
 

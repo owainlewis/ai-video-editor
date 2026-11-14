@@ -156,7 +156,7 @@ Best first, by how much meaning each carries per second, how often Owain's topic
 
 ## Built
 
-Eight graphics in `effects/custom/stage.tsx`, in the library as `blueprint.t2.*`: filter the gallery with `#/gallery?q=custom`. In Ivory, Graphite and black, drawn for `side` and `media`. All of them pass `qc --library --canvas youtube`.
+(Retired on 2026-11-14; see `docs/PLAYBOOK.md`.) Eight graphics in `effects/custom/stage.tsx`, in the library as `blueprint.t2.*`: filter the gallery with `#/gallery?q=custom`. In Ivory, Graphite and black, drawn for `side` and `media`. All of them pass `qc --library --canvas youtube`.
 
 `projects/stage-demo` puts five on Owain's own footage and words from the `review` video (it links to that project's files and changes nothing in it). `surge` is on his real numbers, 2,500 to 30,000 changes a day, with Review giving way on "struggle to keep up". `drift` walks his risk tiers. See it at `#/gallery?tab=projects&q=stage`, or the stills in `projects/stage-demo/checks/stills/`.
 

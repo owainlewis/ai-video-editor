@@ -12,7 +12,7 @@ const reel = (slug: string, status: Listed["status"], approvedAt: string | null 
 describe("the desktop app", () => {
   it("restarts the server for its own code, not for the editor or the data", () => {
     for (const f of ["engine/resolve.ts", "media/approve.ts", "server/index.ts", "styles/cards.ts", "effects/clean/Clean.tsx", "cli.ts", "package.json"]) expect(needsRestart(f), f).toBe(true);
-    for (const f of ["app/Editor.tsx", "projects/a1-reel-1/edit.json", "library/broll/index.json", "tests/clean.test.ts", "docs/RULES.md", "engine/README.md", "electron/main.ts"])
+    for (const f of ["app/Editor.tsx", "projects/a1-reel-1/edit.json", "library/broll/index.json", "tests/clean.test.ts", "docs/RULES.md", "engine/README.md", "electron/main.ts", "styles/library.json"])
       expect(needsRestart(f), f).toBe(false);
   });
 

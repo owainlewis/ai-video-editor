@@ -17,6 +17,7 @@ import { openBrowser } from "@remotion/renderer";
 import { createServer as createVite } from "vite";
 import { compositionFor } from "../effects/canvas.ts";
 import { type Canvas, cardPlan, effectList, hookPlan } from "../effects/preview.ts";
+import { readCardLibrary } from "./cardlibrary.ts";
 import { BAND } from "../effects/clean/cover.tsx";
 import { longestStill, type Measure, qcCover, qcHook, qcLayout, STILL_LIMIT } from "../engine/qc.ts";
 import type { Range } from "../engine/parts.ts";
@@ -417,7 +418,7 @@ export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log
       // Every card on YouTube, the lower third included (Owain may still ask for one); on a reel only
       // the clean kit, since a reel cannot use the rest.
       const clean = canvas === "reel";
-      const cards = effectList(canvas).filter((e) => !(clean && e.off) && (!opts.card || e.id.includes(opts.card) || e.kind === opts.card));
+      const cards = effectList(canvas, readCardLibrary()).filter((e) => e.approved).filter((e) => !(clean && e.off) && (!opts.card || e.id.includes(opts.card) || e.kind === opts.card));
       if (!variants.length || !cards.length) continue;
       const { browser, page } = await qcPage(srv, compositionFor(canvas), "library=1", log);
       try {

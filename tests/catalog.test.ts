@@ -6,14 +6,16 @@ import { style } from "../effects/style.ts";
 import { cards, slotIssues, slotValues } from "../styles/blueprint/style.ts";
 import { atMax } from "../styles/catalog.ts";
 import { cardPlan, effectList } from "../effects/preview.ts";
-import { APPROVED } from "../styles/approved.ts";
+import { readCardLibrary } from "../media/cardlibrary.ts";
 
 const kinds = Visual.options.map((o) => o.shape.kind.value);
 
-describe("the approved cards", () => {
-  it("name real cards, so a typo never hides one", () => {
+describe("the library", () => {
+  it("names real cards, so a typo never hides one", () => {
     const ids = new Set(cards.map((c) => c.id));
-    expect([...APPROVED].filter((id) => !ids.has(id))).toEqual([]);
+    const lib = readCardLibrary();
+    expect([...lib.cards, ...lib.removed].filter((id) => !ids.has(id))).toEqual([]);
+    expect(lib.cards.filter((id) => lib.removed.includes(id))).toEqual([]);
   });
 });
 
@@ -63,7 +65,7 @@ describe("the Blueprint catalog", () => {
   });
   it("builds a playable plan for every sampled card, on every canvas that shows it", () => {
     for (const canvas of ["reel", "youtube"] as const)
-      for (const { id } of effectList(canvas)) {
+      for (const { id } of effectList(canvas, { cards: cards.map((c) => c.id), removed: [] })) {
         const r = cardPlan(id, canvas);
         expect(r.shots[0].visual?.times?.length, id).toBeGreaterThan(0);
         expect(r.duration, id).toBeGreaterThanOrEqual(2);

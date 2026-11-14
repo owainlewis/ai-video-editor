@@ -26,7 +26,8 @@ export type CaptureOptions = {
 
 type Cdp = { send(method: string, params?: object): Promise<{ value?: unknown } & Record<string, unknown>> };
 type Rect = { x: number; y: number; width: number; height: number };
-type Measured = { clip: Rect; scrollX: number; scrollY: number; innerHeight: number; title: string; icon: string; runs: { text: string; r: Rect; block: number }[]; blocks: { tag: string; r: Rect }[]; missing?: string };
+type MeasuredField = { label: string; kind: "text" | "check"; r: Rect; family: string; size: number; weight: number; color: string; bg: string; pad: number; secret: boolean };
+type Measured = { clip: Rect; scrollX: number; scrollY: number; innerHeight: number; title: string; icon: string; runs: { text: string; r: Rect; block: number }[]; blocks: { tag: string; r: Rect }[]; fields: MeasuredField[]; missing?: string };
 
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
@@ -81,6 +82,48 @@ export async function capture(projects: string, slug: string, url: string, opts:
     writeFileSync(png, Buffer.from(data, "base64"));
 
     const norm = (r: Rect): Box => [r.x / clip.width, r.y / clip.height, r.width / clip.width, r.height / clip.height].map((v) => Math.round(v * 10000) / 10000) as Box;
+    // Each box ticked, as the page itself draws it: the box and a little around it, saved for `check`.
+    const checked = new Map<number, string>();
+    for (const [i, f] of m!.fields.entries()) {
+      if (f.kind !== "check") continue;
+      const on = await page.evaluate((n: number) => {
+        const el = document.querySelector<HTMLInputElement>(`[data-studio-field="${n}"]`);
+        if (!el || el.checked) return false;
+        el.checked = true;
+        return true;
+      }, i);
+      if (!on) continue;
+      await new Promise((ok) => setTimeout(ok, 120));
+      const part = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX + f.r.x, y: clip.y + m!.scrollY + f.r.y, width: f.r.width, height: f.r.height, scale: 1 }, captureBeyondViewport: false });
+      const file = `${name}-check-${i}.png`;
+      writeFileSync(join(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
+      checked.set(i, `assets/pages/${file}`);
+      await page.evaluate((n: number) => {
+        const el = document.querySelector<HTMLInputElement>(`[data-studio-field="${n}"]`);
+        if (el) el.checked = false;
+      }, i);
+    }
+    // Each field with focus, as the page draws it (its own ring or outline), with room around it for
+    // the ring: shown under the typing while the agent types there.
+    const focused = new Map<number, { src: string; box: Box }>();
+    const RING = 5;
+    for (const [i, f] of m!.fields.entries()) {
+      if (f.kind !== "text") continue;
+      const ok = await page.evaluate((n: number) => {
+        const el = document.querySelector<HTMLElement>(`[data-studio-field="${n}"]`);
+        el?.focus();
+        return !!el && document.activeElement === el;
+      }, i);
+      if (!ok) continue;
+      await new Promise((done) => setTimeout(done, 150));
+      const r = { x: Math.max(0, f.r.x - RING), y: Math.max(0, f.r.y - RING), width: f.r.width + RING * 2, height: f.r.height + RING * 2 };
+      const part = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX + r.x, y: clip.y + m!.scrollY + r.y, width: r.width, height: r.height, scale: 1 }, captureBeyondViewport: false });
+      const file = `${name}-focus-${i}.png`;
+      writeFileSync(join(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
+      focused.set(i, { src: `assets/pages/${file}`, box: norm(r) });
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    }
+    const r4 = (v: number) => Math.round(v * 10000) / 10000;
     const icon = await saveIcon(m!.icon, out, name, log);
     const result: Page = {
       url: page.url() || url,
@@ -91,10 +134,18 @@ export async function capture(projects: string, slug: string, url: string, opts:
       size: [Math.round(clip.width), Math.round(clip.height)],
       runs: m!.runs.map((r) => ({ text: r.text, box: norm(r.r), block: r.block })),
       blocks: m!.blocks.map((b) => ({ tag: b.tag, box: norm(b.r) })),
+      fields: m!.fields.map((f, i) => ({
+        label: f.label,
+        kind: f.kind,
+        box: norm(f.r),
+        ...(f.kind === "text" && { font: { family: f.family, size: r4(f.size / clip.height), weight: f.weight, color: f.color, bg: f.bg, pad: r4(f.pad / clip.width), ...(f.secret && { secret: true }) } }),
+        ...(checked.has(i) && { checked: checked.get(i) }),
+        ...(focused.has(i) && { focused: focused.get(i) }),
+      })),
     };
     const json = join(out, `${name}.json`);
     writeJson(json, result);
-    log?.(`${Math.round(clip.width * scale)}x${Math.round(clip.height * scale)} px, ${result.runs.length} words`);
+    log?.(`${Math.round(clip.width * scale)}x${Math.round(clip.height * scale)} px, ${result.runs.length} words, ${result.fields?.length ?? 0} form fields`);
     return { png, json, page: result };
   } finally {
     await browser.close({ silent: true } as never);
@@ -209,7 +260,33 @@ function measure(from: string | null, to: string | null, tall: number) {
   // The sharpest icon the page offers: an SVG, else the largest.
   const size = (l: HTMLLinkElement) => (l.type === "image/svg+xml" || /\.svg($|\?)/.test(l.href) ? 1e6 : parseInt(l.sizes?.value) || 16);
   const icon = links.sort((x, y) => size(y) - size(x))[0]?.href ?? new URL("/favicon.ico", location.href).href;
-  return { clip, scrollX, scrollY, innerHeight, title: document.title.trim(), icon, runs, blocks };
+  // The form's fields, for an agent typing into them. Each is tagged so the capture can tick its box.
+  const fields: { label: string; kind: "text" | "check"; r: ReturnType<typeof box>; family: string; size: number; weight: number; color: string; bg: string; pad: number; secret: boolean }[] = [];
+  const TEXT = /^(|text|email|password|search|tel|url|number)$/;
+  const paint = (e: Element | null): string => {
+    for (; e; e = e.parentElement) {
+      const c = getComputedStyle(e).backgroundColor;
+      const a = c.match(/[\d.]+/g);
+      if (a && (a.length < 4 || +a[3] > 0.5)) return c;
+    }
+    return "rgb(255, 255, 255)";
+  };
+  const say = (t?: string | null) => (t ?? "").replace(/\s+/g, " ").trim().replace(/[*:]+$/, "").trim();
+  for (const el of document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")) {
+    const type = el instanceof HTMLTextAreaElement ? "" : (el.getAttribute("type") ?? "").toLowerCase();
+    const kind = el instanceof HTMLTextAreaElement || TEXT.test(type) ? "text" : type === "checkbox" || type === "radio" ? "check" : null;
+    if (!kind || el.disabled || el.readOnly) continue;
+    const named = document.getElementById(el.getAttribute("aria-labelledby") ?? "");
+    const label = say(el.labels?.[0]?.textContent) || say(el.getAttribute("aria-label")) || say(named?.textContent) || say(el.getAttribute("placeholder")) || say(el.getAttribute("name"));
+    // A styled box hides the real input; its label is what shows.
+    let r = el.getBoundingClientRect();
+    if (kind === "check" && (r.width < 4 || getComputedStyle(el).opacity === "0") && el.labels?.[0]) r = el.labels[0].getBoundingClientRect();
+    if (!label || !inClip(r)) continue;
+    const cs = getComputedStyle(el);
+    el.setAttribute("data-studio-field", String(fields.length));
+    fields.push({ label, kind, r: { x: r.x - clip.x, y: r.y - clip.y, width: r.width, height: r.height }, family: cs.fontFamily, size: parseFloat(cs.fontSize), weight: parseInt(cs.fontWeight) || 400, color: cs.color, bg: paint(el), pad: parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth), secret: type === "password" });
+  }
+  return { clip, scrollX, scrollY, innerHeight, title: document.title.trim(), icon, runs, blocks, fields };
 }
 
 // The favicon, saved beside the capture for the browser window's tab. Returns its path in the project.

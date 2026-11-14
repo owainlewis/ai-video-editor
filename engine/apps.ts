@@ -15,14 +15,22 @@ export const typeTime = (chars: number) => chars / typeRate(chars);
 
 export type Beat = { t0: number; t1: number };
 
+// How long Claude Code's permission box stays up before a tool asked about runs: long enough to
+// read the question, longer when the cursor moves to a second choice.
+export const askTime = (s: { ask?: boolean; pick?: number }) => (s.ask ? 1.9 + ((s.pick ?? 1) > 1 ? 0.5 : 0) : 0);
+
 // How long a step takes once it starts, by kind and type.
-const length = (kind: AppKind, s: { type: string; text?: string; items?: string[]; out?: string[] }): number => {
+const length = (kind: AppKind, s: { type: string; text?: string; items?: string[]; out?: string[]; ask?: boolean; pick?: number; lines?: unknown[] }): number => {
   const chars = s.text?.length ?? 0;
   switch (s.type) {
     case "prompt":
     case "user": return typeTime(chars) + 0.35;
     case "think": return 1.1;
-    case "tool": return kind === "cli" ? 1.2 : 0.6;
+    case "tool": return kind === "cli" ? 1.2 + askTime(s) + (s.lines?.length ? 0.3 : 0) : 0.6;
+    // Plan mode's "Ready to code?": time to take in the plan, then it is answered.
+    case "plan": return Math.min(5, 1.6 + (s.items?.length ?? 0) * 0.3);
+    // Subagents: launched, each working, then done.
+    case "agents": return 1.6 + (s.items?.length ?? 0) * 0.5;
     // A reply streams in quickly, as the apps stream one: whole within 0.8 s, so the frame QC calls
     // settled shows it complete.
     case "text": return kind === "cli" ? 0.5 : Math.min(0.75, 0.2 + (s.text ?? "").split(/\s+/).length * 0.02);

@@ -11,7 +11,7 @@ export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
 export type LibraryClip = { id: string; duration: number; description: string; tags: string[]; thumb: string };
 export type Suggestion = { id: string; start: number; end: number; layout: string; visual: { kind: string }; reason: string; status: "pending" | "accepted" | "rejected"; note?: string };
-export type Effect = { id: string; kind: string; purpose: string; summary: string; name?: string; off?: string; approved?: boolean };
+export type Effect = { id: string; kind: string; purpose: string; summary: string; name?: string; off?: string; approved?: boolean; removed?: boolean };
 export type Version = { n: number; at: string; by: string };
 // Claude's takes on one graphic (server/variants.ts), each resolved against the real words.
 export type Take = { id: string; label: string; reason?: string; shot: Record<string, unknown> & { at: string; layout: string }; resolved?: import("../engine/schema").ResolvedShot; problems: string[] };
@@ -64,7 +64,7 @@ export type Project = {
 };
 export type Event =
   | { type: "plan" | "status"; slug: string }
-  | { type: "library"; slug?: undefined }
+  | { type: "library" | "cards"; slug?: undefined }
   | { type: "chat"; slug: string; message: ChatMessage | { role: "status"; text: string } };
 
 const json = async <T,>(res: Response): Promise<T> => {
@@ -76,7 +76,10 @@ const json = async <T,>(res: Response): Promise<T> => {
 export const api = {
   projects: () => fetch("/api/projects").then((r) => json<ProjectSummary[]>(r)),
   library: () => fetch("/api/library").then((r) => json<{ busy: boolean; clips: LibraryClip[] }>(r)),
-  effects: (canvas: string, all = false) => fetch(`/api/effects?canvas=${canvas}${all ? "&all=1" : ""}`).then((r) => json<Effect[]>(r)),
+  effects: (canvas: string, removed = false) => fetch(`/api/effects?canvas=${canvas}${removed ? "&removed=1" : ""}`).then((r) => json<Effect[]>(r)),
+  // Take a card out of the library, or add it back (media/cardlibrary.ts).
+  setInLibrary: (id: string, inLibrary: boolean) =>
+    fetch("/api/cards", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, inLibrary }) }).then((r) => json<{ cards: string[]; removed: string[] }>(r)),
   gallery: () => fetch("/api/gallery").then((r) => json<{ slug: string; resolved: Resolved }[]>(r)),
   project: (slug: string, have?: string) => fetch(`/api/projects/${slug}${have ? `?have=${have}` : ""}`).then((r) => json<Project>(r)),
   upload: (file: File, onProgress: (f: number) => void, to = "/api/upload", params: Record<string, string> = {}) =>

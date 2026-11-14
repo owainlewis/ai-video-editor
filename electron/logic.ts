@@ -9,6 +9,8 @@ const SERVER_CODE = ["engine/", "media/", "server/", "styles/", "effects/"];
 export function needsRestart(file: string): boolean {
   const f = file.replace(/\\/g, "/");
   if (f === "cli.ts" || f === "package.json") return true;
+  // The card library is data the server reads on each request (media/cardlibrary.ts).
+  if (f === "styles/library.json") return false;
   return SERVER_CODE.some((d) => f.startsWith(d)) && /\.(ts|tsx|json)$/.test(f) && !f.includes("/node_modules/");
 }
 

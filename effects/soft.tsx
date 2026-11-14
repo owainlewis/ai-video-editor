@@ -31,6 +31,7 @@ export const darkIsGraphite = (on: boolean, isBlack = false, neutralDark = isBla
   neutral = on && neutralDark;
 };
 export const isBlack = () => black;
+export const isGraphite = () => graphite;
 export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : neutral ? NEUTRAL : graphite ? GRAPHITE : style.color.dark) : style.color.light);
 
 export type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };

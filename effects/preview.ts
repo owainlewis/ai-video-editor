@@ -3,11 +3,11 @@
 import type { Resolved, ResolvedShot } from "../engine/schema";
 import { visualAnchors } from "../engine/resolve";
 import { appBeats, appEnd, isApp } from "../engine/apps";
+import { actionBeats, actionOffset } from "../engine/actions";
 import { codeBeats, codeTimes } from "../engine/code";
 import { atMax, type Card } from "../styles/catalog";
 import { cards } from "../styles/blueprint/style";
 import { blank } from "./canvas";
-import { APPROVED } from "../styles/approved";
 
 export type Canvas = "reel" | "youtube";
 
@@ -28,16 +28,18 @@ export function offBrand(c: Card, canvas: Canvas): string | undefined {
 export const fitsCanvas = (c: Card, canvas: string) =>
   !!c.sample && (canvas === "youtube" ? c.layouts.some((l) => l === "side" || l === "over" || l === "media") || c.tier === "overlay" : c.tier !== "overlay");
 
-// The cards a canvas can show, house graphics first: YouTube in the house look, reels in the clean
-// style. Cards drawn only in another style are left out; cards that draw but are off the brand say
-// why in `off`.
-export const effectList = (canvas: Canvas) =>
+// The library cards a canvas can show (`library`: styles/library.json, media/cardlibrary.ts), house
+// graphics first: YouTube in the house look, reels in the clean style. `approved` is in the library,
+// `removed` was taken out of it and can be added back. Cards drawn only in another style are left
+// out; cards that draw but are off the brand say why in `off`.
+export const effectList = (canvas: Canvas, library: { cards: string[]; removed: string[] }) =>
   cards
+    .filter((c) => library.cards.includes(c.id) || library.removed.includes(c.id))
     .filter((c) => fitsCanvas(c, canvas))
     .filter((c) => !c.styles || c.styles.includes(canvas === "reel" ? "clean" : "ivory"))
     .map((c, i) => ({ c, rank: (c.styles ? 0 : HOUSE.includes(c.kind) ? 1 : 2) * 1000 + i }))
     .sort((a, b) => a.rank - b.rank)
-    .map(({ c }) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary, name: c.kind === "custom" ? (c.sample!.visual as { name: string }).name : undefined, off: offBrand(c, canvas), approved: APPROVED.has(c.id) }));
+    .map(({ c }) => ({ id: c.id, kind: c.kind, purpose: c.purpose, summary: c.summary, name: c.kind === "custom" ? (c.sample!.visual as { name: string }).name : undefined, off: offBrand(c, canvas), approved: library.cards.includes(c.id), removed: library.removed.includes(c.id) }));
 
 // A library card's sample, its parts landing 0.3 s apart, then held for 2 s. `longest` fills every
 // text slot to its maxChars, to see that the layout holds at the limit. On a reel a card draws as a
@@ -58,6 +60,12 @@ export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme
     const after = (steps.length ? appEnd(v, 0) : 0.3) + 0.3;
     times = [...steps, ...times.slice(steps.length).map((_, i) => after + i * 0.9)];
     duration = Math.max(...times, appEnd(v, 0, times)) + 2;
+  }
+  // An agent on a page clicks and types at its own pace (engine/actions.ts).
+  if (v.kind === "image" && v.actions?.length) {
+    const beats = actionBeats(v.actions, 0, []);
+    times = [...times.slice(0, actionOffset(v)), ...beats.map((b) => b.t)];
+    duration = Math.max(...times, ...beats.map((b) => b.t1)) + 2;
   }
   // A code view types its lines one after another, so its parts follow its own clock (engine/code.ts).
   if (v.kind === "code") {

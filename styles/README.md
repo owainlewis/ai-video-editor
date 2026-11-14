@@ -10,6 +10,8 @@ and typed slots.
 ```
 styles/
   catalog.ts       the shared shape: StyleTokens, Card, Slot (maxChars, minItems, maxItems), StyleDef, slot checks
+  library.json     the library: the catalog cards the gallery and the Library tab show ("cards"), and the ones
+                   taken out, to add back ("removed"). Owain edits it from the gallery (media/cardlibrary.ts).
   blueprint/       style 01, the card catalog Ivory is built from
     tokens.ts      palette, type, spacing, grid, motion (StyleTokens)
     style.ts       the card catalog, with sample content (StyleDef)
@@ -67,7 +69,7 @@ A card is a visual kind (`engine/schema.ts`, drawn by `effects/Visuals.tsx`, `ef
 `overlay` over the picture), the layouts it fits, and its slots. Slot limits are typed (`maxChars`,
 `minItems`, `maxItems`), `tests/catalog.test.ts` lays out each sampled `added` card at those limits,
 and `media/project.ts` warns when a plan goes past one. A custom visual is checked against
-`blueprint.t1.custom`, so a plan past a stage card's `props.*` limit gets no warning.
+`blueprint.t1.custom`, so a plan past a custom card's `props.*` limit gets no warning.
 
 Most components read colour, type, spacing and motion from tokens through `effects/style.ts`.
 `effects/clean/kit.tsx` and `effects/apps/` define literal colours, and `effects/soft.tsx` imports

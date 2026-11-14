@@ -23,15 +23,15 @@ From `tokens.ts`:
 
 From `samples.ts` (used by `style.ts` only):
 
-- `samplePage`, `sampleArticle`, `sampleRepo`, `sampleLogo`, `sampleThumb`: inline SVG data URLs that stand in for real assets.
-- `SAMPLE_PAGE_SIZE`, `SAMPLE_ARTICLE_SIZE`, `SAMPLE_REPO_SIZE`: their sizes.
+- `samplePage`, `sampleArticle`, `sampleRepo`, `sampleForm`, `sampleLogo`, `sampleThumb`: inline SVG data URLs that stand in for real assets. `sampleFocus(hint)` and `sampleTick()` are the sample form's own field with focus and ticked box, as `capture` saves a real page's.
+- `SAMPLE_PAGE_SIZE`, `SAMPLE_ARTICLE_SIZE`, `SAMPLE_REPO_SIZE`, `SAMPLE_FORM_SIZE`: their sizes.
 
 ## Invariants
 
 Set in code:
 
 - A card with no `duration` takes its tier's default from `DURATION` in `style.ts`.
-- `samplePage`, `sampleArticle`, `sampleRepo` and `sampleThumb` label themselves as samples. `sampleLogo` is a neutral monogram, never a real mark.
+- `samplePage`, `sampleArticle`, `sampleRepo`, `sampleForm` and `sampleThumb` label themselves as samples. `sampleLogo` is a neutral monogram, never a real mark.
 
 Enforced by `tests/catalog.test.ts`:
 

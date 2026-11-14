@@ -25,7 +25,9 @@ export const C = {
 
 // The stage's palette. Diagrams are written in the forest colours (C.white lines, C.sage accent); the
 // kit's parts read them through `tone`, so one diagram draws in either palette.
-export type Palette = { name: "forest" | "light"; stage: string; diagram: string; card: string; text: string; line: string; accent: string; dim: string; faint: string };
+// `node`: a dark palette's own card fills, when it is not forest (YouTube's Black): a card, its
+// second line, and the accent card's fill.
+export type Palette = { name: "forest" | "light"; stage: string; diagram: string; card: string; text: string; line: string; accent: string; dim: string; faint: string; node?: { fill: string; sub: string; accentFill: string } };
 export const PALETTES: Record<Palette["name"], Palette> = {
   forest: { name: "forest", stage: C.ink, diagram: "#1D3832", card: C.ink, text: "#FFFFFF", line: C.white, accent: C.sage, dim: C.dim, faint: C.faint },
   light: { name: "light", stage: "#F6F6F3", diagram: "#F6F6F3", card: C.black, text: "#123A2E", line: "#123A2E", accent: "#2F7550", dim: "rgba(18,58,46,0.42)", faint: "rgba(18,58,46,0.14)" },

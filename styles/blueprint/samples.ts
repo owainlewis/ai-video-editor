@@ -81,3 +81,34 @@ export const sampleRepo = () =>
      ${bar(160, 1395, 520, 20, "#C6CBD2")}`,
   );
 export const SAMPLE_REPO_SIZE: [number, number] = [1600, 2000];
+
+// A sign-up form, generic and unbranded: two fields, a box to tick and a button, for an agent filling
+// it in. Labelled as a sample; a real reel captures the real page (its fields come with it). The
+// field geometry is exported so the sample card's actions land on it.
+export const SAMPLE_FORM_SIZE: [number, number] = [1600, 1000];
+const field = (y: number, hint: string, ring = false) =>
+  `${ring ? `<rect x="114" y="${y - 6}" width="892" height="96" rx="17" fill="none" stroke="#2563EB" stroke-opacity="0.35" stroke-width="5"/>` : ""}
+   <rect x="120" y="${y}" width="880" height="84" rx="12" fill="#FFFFFF" stroke="${ring ? "#2563EB" : "#C6CBD2"}" stroke-width="2"/>
+   <text x="150" y="${y + 53}" ${font} font-size="32" fill="#9AA0A8">${hint}</text>`;
+export const sampleForm = () =>
+  svg(
+    1600,
+    1000,
+    `<rect width="1600" height="1000" fill="#FFFFFF"/>
+     <rect width="1600" height="88" fill="#F5F6F8"/>
+     ${bar(64, 36, 180, 16, "#C6CBD2")}${bar(1300, 36, 236, 16, "#DADDE2")}
+     <text x="120" y="200" ${font} font-weight="700" font-size="60" fill="#0E1013">Sample form</text>
+     <text x="120" y="252" ${font} font-size="28" fill="#6E737B">Illustration of a capture. A real reel fills in the real page.</text>
+     <text x="120" y="338" ${font} font-weight="700" font-size="28" fill="#0E1013">Name</text>
+     ${field(360, "Your name")}
+     <text x="120" y="488" ${font} font-weight="700" font-size="28" fill="#0E1013">Email</text>
+     ${field(510, "you@example.com")}
+     <rect x="121" y="651" width="38" height="38" rx="8" fill="#FFFFFF" stroke="#C6CBD2" stroke-width="2"/>
+     <text x="180" y="681" ${font} font-size="32" fill="#0E1013">Send me updates</text>
+     <rect x="120" y="740" width="300" height="88" rx="14" fill="#0E1013"/>
+     <text x="270" y="795" text-anchor="middle" ${font} font-weight="700" font-size="32" fill="#FFFFFF">Create account</text>`,
+  );
+// The sample's own looks for a field with focus and a ticked box, as a capture saves a real page's.
+export const sampleFocus = (hint: string) => svg(892, 96, field(6, hint, true).replace(/x="114" y="0"/, 'x="0" y="0"').replace(/x="120"/g, 'x="6"').replace(/x="150"/g, 'x="36"'));
+export const sampleTick = () =>
+  svg(40, 40, `<rect x="1" y="1" width="38" height="38" rx="8" fill="#0E1013"/><path d="M11 20.5l6 6 12-13" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`);

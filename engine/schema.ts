@@ -15,18 +15,58 @@ const CameraRect = z.union([Rect, PhraseFrame]);
 
 const Item = z.object({ text: z.string(), at: Anchor.optional() });
 
+// A form field's text, as the page sets it (from `capture`): `size` is a fraction of the capture's
+// height, `pad` (the left padding and border) of its width.
+// `secret`: a password field, which shows a dot for each letter.
+const FieldFont = z.object({ family: z.string().optional(), size: z.number().positive(), weight: z.number().optional(), color: z.string().optional(), bg: z.string().optional(), pad: z.number().min(0).default(0), secret: z.boolean().optional() });
+// One thing an agent does on a captured page: `type` into a field, `check` a box, `click` words (a
+// button, a link). The target is a `field` by its label, or a `phrase` on the page, from the capture's
+// json; a rect (with `font` for a field) only on a page without one. The resolver fills in the rest.
+const PageAction = z
+  .object({
+    act: z.enum(["type", "click", "check"]),
+    field: z.string().optional(),
+    phrase: z.string().optional(),
+    nth: z.number().int().min(1).optional(),
+    rect: Rect.optional(),
+    text: z.string().max(60).optional(),
+    at: Anchor.optional(),
+    font: FieldFont.optional(),
+    // `check`: the box as the page draws it ticked; `type`: the field as the page draws it with
+    // focus, and where that sits. The capture saves both.
+    checked: z.string().optional(),
+    focused: z.object({ src: z.string(), box: Rect }).optional(),
+  })
+  .refine((a) => [a.field, a.phrase, a.rect].filter(Boolean).length === 1, { message: "an action needs one target: a field, a phrase or a rect" })
+  .refine((a) => a.act !== "type" || !!a.text, { message: "a type action needs its text" })
+  .refine((a) => a.act !== "type" || !a.rect || !!a.font, { message: "a type action on a rect needs the field's font; name the field on a captured page instead" });
+
 // The app mock-ups (effects/apps/): Claude Code and Codex in a terminal, the Claude app and Grok Bot,
 // drawn from the real products' layout, colours and labels. Each plays a script of steps: a step
 // lands on its own spoken words (`at`), else straight after the step before it.
 // `code` spans (in backticks) and **bold** in a step's text are drawn as the app draws them.
+// A line of code a tool wrote or changed: `op` marks a diff's removed (del) or added (add) line.
+// `n` is its line number in the file; without one, lines count up from 1.
+const CodeLine = z.object({ s: z.string().default(""), n: z.number().int().positive().optional(), op: z.enum(["add", "del"]).optional() });
 const CliStep = z.object({
   // prompt: typed into the input, then sent; think: the working line with its verb ("Reading");
   // tool: a tool call (`name`, `text` its argument) that runs, then shows `out`; text: the agent's
   // reply; done: the turn's closing line ("Worked for 14s").
-  type: z.enum(["prompt", "think", "tool", "text", "done"]),
+  // Claude Code only (captured from 2.1.323 on 2026-11-14): agents: subagents launched side by side
+  // (`items`, what each one does); plan: plan mode's "Ready to code?" with the plan (`text` its
+  // title, `items` its lines; a line ending in ":" is a heading) and the choice to proceed.
+  type: z.enum(["prompt", "think", "tool", "text", "done", "agents", "plan"]),
   text: z.string().default(""),
   name: z.string().optional(),
   out: z.array(z.string()).max(4).optional(),
+  // tool (Claude Code): `ask` puts up the permission box first, as manual mode does, and `pick` is
+  // the choice made (1, "Yes", by default). `lines` is the code a Write wrote or an Update's diff,
+  // shown in the box and under the done tool. `desc`: a Bash command's description.
+  ask: z.boolean().optional(),
+  pick: z.number().int().min(1).max(2).optional(),
+  lines: z.array(CodeLine).max(8).optional(),
+  desc: z.string().optional(),
+  items: z.array(z.string()).max(8).optional(),
   // On a prompt that starts with "/": the command menu shown while it types (the real commands).
   menu: z.array(z.object({ name: z.string(), desc: z.string().default("") })).max(4).optional(),
   at: Anchor.optional(),
@@ -88,6 +128,9 @@ export const Visual = z.discriminatedUnion("kind", [
     label: z.object({ text: z.string(), logo: z.string().optional() }).optional(),
     // Lifts one real element out of the capture on `at` and shows it large, the card dimmed behind.
     lift: z.object({ rect: Rect, at: Anchor }).optional(),
+    // An agent at work on the page: a cursor goes to each target in turn, clicks it, and types into a
+    // field or ticks a box. The page under it is the real capture (engine/actions.ts has the timing).
+    actions: z.array(PageAction).max(8).optional(),
   }),
   // B-roll footage: a project file, or "broll:<id>" for a clip from the library.
   // `start` is the offset into the clip in seconds.
@@ -180,6 +223,8 @@ export const Visual = z.discriminatedUnion("kind", [
     // The model line under the name: "Opus 5.5 · Claude Max", "GPT-6-Astra medium".
     model: z.string().optional(),
     welcome: z.boolean().default(true),
+    // Claude Code's permission mode, in the footer: auto (Owain's), plan, accept edits or manual.
+    mode: z.enum(["auto", "plan", "accept", "manual"]).default("auto"),
     backdrop: Backdrop,
     steps: z.array(CliStep).min(1).max(14),
   }),

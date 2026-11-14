@@ -8,15 +8,16 @@ import { zoomAt } from "../engine/resolve";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
 import { markColor } from "./motion";
-import { FunnelVisual, GridVisual, isBlack, pal, prog, SoftAccented, src, TypeVisual, type Tone } from "./soft";
+import { FunnelVisual, GridVisual, isBlack, isGraphite, pal, prog, SoftAccented, src, TypeVisual, type Tone } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
+import { PageActions } from "./pageactions";
 import { AgendaCard, BeforeAfterCard, BentoCard, ChecklistCard, KpiCard, LevelsCard, LogowallCard, MatrixCard, MeterCard, QuoteCard, RingCard, TimelineCard, WaffleCard } from "./cards";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { CodeView } from "./clean/code";
 import { FlowView } from "./clean/flow";
-import { PALETTES, PaletteContext } from "./clean/kit";
+import { type Palette, PALETTES, PaletteContext } from "./clean/kit";
 
 type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number; filter?: string; bleed?: boolean };
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[]; size?: [number, number] };
@@ -167,6 +168,7 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
               />
             );
           })}
+          <PageActions slug={slug} v={v} time={time} start={shot.start} k={k} cursor={Math.round(Math.min(48, Math.max(30, w * 0.04)))} />
           {/* Callouts: a label above the highlighted region, joined by a short line. */}
           {v.highlight.map((hl, i) => {
             if (!hl.label || !hl.rect) return null;
@@ -765,9 +767,16 @@ const ChapterGlow: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h, 
 };
 
 // The kit's laid-out kinds (effects/clean/code.tsx, flow.tsx) draw in the reel palette's colours; off
-// a clean reel they take the shot's tone: forest on dark, the light palette otherwise.
+// a clean reel they take the shot's tone: the light palette, or on dark the video's own dark. On
+// YouTube that is Graphite or Black, never the reels' forest green (Owain: YouTube is "never dark green").
+const laidPalette = (tone?: Tone): Palette => {
+  if (tone !== "dark") return PALETTES.light;
+  if (!isGraphite()) return PALETTES.forest;
+  const c = pal("dark");
+  return { name: "forest", stage: c.bg, diagram: c.card, card: c.bg, text: c.ink, line: c.ink, accent: c.accent, dim: c.muted, faint: c.faint, node: { fill: c.card, sub: c.muted, accentFill: c.chip } };
+};
 const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> }> = ({ slug, shot, time, w, h, v }) => (
-  <PaletteContext.Provider value={PALETTES[shot.tone === "dark" ? "forest" : "light"]}>
+  <PaletteContext.Provider value={laidPalette(shot.tone)}>
     <div style={{ position: "relative", width: w, height: h }}>
       {v.kind === "code" ? <CodeView v={v} time={time} start={shot.start} w={w} h={h} /> : <FlowView v={v} time={time} start={shot.start} w={w} h={h} slug={slug} />}
     </div>

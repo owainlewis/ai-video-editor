@@ -20,6 +20,21 @@ export type Page = {
   // end left out), its box, and the block (paragraph, list item, heading, cell) it sits in.
   runs: { text: string; box: Box; block: number }[];
   blocks: { tag: string; box: Box }[];
+  // The form's fields, for an agent's `actions`: each one's label (its <label>, else its aria-label,
+  // placeholder or name), its box, and how the page sets its text: `size` a fraction of the capture's
+  // height, `pad` (left padding and border) of its width. A box keeps `checked`, itself ticked; a
+  // field keeps `focused`, itself with focus.
+  fields?: PageField[];
+};
+
+export type PageField = {
+  label: string;
+  kind: "text" | "check";
+  box: Box;
+  font?: { family?: string; size: number; weight?: number; color?: string; bg?: string; pad: number; secret?: boolean };
+  checked?: string;
+  // The field with focus, as the page draws it, and where that crop sits (a little outside `box`).
+  focused?: { src: string; box: Box };
 };
 
 // A camera rect named by words on the page: the box around `phrase` (or around several phrases), or
@@ -134,13 +149,28 @@ export function phraseFrame(page: Page, f: PhraseFrame): Box {
   return grow(union(boxes), pad, (pad * page.size[0]) / page.size[1]);
 }
 
+// The field labelled `name`: same words, any case, else the one whose label starts with them.
+export function findField(page: Page, name: string, nth = 1): PageField {
+  const want = tokens(name).join(" ").toLowerCase();
+  const label = (f: PageField) => tokens(f.label).join(" ").toLowerCase();
+  const fields = page.fields ?? [];
+  const exact = fields.filter((f) => label(f) === want);
+  const found = exact.length ? exact : fields.filter((f) => label(f).startsWith(want));
+  if (!found.length) {
+    const near = [...fields].sort((a, b) => edits(label(a), want) - edits(label(b), want)).slice(0, 3);
+    throw new Error(`no field labelled "${name}" on the page${near.length ? `; its fields: ${near.map((f) => `"${f.label}"`).join(", ")}` : " (capture it again to find its fields)"}`);
+  }
+  if (nth > found.length) throw new Error(`"${name}" labels ${found.length} field${found.length > 1 ? "s" : ""}, not ${nth}`);
+  return found[nth - 1];
+}
+
 export type ImageSpec = Extract<VisualSpec, { kind: "image" }>;
 
 // An image visual with its named words turned into rects, and the page's own address on a browser
 // window that does not give its own. Every phrase the page lacks is an error.
 export function placePhrases(v: ImageSpec, page: Page | undefined): { visual: ImageSpec; errors: string[] } {
   const errors: string[] = [];
-  const named = [v.from, v.to].some((r) => r && !Array.isArray(r)) || v.highlight.some((h) => h.phrase);
+  const named = [v.from, v.to].some((r) => r && !Array.isArray(r)) || v.highlight.some((h) => h.phrase) || !!v.actions?.some((a) => a.field || a.phrase);
   if (!page) {
     if (named) errors.push(`${v.src} has no page json beside it, so it cannot name words; capture it with \`studio capture\`, or give rects`);
     return { visual: v, errors };
@@ -159,6 +189,20 @@ export function placePhrases(v: ImageSpec, page: Page | undefined): { visual: Im
     from: camera(v.from),
     to: camera(v.to),
     highlight: v.highlight.map((h) => (h.phrase ? { ...h, rect: attempt(() => markRect(page, h.phrase!, h.nth ?? 1)) } : h)),
+    // A field brings its box, its text style and its ticked look; a phrase to click, its first line.
+    actions: v.actions?.map((a) => {
+      if (a.field) {
+        const f = attempt(() => findField(page, a.field!, a.nth ?? 1));
+        if (f && a.act === "type" && f.kind !== "text") errors.push(`"${a.field}" is a box to check, not a field to type into`);
+        if (f && a.act === "check" && f.kind !== "check") errors.push(`"${a.field}" is a field to type into, not a box to check`);
+        return f ? { ...a, rect: f.box, ...(f.font && { font: f.font }), ...(f.checked && { checked: f.checked }), ...(f.focused && { focused: f.focused }) } : a;
+      }
+      if (a.phrase) {
+        const hit = attempt(() => findPhrase(page, a.phrase!, a.nth ?? 1));
+        return hit ? { ...a, rect: hit.lines[0] } : a;
+      }
+      return a;
+    }),
     // The tab's title and favicon stay the plan's choice: the page json has them to copy in.
     ...(v.frame === "browser" && { url: v.url ?? page.url }),
   };

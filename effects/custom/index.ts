@@ -6,21 +6,11 @@
 // it is drawn in (`panel` true inside a split's panel, where the paper shows and the speaker stays).
 import type React from "react";
 import type { ResolvedShot } from "../../engine/schema";
-import { Drain, Drift, Gaps, Lens, Minds, Scale, Surge, Tally, Thread, Wall } from "./stage";
 
 export type CustomProps = { shot: ResolvedShot; time: number; props: Record<string, unknown>; times: number[]; width: number; height: number; panel: boolean };
-// Drawn to hold still: the frame stays put and only the parts change (measured in the study).
-export const STILL = new Set(["drain", "lens", "wall", "thread", "gaps", "drift", "surge", "scale", "minds", "tally"]);
-export const CUSTOM: Record<string, React.FC<CustomProps>> = {
-  // The stage moves, for YouTube (research/youtube/xxf6D9jynFw/NOTES.md).
-  drain: Drain,
-  lens: Lens,
-  wall: Wall,
-  thread: Thread,
-  gaps: Gaps,
-  drift: Drift,
-  surge: Surge,
-  scale: Scale,
-  minds: Minds,
-  tally: Tally,
-};
+// Empty today: the stage moves drawn for one YouTube study were retired on 2026-11-14 with the old
+// library cards. A new one-off is added here by its key.
+export const CUSTOM: Record<string, React.FC<CustomProps>> = {};
+// Drawn to hold still: the frame stays put and only the parts change. A component that does joins
+// this set by its key.
+export const STILL = new Set<string>();

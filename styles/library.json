@@ -1,0 +1,34 @@
+{
+  "cards": [
+    "blueprint.t1.cli",
+    "blueprint.t1.cli.codex",
+    "blueprint.t1.cli.command",
+    "blueprint.t1.cli.permission",
+    "blueprint.t1.cli.plan",
+    "blueprint.t1.cli.agents",
+    "blueprint.t1.claudeapp",
+    "blueprint.t1.claudeapp.code",
+    "blueprint.t1.grokbot",
+    "blueprint.t1.grokbot.bots",
+    "blueprint.t1.grokbot.profile",
+    "blueprint.t2.code",
+    "blueprint.t2.code.diff",
+    "blueprint.t2.flow",
+    "blueprint.t2.flow.column",
+    "blueprint.t2.flow.versus",
+    "blueprint.t1.beats",
+    "blueprint.t1.list.bracket",
+    "blueprint.t2.capture.browser",
+    "blueprint.t2.capture.form",
+    "blueprint.t1.windows",
+    "blueprint.t2.logos",
+    "blueprint.t2.flow.before-after",
+    "blueprint.t2.flow.fan-out"
+  ],
+  "removed": [
+    "blueprint.t1.cli.diff",
+    "blueprint.t1.cli.bash",
+    "blueprint.t1.claudeapp.light",
+    "blueprint.t2.flow.fan-in"
+  ]
+}

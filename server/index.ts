@@ -27,6 +27,7 @@ import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } 
 import { BROLL, loadLibrary } from "../media/broll.ts";
 import { cameraOnTimeline, clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
 import { effectList } from "../effects/preview.ts";
+import { readCardLibrary, saveInLibrary } from "../media/cardlibrary.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { lastKept } from "../engine/resolve.ts";
 
@@ -183,9 +184,18 @@ export async function startServer(port = 4747) {
     }
 
     if (parts[0] === "effects") {
-      // Approved cards only, unless `all=1` (the gallery's review of candidates).
-      const list = effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube");
-      return send(res, 200, url.searchParams.get("all") === "1" ? list : list.filter((e) => e.approved));
+      // The library's cards, or with `removed=1` the ones taken out of it (to add back).
+      const list = effectList(url.searchParams.get("canvas") === "reel" ? "reel" : "youtube", readCardLibrary());
+      return send(res, 200, url.searchParams.get("removed") === "1" ? list.filter((e) => e.removed) : list.filter((e) => e.approved));
+    }
+
+    // Take a card out of the library, or add it back: { id, inLibrary }. Every open editor reloads it.
+    if (parts[0] === "cards" && req.method === "POST") {
+      const { id, inLibrary } = await body(req);
+      if (typeof id !== "string" || typeof inLibrary !== "boolean") return send(res, 400, { error: "needs { id, inLibrary }" });
+      const lib = saveInLibrary(id, inLibrary);
+      broadcast({ type: "cards" });
+      return send(res, 200, lib);
     }
 
     // The gallery: every project's graphics, from the plan as last resolved, without captions.

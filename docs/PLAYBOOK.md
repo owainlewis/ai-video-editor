@@ -78,20 +78,7 @@ What makes it work, measured:
 - **A card slides over to make room**: 406 px in 13 frames, our MOVE and our ease. Prefer it to cutting when a second part joins a picture.
 - **Cuts are a frame of nothing**: 1 frame out, 2 of black, parts arriving from there. No sound on them: the highest band is lower at a cut than anywhere else.
 
-Eight graphics came out of it, for `side` and `media`, all in the library (`effects/custom/stage.tsx` has the props and beats):
-
-| Graphic | Use it when he says | Plan |
-| --- | --- | --- |
-| `lens` | several things read or check one thing | `angles`, one beat each |
-| `drift` | two things are compared or a list is checked row by row | `rows` with `text`, `ok: false` on the one that matters; add `then` when the right side differs, and each row takes two beats, so the answer lands when it is said |
-| `wall` | something is kept apart on purpose | `inputs`, `said`; beats: reader, chat, wall, message stops |
-| `drain` | something runs out: memory, context, time, budget | `from`, `to`, or `number: false` when no number is said |
-| `thread` | a plan causes a result, part by part | `rows`, one beat each |
-| `surge` | load: a real count arriving and something giving | `count`, `from`, `nodes`, `fail`; the third beat is the said number, the fourth is where it gives |
-| `gaps` | something gets complete | `holes`, `helpers`; `count: false` unless the number is said |
-| `scale` | a trade-off with a verdict | `left`, `right` |
-
-Rules: one accent, on the part that matters; older beams go quiet. Numbers only when said. These are moments, not a look for a whole video: on camera only, and each video still gets its own `DESIGN.md`. Try them on his words in the gallery (`#/gallery?q=lens`, and so on). Owain, 2026-11-13: no rings filled with dots, and show the real product wherever one exists; these are for ideas that have no screen.
+Eight graphics came out of it (`lens`, `drift`, `wall`, `drain`, `thread`, `surge`, `gaps`, `scale`). They were retired on 2026-11-14 with the old library cards, since the kit shows the real product instead (Owain, 2026-11-13: no rings filled with dots). The lessons above still hold. The code is in git history before the commit that removed `effects/custom/stage.tsx`.
 
 ## Needs Owain's call (conflicts with a rule)
 

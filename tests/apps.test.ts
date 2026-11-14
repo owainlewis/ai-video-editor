@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { appBeats, appEnd, appRows, typeTime } from "../engine/apps.ts";
+import { appBeats, appEnd, appRows, askTime, typeTime } from "../engine/apps.ts";
+import { changed, codeRows, highlight } from "../effects/apps/cli.tsx";
 import { cleanSfx, resolveShots, visualAnchors } from "../engine/resolve.ts";
 import { Edit, Visual } from "../engine/schema.ts";
 import { bodyRange, clip, fit, inView, pan, snap, tail, textWidth, windowSize } from "../effects/apps/kit.tsx";
@@ -114,5 +115,49 @@ describe("the app window's camera", () => {
     const cut = clip(long, 400, 30);
     expect(cut.endsWith("…")).toBe(true);
     expect(textWidth(cut, 30)).toBeLessThanOrEqual(400);
+  });
+});
+
+describe("Claude Code's own moments (captured from 2.1.323)", () => {
+  const text = (r: { s: string }[]) => r.map((c) => c.s).join("");
+
+  it("brightens only the changed words of an edited line, as the capture shows", () => {
+    const [del, add] = changed("  return `Hello, ${name}!`;", "  return `Hi, ${name}. Welcome back!`;");
+    const a = "  return `Hello, ${name}!`;", b = "  return `Hi, ${name}. Welcome back!`;";
+    expect(del.map(([f, t]) => a.slice(f, t))).toEqual(["Hello"]);
+    expect(add.map(([f, t]) => b.slice(f, t))).toEqual(["Hi", ". Welcome back"]);
+  });
+
+  it("numbers a diff, keeps a replaced line's number, and bands removed and added lines", () => {
+    const rows = codeRows([{ s: "function a() {", n: 12 }, { s: "  return 1;", op: "del" }, { s: "  return 2;", op: "add" }, { s: "}" }], 40, 6);
+    expect(rows.map(text).map((t) => t.trimEnd())).toEqual(["      12  function a() {", "      13 -  return 1;", "      13 +  return 2;", "      14  }"]);
+    expect(rows[1].some((c) => c.bg === "#3D0100")).toBe(true);
+    expect(rows[2].some((c) => c.bg === "#022800")).toBe(true);
+    // The band stops a column short of its edge: on the capture's 100-column terminal it ended at
+    // column 93, with the 6-column margin a result's diff keeps.
+    expect(text(rows[1]).length).toBe(39);
+    expect(text(codeRows([{ s: "a", op: "del" }], 100, 6, 6)[0]).length).toBe(93);
+  });
+
+  it("wraps a long code line onto the next row instead of cutting it", () => {
+    const rows = codeRows([{ s: "x".repeat(50), op: "add" }], 30, 1);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows.map(text).join("")).toContain("x".repeat(20));
+    expect(rows.every((r) => !text(r).includes("…"))).toBe(true);
+  });
+
+  it("colours code as Monokai: keywords, declarations, names called, strings", () => {
+    const cells = highlight("export function greet(name) { return `Hi`; }");
+    const colour = (s: string) => cells.find((c) => c.s.includes(s))?.c;
+    expect([colour("export"), colour("function"), colour("greet"), colour("`Hi`")]).toEqual(["#F92672", "#66D9EF", "#A6E22E", "#E6DB74"]);
+  });
+
+  it("gives a tool that asks first the time to read the box, longer when a second choice is picked", () => {
+    expect(askTime({})).toBe(0);
+    expect(askTime({ ask: true })).toBeCloseTo(1.9);
+    expect(askTime({ ask: true, pick: 2 })).toBeCloseTo(2.4);
+    const v = Visual.parse({ kind: "cli", mode: "manual", steps: [{ type: "tool", name: "Update", text: "a.ts", ask: true }] });
+    const [b] = appBeats(v as never, 0);
+    expect(b.t1 - b.t0).toBeCloseTo(1.2 + 1.9);
   });
 });

@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { cardPlan, effectList, settledTime, shotPlan } from "../effects/preview.ts";
 import { cards, slotIssues } from "../styles/blueprint/style.ts";
 import { libraryVariants } from "../media/qc.ts";
+import { readCardLibrary } from "../media/cardlibrary.ts";
+
+// Every catalog card, to test the catalog itself apart from what the library holds today.
+const EVERY = { cards: cards.map((c) => c.id), removed: [] };
 
 describe("the gallery's plans", () => {
   it("plays every card in a layout the card allows, at sample and longest text", () => {
     for (const canvas of ["youtube", "reel"] as const)
-      for (const e of effectList(canvas))
+      for (const e of effectList(canvas, EVERY))
         for (const longest of [false, true]) {
           const card = cards.find((c) => c.id === e.id)!;
           const plan = cardPlan(e.id, canvas, "dark", longest);
@@ -20,7 +24,7 @@ describe("the gallery's plans", () => {
   });
 
   it("plays one project shot alone and silent, with footage only when asked", () => {
-    const r = { ...cardPlan(effectList("youtube")[0].id, "youtube"), video: "p/source/video.mp4", audio: "p/build/mix.wav", sfx: [{ kind: "whoosh" as const, t: 1 }] };
+    const r = { ...cardPlan(effectList("youtube", EVERY)[0].id, "youtube"), video: "p/source/video.mp4", audio: "p/build/mix.wav", sfx: [{ kind: "whoosh" as const, t: 1 }] };
     r.shots = [{ ...r.shots[0], end: 2 }, { ...r.shots[0], start: 2, end: 4 }];
     const bare = shotPlan(r, 1, false);
     expect(bare.shots).toEqual([r.shots[1]]);
@@ -29,19 +33,33 @@ describe("the gallery's plans", () => {
   });
 
   it("leaves the YouTube-only lower third out of reels, and marks it off the look on YouTube", () => {
-    expect(effectList("reel").some((e) => e.kind === "lower")).toBe(false);
-    expect(effectList("youtube").find((e) => e.kind === "lower")?.off).toBeTruthy();
+    expect(effectList("reel", EVERY).some((e) => e.kind === "lower")).toBe(false);
+    expect(effectList("youtube", EVERY).find((e) => e.kind === "lower")?.off).toBeTruthy();
   });
 
   it("shows each canvas's look: house graphics first on YouTube, the clean kit on reels", () => {
-    const wide = effectList("youtube");
+    const wide = effectList("youtube", EVERY);
     expect(wide.slice(0, 4).map((e) => e.kind)).toEqual(["words", "focus", "shift", "map"]);
     expect(wide.some((e) => e.id === "blueprint.t1.beats")).toBe(false);
-    const kit = effectList("reel").filter((e) => !e.off).map((e) => e.id);
+    const kit = effectList("reel", EVERY).filter((e) => !e.off).map((e) => e.id);
     expect(kit.slice(0, 2)).toEqual(["blueprint.t1.beats", "blueprint.t1.list.bracket"]);
     expect(kit).toContain("blueprint.t1.words");
     expect(kit).not.toContain("blueprint.t2.kpi");
-    expect(effectList("youtube").filter((e) => e.off).map((e) => e.kind)).toEqual(["lower"]);
+  });
+
+  it("shows only the library's cards, and the removed ones apart, to add back", () => {
+    const lib = { cards: ["blueprint.t1.beats", "blueprint.t1.cli"], removed: ["blueprint.t2.code"] };
+    const list = effectList("reel", lib);
+    expect(list.map((e) => [e.id, e.approved, e.removed])).toEqual([
+      ["blueprint.t1.beats", true, false],
+      ["blueprint.t1.cli", true, false],
+      ["blueprint.t2.code", false, true],
+    ]);
+    // Today's library on reels is the clean kit, nothing retired.
+    const now = effectList("reel", readCardLibrary()).filter((e) => e.approved);
+    expect(now.length).toBeGreaterThanOrEqual(15);
+    expect(now.some((e) => ["words", "kpi", "chart", "custom"].includes(e.kind))).toBe(false);
+    expect(effectList("youtube", EVERY).filter((e) => e.off).map((e) => e.kind)).toEqual(["lower"]);
   });
 
   it("draws a clean card as a clean reel does", () => {

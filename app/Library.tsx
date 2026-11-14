@@ -42,7 +42,10 @@ export const Library: React.FC<{
   );
   const [effects, setEffects] = useState<Effect[]>([]);
   useEffect(() => {
-    api.effects(canvas).then(setEffects).catch(() => {});
+    const load = () => api.effects(canvas).then(setEffects).catch(() => {});
+    load();
+    // The gallery can change the library while this is open.
+    return api.events((e) => e.type === "cards" && load());
   }, [canvas]);
   // Cards off the project's look stay out of the way unless asked for.
   const [showOff, setShowOff] = useState(false);

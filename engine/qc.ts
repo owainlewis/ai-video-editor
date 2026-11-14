@@ -6,10 +6,11 @@
 import { COVER, HOOK, type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
 import type { Resolved, Word } from "./schema.ts";
 import { isApp } from "./apps.ts";
+import { actionBeats, actionOffset } from "./actions.ts";
 
 // ---------- plan checks ----------
 
-const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of", "icon", "shape", "diff", "lang", "marks"]);
+const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of", "icon", "shape", "diff", "lang", "marks", "act", "field", "phrase", "nth", "rect", "font", "focused", "checked"]);
 
 // Every piece of text a visual puts on screen.
 export const visualText = (v: unknown): string[] => {
@@ -39,7 +40,9 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
       issues.push({ level: "warn", message: `${label(s, i)}: ${n} words on screen for ${len.toFixed(1)}s; about ${need.toFixed(1)}s to read` });
     // Lingering: once the last part has landed, a graphic has made its point. Hold about two seconds,
     // then cut back (Owain, 2026-10-25: "sometimes the graphics linger a bit too long").
-    const last = Math.max(s.start, ...(v.times ?? []).filter((t) => t < s.end), ...((v as { words?: number[] }).words ?? []));
+    // An agent on a page is done when its last key is typed.
+    const acted = v.kind === "image" && v.actions?.length ? actionBeats(v.actions, s.start, (v.times ?? []).slice(actionOffset(v))).map((b) => b.t1) : [];
+    const last = Math.max(s.start, ...(v.times ?? []).filter((t) => t < s.end), ...((v as { words?: number[] }).words ?? []), ...acted.filter((t) => t < s.end));
     const linger = s.end - last;
     const settle = v.kind === "constraint" ? 5 : 3;
     // A recorded screen keeps moving; QC measures that on the footage instead.

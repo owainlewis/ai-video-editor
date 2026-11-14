@@ -16,33 +16,47 @@ import { Side } from "./ui";
 //
 // Links: #/gallery?tab=projects&q=flow opens the projects tab filtered to "flow".
 
-export type Item = { key: string; title: string; sub: string; plan: Resolved; footage?: Resolved; from: number; to: number; settled: number; visual: unknown; slug?: string };
+// `card` is set on a library card: its id, and whether it is in the library now (to remove it or add it back).
+export type Item = { key: string; title: string; sub: string; plan: Resolved; footage?: Resolved; from: number; to: number; settled: number; visual: unknown; slug?: string; card?: { id: string; inLibrary: boolean } };
 
 const query = () => new URLSearchParams(location.hash.split("?")[1] ?? "");
 
 export const Gallery: React.FC = () => {
   const q0 = query();
   const [tab, setTab] = useState<"library" | "projects">(q0.get("tab") === "projects" ? "projects" : "library");
-  const [canvas, setCanvas] = useState<Canvas>(q0.get("canvas") === "reel" ? "reel" : "youtube");
-  const [theme, setTheme] = useState<"dark" | "light">(q0.get("theme") === "light" ? "light" : "dark");
+  // Reels first: the library is the reel kit (Owain, 2026-11-14: the YouTube view looked like old
+  // cards). YouTube shows its two looks: Ivory, the default, and Black now and then (never dark green).
+  const [canvas, setCanvas] = useState<Canvas>(q0.get("canvas") === "youtube" ? "youtube" : "reel");
+  const [theme, setTheme] = useState<"black" | "light">(q0.get("theme") === "black" ? "black" : "light");
   const [search, setSearch] = useState(q0.get("q") ?? "");
   const [longest, setLongest] = useState(q0.get("text") === "longest");
-  // Approved cards only, unless reviewing every candidate.
-  const [all, setAll] = useState(q0.get("all") === "1");
+  // The library's cards, or the ones taken out of it, to add back.
+  const [removed, setRemoved] = useState(q0.get("view") === "removed");
   const [effects, setEffects] = useState<Effect[]>([]);
+  const [removedCount, setRemovedCount] = useState(0);
   const [projects, setProjects] = useState<{ slug: string; resolved: Resolved }[]>([]);
   const [open, setOpen] = useState<Item | null>(null);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams({ tab, canvas, theme, ...(longest ? { text: "longest" } : {}), ...(all ? { all: "1" } : {}), ...(search ? { q: search } : {}) });
+    const params = new URLSearchParams({ tab, canvas, theme, ...(longest ? { text: "longest" } : {}), ...(removed ? { view: "removed" } : {}), ...(search ? { q: search } : {}) });
     history.replaceState(null, "", `#/gallery?${params}`);
-  }, [tab, canvas, theme, longest, all, search]);
+  }, [tab, canvas, theme, longest, removed, search]);
 
+  // The cards, again whenever the library changes (here, in another window, or by hand).
   useEffect(() => {
-    api.effects(canvas, all).then(setEffects).catch((e) => setError(String(e.message)));
-  }, [canvas, all]);
+    const load = () => {
+      api.effects(canvas, removed).then(setEffects).catch((e) => setError(String(e.message)));
+      api.effects(canvas, true).then((l) => setRemovedCount(l.length)).catch(() => {});
+    };
+    load();
+    return api.events((e) => e.type === "cards" && load());
+  }, [canvas, removed]);
+  // Back to the library once nothing is left to add back.
+  useEffect(() => {
+    if (removed && !removedCount) setRemoved(false);
+  }, [removed, removedCount]);
 
   // Plans change while Claude works; reload the projects a moment after each save.
   useEffect(() => {
@@ -62,7 +76,7 @@ export const Gallery: React.FC = () => {
       // A reel shows its clean kit only, as library QC checks it.
       effects.filter((e) => canvas === "youtube" || !e.off).map((e) => {
         const plan = cardPlan(e.id, canvas, canvas === "youtube" ? theme : undefined, longest);
-        return { key: e.id, title: e.kind === "custom" ? e.purpose : e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual };
+        return { key: e.id, title: e.kind === "custom" ? e.purpose : e.kind, sub: e.summary, plan, from: 0, to: plan.duration, settled: settledTime(plan.shots[0]), visual: plan.shots[0].visual, card: { id: e.id, inLibrary: !!e.approved } };
       }),
     [effects, canvas, theme, longest],
   );
@@ -110,21 +124,26 @@ export const Gallery: React.FC = () => {
             {tab === "library" && (
               <>
                 <div className="seg">
-                  <button className={canvas === "youtube" ? "on" : ""} onClick={() => setCanvas("youtube")}>YouTube</button>
                   <button className={canvas === "reel" ? "on" : ""} onClick={() => setCanvas("reel")}>Reel</button>
+                  <button className={canvas === "youtube" ? "on" : ""} onClick={() => setCanvas("youtube")}>YouTube</button>
                 </div>
                 {canvas === "youtube" && (
                   <div className="seg">
-                    <button className={theme === "dark" ? "on" : ""} onClick={() => setTheme("dark")}>Graphite</button>
                     <button className={theme === "light" ? "on" : ""} onClick={() => setTheme("light")}>Ivory</button>
+                    <button className={theme === "black" ? "on" : ""} onClick={() => setTheme("black")}>Black</button>
                   </div>
                 )}
                 <label className="small" title="Fill every text slot to its limit, to check the layout holds">
                   <input type="checkbox" checked={longest} onChange={(e) => setLongest(e.target.checked)} /> Longest text
                 </label>
-                <label className="small" title="Every card, approved or not, to review candidates">
-                  <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show all
-                </label>
+                {(removedCount > 0 || removed) && (
+                  <div className="seg">
+                    <button className={!removed ? "on" : ""} onClick={() => setRemoved(false)}>In library</button>
+                    <button className={removed ? "on" : ""} onClick={() => setRemoved(true)} title="Cards taken out of the library, to add back">
+                      Removed <span className="muted">{removedCount}</span>
+                    </button>
+                  </div>
+                )}
               </>
             )}
             <input className="search" placeholder="Filter: kind, project, words…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -133,7 +152,7 @@ export const Gallery: React.FC = () => {
           {tab === "library" ? (
             <div className={`tiles ${canvas}`}>
               {library.filter((i) => match(i.key, i.title, i.sub, String((i.visual as { kind?: string }).kind))).map((i) => <Tile key={i.key} item={i} onOpen={() => setOpen(i)} />)}
-              {!library.length && !error && <p className="muted">No approved cards yet. Tick Show all to review the candidates.</p>}
+              {!library.length && !error && <p className="muted">{removed ? "Nothing removed." : "The library is empty. Add cards back from Removed."}</p>}
             </div>
           ) : (
             groups.map((g) => {
@@ -153,7 +172,7 @@ export const Gallery: React.FC = () => {
           )}
         </div>
       </main>
-      {open && <Big item={open} onClose={() => setOpen(null)} />}
+      {open && <Big item={open} onClose={() => setOpen(null)} onLibrary={(inLibrary) => api.setInLibrary(open.card!.id, inLibrary).then(() => setOpen(null)).catch((e) => setError(String(e.message)))} />}
       {creating && <NewProject onClose={() => setCreating(false)} />}
     </div>
   );
@@ -196,7 +215,7 @@ export const Tile: React.FC<{ item: Item; onOpen: () => void }> = ({ item, onOpe
 };
 
 // One graphic large, with controls, on a loop; with the footage for a project's graphic.
-const Big: React.FC<{ item: Item; onClose: () => void }> = ({ item, onClose }) => {
+const Big: React.FC<{ item: Item; onClose: () => void; onLibrary: (inLibrary: boolean) => void }> = ({ item, onClose, onLibrary }) => {
   const [footage, setFootage] = useState(!!item.footage);
   const r = footage && item.footage ? item.footage : item.plan;
   const comp = compositionFor(r.canvas);
@@ -217,6 +236,12 @@ const Big: React.FC<{ item: Item; onClose: () => void }> = ({ item, onClose }) =
             </label>
           )}
           {item.slug && <a href={`#/p/${item.slug}`}>Open project</a>}
+          {item.card &&
+            (item.card.inLibrary ? (
+              <button onClick={() => onLibrary(false)} title="Take this card out of the library. It stays under Removed, to add back.">Remove from library</button>
+            ) : (
+              <button className="primary" onClick={() => onLibrary(true)}>Add back to library</button>
+            ))}
           <button onClick={onClose}>Close</button>
         </div>
         <Player key={footage ? "f" : "p"} component={component(r)} inputProps={r} durationInFrames={frames(r)} fps={r.fps} compositionWidth={comp.width} compositionHeight={comp.height}

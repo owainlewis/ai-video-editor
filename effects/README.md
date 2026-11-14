@@ -35,7 +35,8 @@ The Remotion compositions and every visual. The editor plays a resolved plan thr
 - `cardGeom`, `Geom`, `Box`, `Fit`, `fit`, and the `*Card` components and `*Geom` functions per card kind (`cards.tsx`): cards laid out by geometry functions. `tests/catalog.test.ts` checks `cardGeom`.
 - `ChartVisual`, `PipelineVisual`, `ConstraintVisual` (`elements.tsx`).
 - `GridVisual`, `FunnelVisual`, `TypeVisual`, `Blueprint`, `SceneCanvas`, `SoftAccented`, `pal`, `darkIsGraphite`, `isBlack`, `Tone`, `Pal`, `Box`, `odometerColumns`, `funnelLayout`, and a re-export of `ACCENT` (`soft.tsx`).
-- `BrowserChrome`, `WindowsVisual`, `browserGeom`, `windowsGeom`, `chromeHeight`, `addressRoom`, `splitUrl` (`browser.tsx`).
+- `BrowserChrome`, `WindowsVisual`, `browserGeom`, `windowsGeom`, `chromeHeight`, `stackChromeHeight`, `addressRoom`, `splitUrl` (`browser.tsx`).
+- `PageActions` (`pageactions.tsx`): an agent at work on a captured page, inside the image card's camera frame: the cursor (the same arrow `record` films) travels to each target and clicks with a sage ring; a field shows its captured focus look and types in the page's font over its own background (dots for a password; it scrolls when the text outgrows it); a box shows its captured tick.
 
 **Design tokens and motion**
 
@@ -46,7 +47,7 @@ The Remotion compositions and every visual. The editor plays a resolved plan thr
 
 **Plans for preview (`preview.ts`)**
 
-- `effectList`, `offBrand`, `Canvas`: the library cards a canvas can show.
+- `effectList(canvas, library)`, `offBrand`, `Canvas`: the library cards a canvas can show, from `styles/library.json` as `media/cardlibrary.ts` reads it.
 - `cardPlan`: a one-shot plan for a library card sample. `cardLayout`: the layout a card is placed in.
 - `shotPlan`: one shot of a project, alone and silent. `settledTime`: the time a graphic has settled.
 
@@ -68,7 +69,7 @@ Used by `app/` (editor, gallery, library, inspector, QC) and `server/` and `medi
 - Camera moves within a shot run on `cameraProgress`, one per shot (`camera.ts`, `Visuals.tsx:ImageCard`).
 - `VideoVisual` converts seconds to frames at a fixed 30 fps.
 - Card geometry functions are pure. A card's height comes from the numbers that lay out its content, every text is sized so its longest line fits its room, and sizes, colours and motion come from the style's tokens (`cards.tsx` header).
-- `chromeHeight` stays between 66 and 80 px so the address is never under the 24 px label floor. The browser frame is ours, and the page inside is always the real capture (`browser.tsx`).
+- `chromeHeight` stays between 66 and 80 px so the address is never under the 24 px label floor; a stack's bars are at least 74 px, since its windows are narrower and the ones behind step back. The browser frame is ours, and the page inside is always the real capture (`browser.tsx`).
 - Logos always sit on white tiles, in either tone (`cards.tsx:LogowallCard`).
 - Charts say where their numbers come from, or "Illustration" when they are only a shape (`elements.tsx:ChartVisual`).
 - Every dot in `ConstraintVisual` is a pure function of time, so frames render the same every time.

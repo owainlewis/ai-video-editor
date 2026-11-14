@@ -2,6 +2,7 @@
 // Pure functions, so they are easy to test.
 import type { Chunk, EditPlan, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
 import { appAnchors, appBeats, isApp, typeRate } from "./apps.ts";
+import { actionBeats, actionOffset, FOCUS } from "./actions.ts";
 import { codeAnchors, codeBeats, codeIssues, codeMoments, codeResets, codeTimes, isDiff } from "./code.ts";
 import { flowAnchors, flowBeats, flowIssues, flowMoments, flowResets, flowTimes } from "./flow.ts";
 
@@ -71,7 +72,7 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "windows":
       return v.items.map((it) => it.at);
     case "logos": return v.items.map((it) => it.at);
-    case "image": return [...v.highlight.map((h) => h.at), ...(v.lift ? [v.lift.at] : [])];
+    case "image": return [...v.highlight.map((h) => h.at), ...(v.lift ? [v.lift.at] : []), ...(v.actions ?? []).map((a) => a.at)];
     case "compare": return [v.right.at];
     case "beforeafter": return [v.after.at];
     case "quote":
@@ -597,9 +598,19 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
       });
       for (const t of b.marks) ev.push({ kind: "blip", t, gain: 0.6, exact: true });
     }
+    // An agent on a page: a click as each target is pressed, keys under what it types. Its marks blip.
+    if (v.kind === "image" && v.actions?.length) {
+      const off = actionOffset(v);
+      actionBeats(v.actions, s.start, times.slice(off)).forEach((b, n) => {
+        const a = v.actions![n];
+        ev.push({ kind: "pop", t: b.t, gain: 0.45, exact: true });
+        if (a.act === "type") typing(b.t + FOCUS, a.text?.length ?? 0, (a.text?.length ?? 0) / Math.max(0.05, b.t1 - b.t - FOCUS));
+      });
+    }
+    const marked = v.kind === "image" ? times.slice(0, actionOffset(v)) : times;
     const each = v.kind === "image" ? "blip" : v.kind === "logos" ? "chime" : v.kind === "list" || v.kind === "beats" ? "pop" : null;
     // A huge card beat lands with a low hit under it; the smaller ones tick.
-    if (each) times.forEach((t, n) => ev.push(v.kind === "beats" && v.items[n]?.size === "huge" ? { kind: "impact", t, gain: 0.5, exact: true } : { kind: each, t, gain: 0.6, exact: true }));
+    if (each) marked.forEach((t, n) => ev.push(v.kind === "beats" && v.items[n]?.size === "huge" ? { kind: "impact", t, gain: 0.5, exact: true } : { kind: each, t, gain: 0.6, exact: true }));
     // A click or a mark on a recorded screen; the file spans the reel, so only this shot's.
     if (v.kind === "video") for (const t of v.ticks ?? []) if (t >= s.start && t < s.end) ev.push({ kind: "pop", t, gain: 0.45, exact: true });
   });
