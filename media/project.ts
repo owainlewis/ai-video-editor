@@ -15,6 +15,7 @@ import { BROLL, useClip } from "./broll.ts";
 import { cameraOnTimeline, clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapTimes, placed } from "../engine/cut.ts";
 import { resolveParts } from "../engine/parts.ts";
+import { resolveCta } from "../engine/cta.ts";
 import { MAIN } from "../engine/schema.ts";
 import { ffmpeg, FPS, imageSize, mediaProbe, readJson, ROOT, writeJson } from "./tools.ts";
 
@@ -61,6 +62,8 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const clean = !youtube;
   const { hook, issues: hookIssues } = clean ? resolveHook(plan.hook, words, shots, meta.duration, FPS, explicit) : { hook: undefined, issues: [] };
   issues.push(...hookIssues);
+  const { cta, issues: ctaIssues } = clean ? resolveCta(plan.cta, words, FPS) : { cta: undefined, issues: [] };
+  issues.push(...ctaIssues);
   issues.push(...(clean ? lintClean(shots, meta.duration, !!meta.script, hook, plan.cover) : lintWide(shots, meta.duration)));
   // The cover is its own image, made in Higgsfield and uploaded apart from the video (2026-11-13).
   // The Instagram caption, posted with the reel; approval copies it beside the video.
@@ -225,6 +228,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       : {}),
     shots,
     ...(hook ? { hook } : {}),
+    ...(cta ? { cta } : {}),
     ...(cover ? { cover } : {}),
     parts,
     chunks: chunkWords(words, plan.accents, [...shots.map((s) => s.start).slice(1), ...joins(cut)].sort((a, b) => a - b), FPS),

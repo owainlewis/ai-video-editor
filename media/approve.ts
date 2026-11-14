@@ -7,6 +7,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { type ApprovalFacts, type ApprovalRecord, type ApprovalState, approvalState, day, exportReady, fileTitle, thisWeek, WEEKLY_TARGET } from "../engine/approve.ts";
 import type { Issue } from "../engine/resolve.ts";
 import { uploadCover } from "./coverkit.ts";
+import { NO_CTA } from "./nocta.ts";
 import { handCover } from "./project.ts";
 import { coverStill } from "./render.ts";
 import { envValue, type Log, readJson, writeJson } from "./tools.ts";
@@ -69,6 +70,8 @@ export function approvalFacts(dir: string): ApprovalFacts {
   }
   return {
     video: mtime(join(dir, "renders/final.mp4")),
+    cta: !!readJson<{ cta?: string }>(join(dir, "edit.json")).cta,
+    noCta: mtime(join(dir, NO_CTA)),
     plan: Math.max(mtime(join(dir, "edit.json")) ?? 0, mtime(join(dir, "cut.json")) ?? 0),
     check,
     exporting: exporting(dir),
@@ -87,7 +90,8 @@ export function approval(dir: string) {
 const isReel = (dir: string) => readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas !== "youtube";
 
 // Copy a reel's current final export and its cover into its own folder in the approved folder:
-// "<YYYY-MM-DD> <title>/reel.mp4", "image.jpg" and, when the project has one, "caption.txt"
+// "<YYYY-MM-DD> <title>/reel.mp4" (for Instagram), "reel-no-cta.mp4" (without the call to action,
+// for TikTok and LinkedIn, when the plan names one), "image.jpg" and, when the project has one, "caption.txt"
 // (Owain, 2026-11-13: "reel-name/ caption.txt, reel.mp4, image.jpg"). A folder name taken by anything else gets " (2)", " (3)" and so on; this reel's own
 // earlier folder is reused, or moved to the Trash once the new one is in place, so a failure never
 // leaves it with neither.
@@ -113,6 +117,7 @@ export async function approve(projects: string, slug: string, opts: Options = {}
   for (let n = 2; !free(name); n++) name = `${stem} (${n})`;
   const into = join(folder, name);
   const video = join(into, "reel.mp4");
+  const noCta = join(into, "reel-no-cta.mp4");
   const cover = join(into, "image.jpg");
 
   // The cover is made in the project first, then each file is copied in under a hidden name and
@@ -131,7 +136,7 @@ export async function approve(projects: string, slug: string, opts: Options = {}
   }
   if (!existsSync(drawn)) throw fail("the cover was not drawn", 500);
   // The export must still be the one that was checked: a render may have started meanwhile.
-  if (mtime(join(dir, "renders/final.mp4")) !== facts.video) throw fail("the export changed while approving; try again");
+  if (mtime(join(dir, "renders/final.mp4")) !== facts.video || mtime(join(dir, NO_CTA)) !== facts.noCta) throw fail("the export changed while approving; try again");
   mkdirSync(into, { recursive: true });
   const place = (from: string, to: string) => {
     const part = join(into, `.${basename(to)}.partial`);
@@ -139,6 +144,10 @@ export async function approve(projects: string, slug: string, opts: Options = {}
     renameSync(part, to);
   };
   place(join(dir, "renders/final.mp4"), video);
+  // The reel without its call to action, for TikTok and LinkedIn, when the plan names one.
+  const withoutCta = facts.cta && existsSync(join(dir, NO_CTA));
+  if (withoutCta) place(join(dir, NO_CTA), noCta);
+  else rmSync(noCta, { force: true });
   place(drawn, cover);
   // The caption to post with it, when the project has one.
   const text = join(into, "caption.txt");
@@ -152,7 +161,7 @@ export async function approve(projects: string, slug: string, opts: Options = {}
     if (prev.folder !== into && existsSync(prev.folder)) moveToTrash(prev.folder, opts.trash);
   } else if (prev) for (const f of [prev.video, prev.cover]) if (existsSync(f)) moveToTrash(f, opts.trash);
 
-  const record: ApprovalRecord = { at: now.toISOString(), folder: into, video, cover, title };
+  const record: ApprovalRecord = { at: now.toISOString(), folder: into, video, ...(withoutCta ? { noCta } : {}), cover, title };
   writeJson(recordFile(dir), record);
   return record;
 }

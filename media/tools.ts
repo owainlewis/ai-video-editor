@@ -49,6 +49,8 @@ export function loudness(file: string): number {
 // How long a file's first sound stream runs, in seconds (NaN when it has none).
 export const probeAudioDuration = (file: string) =>
   parseFloat(execFileSync("ffprobe", ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));
+export const probeVideoDuration = (file: string) =>
+  parseFloat(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));
 
 export const probeSize = (file: string): [number, number] => {
   const [w, h] = execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file], { encoding: "utf8" })

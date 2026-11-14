@@ -25,7 +25,7 @@ uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <p
 
 ### Modules
 
-- `mix.py`: `main(project, config, out_path)`, `library_root()`, `ffmpeg(args)`, `loudness(path)`, `duck_graph(gain, music_db)`.
+- `mix.py`: `main(project, config, out_path)` (a config's `voiceEnd` silences the voice from there, for the reel without its call to action), `library_root()`, `ffmpeg(args)`, `loudness(path)`, `duck_graph(gain, music_db)`.
 - `sfx.py`: `render(events, seconds, root_hz, library=None, synth=False, youtube=False)`, `thin(events, min_gap, tap_gain)`.
 - `library.py`: `SoundLibrary(root, cache)`, `decode(path, cache)`, `music_files(root, mood)`, `music_bed(path, seconds, cache, crossfade=2.0, start=0.0)`.
 - `dsp.py`: `SR` and helpers (`lowpass`, `highpass`, `bandpass`, `stereo`, `place`, `reverb`, `fade`, `rms_db`, `to_rms`, `t_axis`, `midi_hz`).

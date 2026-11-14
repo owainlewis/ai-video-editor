@@ -28,12 +28,12 @@ const cover = async (_p: string, slug: string, file: string) => writeFileSync(fi
 const day = (iso: string) => new Date(iso);
 
 // A reel with its plan at T, and (unless told otherwise) an export a minute later with a clean check.
-function reel(slug: string, o: { title?: string; caption?: string; canvas?: string; video?: number | null; check?: number | null; errors?: number; cut?: number } = {}) {
+function reel(slug: string, o: { title?: string; caption?: string; canvas?: string; video?: number | null; check?: number | null; errors?: number; cut?: number; cta?: boolean; noCta?: number | null } = {}) {
   const dir = join(projects, slug);
   mkdirSync(join(dir, "renders"), { recursive: true });
   mkdirSync(join(dir, "checks"), { recursive: true });
   writeFileSync(join(dir, "project.json"), "{}");
-  writeFileSync(join(dir, "edit.json"), JSON.stringify({ title: o.title ?? "Two types of agent", canvas: o.canvas ?? "reel", shots: [] }));
+  writeFileSync(join(dir, "edit.json"), JSON.stringify({ title: o.title ?? "Two types of agent", canvas: o.canvas ?? "reel", ...(o.cta ? { cta: "If you want a guide" } : {}), shots: [] }));
   at(join(dir, "edit.json"), T);
   if (o.caption !== undefined) writeFileSync(join(dir, "caption.txt"), o.caption);
   if (o.cut !== undefined) {
@@ -44,6 +44,12 @@ function reel(slug: string, o: { title?: string; caption?: string; canvas?: stri
   if (video !== null) {
     writeFileSync(join(dir, "renders/final.mp4"), `video of ${slug}`);
     at(join(dir, "renders/final.mp4"), video);
+  }
+  // The version without the call to action is written just after the export.
+  const noCta = o.noCta === undefined ? (o.cta && video !== null ? video + 2_000 : null) : o.noCta;
+  if (noCta !== null) {
+    writeFileSync(join(dir, "renders/final-no-cta.mp4"), `no-cta video of ${slug}`);
+    at(join(dir, "renders/final-no-cta.mp4"), noCta);
   }
   const check = o.check === undefined ? (video ?? T) + 5_000 : o.check;
   if (check !== null) {
@@ -57,6 +63,17 @@ function reel(slug: string, o: { title?: string; caption?: string; canvas?: stri
 const files = () => (existsSync(folder) ? readdirSync(folder, { recursive: true }).map(String).filter((f) => f.includes("/")).sort() : []);
 
 describe("approving a reel", () => {
+  it("copies the version without the call to action beside the reel, and needs a current one", async () => {
+    reel("a", { cta: true });
+    const r = await approve(projects, "a", { cover, now: day("2026-11-14T09:00:00") });
+    expect(files()).toEqual(["2026-11-14 Two types of agent/image.jpg", "2026-11-14 Two types of agent/reel-no-cta.mp4", "2026-11-14 Two types of agent/reel.mp4"]);
+    expect(readFileSync(r.noCta!, "utf8")).toBe("no-cta video of a");
+    reel("b", { cta: true, noCta: null });
+    await expect(approve(projects, "b", { cover })).rejects.toThrow(/no version without the call to action/);
+    reel("c", { cta: true, noCta: T + 1_000 });
+    await expect(approve(projects, "c", { cover })).rejects.toThrow(/no version without the call to action/);
+  });
+
   it("refuses with no export", async () => {
     reel("a", { video: null, check: null });
     await expect(approve(projects, "a", { cover })).rejects.toThrow(/no export yet/);

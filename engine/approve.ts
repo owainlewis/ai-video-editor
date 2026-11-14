@@ -12,13 +12,17 @@ export const WEEKLY_TARGET = 7;
 export type ApprovalState = "draft" | "exported" | "approved" | "stale";
 
 // What `approved.json` holds, as absolute paths. Each approved reel has its own folder in the
-// approved folder, "<YYYY-MM-DD> <title>", holding `reel.mp4`, `image.jpg` and `caption.txt` (Owain, 2026-11-13).
+// approved folder, "<YYYY-MM-DD> <title>", holding `reel.mp4`, `image.jpg` and `caption.txt` (Owain, 2026-11-13),
+// and `reel-no-cta.mp4`, the reel without its call to action, for TikTok and LinkedIn (2026-11-14).
 // `folder` is missing on a record from before then, when the two files sat loose.
-export type ApprovalRecord = { at: string; folder?: string; video: string; cover: string; title: string };
+export type ApprovalRecord = { at: string; folder?: string; video: string; noCta?: string; cover: string; title: string };
 
 // The facts the state is read from, as file times in ms.
 export type ApprovalFacts = {
   video?: number;
+  // The plan names a call to action, so the export must come with its version without it, `noCta`.
+  cta?: boolean;
+  noCta?: number;
   plan: number;
   check?: { at: number; errors: number };
   exporting?: boolean;
@@ -30,6 +34,7 @@ export function exportReady(f: ApprovalFacts): { ok: boolean; reason: string } {
   if (f.exporting) return { ok: false, reason: "an export is running; wait for it to finish" };
   if (f.video === undefined) return { ok: false, reason: "there is no export yet (renders/final.mp4); export the reel first" };
   if (f.video <= f.plan) return { ok: false, reason: "the plan changed after the last export; export again" };
+  if (f.cta && (f.noCta === undefined || f.noCta < f.video)) return { ok: false, reason: "the export has no version without the call to action (renders/final-no-cta.mp4); export again" };
   // The check is written just after the video it checks; one from before it is an older export's.
   if (!f.check || f.check.at < f.video) return { ok: false, reason: "the last export has no export check (checks/export-check.json); export again" };
   if (f.check.errors) return { ok: false, reason: `the export check found ${f.check.errors} error${f.check.errors === 1 ? "" : "s"} (checks/export-check.json); fix them and export again` };

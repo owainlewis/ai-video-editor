@@ -70,7 +70,8 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
     cache = ROOT / ".cache/audio"
     # The editor's preview mix (media/previewmix.ts) writes elsewhere and works in its own folder,
     # so it never touches an export's files.
-    work = project / ("build/audio" if out_path == "build/mix.wav" else "build/audio-preview")
+    # The version without the call to action (media/nocta.ts) has its own folder too.
+    work = project / ("build/audio" if out_path == "build/mix.wav" else "build/audio-nocta" if "nocta" in out_path else "build/audio-preview")
     work.mkdir(parents=True, exist_ok=True)
     n = int(seconds * SR)
     gain = float(cfg.get("voiceGain", 0))
@@ -81,6 +82,15 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
 
     # A project with a cut mixes the cut's voice (media/cutrender.ts), not the first clip's.
     voice = fit(decode(project / cfg.get("voice", "source/voice.wav"), cache))
+    # The version without the call to action: the voice stops where the call to action would start,
+    # in the pause before it, with a short fade so it never clicks.
+    if cfg.get("voiceEnd") is not None:
+        cut = int(float(cfg["voiceEnd"]) * SR)
+        ramp = int(0.02 * SR)
+        # A faint floor (about -100 dB), not digital silence: on a key of exact zeros the ducking
+        # compressor outputs silence, which cut the music dead instead of letting it fade (2026-11-14).
+        voice[cut:] = np.random.default_rng(0).normal(0, 1e-5, voice[cut:].shape)
+        voice[max(0, cut - ramp):cut] *= np.linspace(1, 0, min(ramp, cut))[:, None]
     sf.write(work / "voice.wav", voice, SR, subtype="FLOAT")
 
     lib = library_root()

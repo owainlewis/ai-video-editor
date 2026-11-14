@@ -544,6 +544,10 @@ export const Edit = z.object({
   // set as written, with one *marked* phrase in the accent. It holds until its `until` words; left out,
   // to the first cut after the first shot or 3 s, whichever is later, and never past 5 s.
   hook: z.object({ text: z.string().min(1), until: Anchor.optional() }).optional(),
+  // The spoken words the reel's call to action starts on ("If you want a guide"), Owain 2026-11-14.
+  // Every export also makes a version that ends before them, for TikTok and LinkedIn, where he does
+  // not answer comments; the full one, with the call to action, is for Instagram.
+  cta: z.string().min(1).optional(),
   // The clean style's cover (Owain, 2026-11-11): frame 0 is a clean card for the Instagram feed, Owain's
   // blank card (library/covers/<image>.png or .jpg) with the title over it. Instagram's default cover is
   // the first frame. `logos` (2026-11-13, after a cover Owain made with an image model): up to two real
@@ -675,6 +679,8 @@ export type Resolved = {
   shots: ResolvedShot[];
   // The clean style's text hook, from the first frame to `until`.
   hook?: ResolvedHook;
+  // The call to action: its words, and where the version without it ends (timeline seconds).
+  cta?: { at: string; end: number };
   // The cover on frame 0: the card's file in the project.
   cover?: { title: string; image: string; logos?: { src: string; name?: string }[] };
   // Draw the cover card alone, as the cover image (`cover`, QC, approval). The reel itself never

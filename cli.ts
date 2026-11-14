@@ -283,7 +283,7 @@ async function main() {
     case "approve": {
       const slug = need(target);
       const r = await approve(projects, slug, { log });
-      console.log(`Approved ${slug}:\n  ${r.video}\n  ${r.cover}`);
+      console.log(`Approved ${slug}:\n  ${[r.video, r.noCta, r.cover].filter(Boolean).join("\n  ")}`);
       const w = weekCount(projects);
       console.log(`This week: ${w.count} of ${w.target} approved.`);
       return;
