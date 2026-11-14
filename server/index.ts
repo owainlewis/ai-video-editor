@@ -11,7 +11,7 @@ import { createServer as createVite } from "vite";
 import { resolveProject } from "../media/project.ts";
 import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
-import { ask, isRunning, loadChat, stop } from "./agent.ts";
+import { ask, isRunning, loadChat, runningNotes, stop } from "./agent.ts";
 import { redo, redoable, snapshot, undo, versions } from "./history.ts";
 import { type ActionData, type ActionName, Actions, isAction } from "../engine/api.ts";
 import { finishSend, loadReview, saveNote, setItem, startSend } from "./review.ts";
@@ -139,6 +139,12 @@ export async function startServer(port = 4747) {
       req.on("close", () => clients.delete(res));
       return;
     }
+
+    // What a restart would cut off: Claude notes run inside this process. Imports and renders are
+    // detached and survive one.
+    if (parts[0] === "busy") return send(res, 200, { notes: runningNotes() });
+    // Where approved reels go (STUDIO_APPROVED), for the desktop app's menu.
+    if (parts[0] === "approved-folder") return send(res, 200, { path: approvedFolder() });
 
     if (parts[0] === "upload" && req.method === "POST") {
       const name = url.searchParams.get("name") ?? "clip.mp4";
