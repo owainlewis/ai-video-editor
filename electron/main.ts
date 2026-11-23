@@ -82,6 +82,10 @@ function createWindow() {
     title: "Studio",
     show: false,
     backgroundColor: background(),
+    // The editor's header is the title bar: macOS draws only the traffic lights, inset into it, as
+    // Final Cut and Xcode do. app/index.html marks the page so its header leaves room for them.
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 19 },
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.once("ready-to-show", () => win?.show());
@@ -134,7 +138,8 @@ function render() {
   if (!win) return;
   if (server.state === "ready" && server.url) {
     const current = win.webContents.getURL();
-    // Same server: the editor reconnects and reloads by itself after a restart. A new address
+    // Same server: the editor reloads by itself once its event stream reconnects after a restart
+    // (app/main.tsx). A new address
     // (the port was taken) or a status page: load the editor, keeping the page it was on.
     if (!current.startsWith(server.url)) {
       const hash = current.startsWith("http") ? new URL(current).hash : "";
