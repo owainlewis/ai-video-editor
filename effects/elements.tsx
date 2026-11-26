@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useId } from "react";
 import { easeInOut } from "./motion";
 import { interpolate } from "remotion";
-import { pal, type V } from "./soft";
+import { usePal, type V } from "./soft";
 import { look } from "./style";
 import { constraintGeom } from "./cards";
 import { clamp, ease, t } from "./theme";
@@ -26,10 +26,12 @@ const fmt = (n: number, unit = "", exact = n) => {
 // the accent and a large value label. `source` prints small under the chart: charts say where
 // their numbers come from, or "Illustration" when they are only a shape.
 export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
+  const clipId = `chart-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const n = v.points.length;
+  if (n < 2) return null;
   const times = v.times ?? v.points.map((_, i) => shot.start + 0.2 + i * 0.25);
-  const hi = v.highlight ?? n - 1;
+  const hi = Math.min(n - 1, Math.max(0, v.highlight ?? n - 1));
   const max = Math.max(...v.points.map((p) => p.value)) || 1;
   const titleH = v.title ? 40 : 0;
   const foot = 58;
@@ -96,7 +98,6 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
             const f = (headX - xs[seg]) / Math.max(1, xs[seg + 1] - xs[seg]);
             const headY = y(v.points[seg].value) + (y(v.points[seg + 1].value) - y(v.points[seg].value)) * f;
             const base = top + plotH;
-            const clipId = `chart-${shot.start}`.replace(".", "-");
             return (
               <>
                 <svg width={w} height={h} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
@@ -144,7 +145,7 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
 // A process as a row of numbered stages joined by a track. The track fills to each stage as it is
 // named and the current stage takes the accent; unnamed stages wait as dim numbers, an open loop.
 export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const n = v.stages.length;
   // A stage with neither a label nor a word is never reached: it waits as a dim number.
   const times = (v.times ?? v.stages.map((_, i) => shot.start + 0.3 + i * 0.4)).map((x, i) => (v.stages[i].label || v.stages[i].at ? x : Infinity));
@@ -243,7 +244,7 @@ export const PipelineVisual: React.FC<Props & { v: V<"pipeline"> }> = ({ shot, t
 
 // More than four stages stack vertically: numbers on a track at the left, big labels to the right.
 const PipelineColumn: React.FC<Props & { v: V<"pipeline">; times: number[]; reached: number; current: number; enter: number }> = ({ shot, time, w, h, v, times, reached, current, enter }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const n = v.stages.length;
   const head = v.title ? 56 : 0;
   const gap = Math.min(150, (h - head - 20) / n);
@@ -284,7 +285,7 @@ const PipelineColumn: React.FC<Props & { v: V<"pipeline">; times: number[]; reac
 // words; the bottleneck tightens and takes the accent on `at`. Every dot is a pure function of
 // time, so frames render the same every time.
 export const ConstraintVisual: React.FC<Props & { v: V<"constraint"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const n = v.stages.length;
   const times = v.times ?? [];
   const stageT = v.stages.map((_, i) => times[i] ?? shot.start + 0.15 + i * 0.2);

@@ -16,8 +16,10 @@ import { Video } from "@remotion/media";
 import { AbsoluteFill, Sequence, staticFile, useCurrentFrame } from "remotion";
 import type { Resolved, ResolvedShot } from "../../engine/schema";
 import { lastKept } from "../../engine/resolve";
+import { shotAt } from "../canvas";
 import { Soundtrack } from "../cut";
 import { CUSTOM } from "../custom";
+import { DEFAULT_SOFT_THEME, SoftThemeContext } from "../soft";
 import { Speaker } from "../Speaker";
 import { BAND } from "../theme";
 import { VisualView } from "../Visuals";
@@ -38,8 +40,9 @@ export const GLASS = { left: 60, top: 380, width: W - 120, height: 880 };
 export const box = (layout: ResolvedShot["layout"]) =>
   layout === "split" ? { left: 0, top: 0, width: W, height: PANEL } : layout === "over" ? GLASS : { left: 0, top: 0, width: W, height: H };
 
-// A screen recording on a split fills the whole panel, edge to edge, down to the band.
-const fillsPanel = (s: ResolvedShot) => s.layout === "split" && s.visual?.kind === "video" && !!s.visual.sync;
+// A screen recording or frameless image on a split fills the whole panel, edge to edge, down to the band.
+export const fillsPanel = (s: ResolvedShot) =>
+  s.layout === "split" && ((s.visual?.kind === "video" && !!s.visual.sync) || (s.visual?.kind === "image" && s.visual.frame === "none"));
 
 // A card's colour; on the light palette an ink card is black (Owain, 2026-11-13: "occasional black screens").
 const bgOf = (s: ResolvedShot, p: Palette) => (s.layout === "diagram" ? p.diagram : s.layout === "card" ? { ink: p.card, paper: C.paper, green: GREEN }[s.bg ?? "ink"] : p.stage);
@@ -60,7 +63,7 @@ const Picture: React.FC<{ r: Resolved; s: ResolvedShot; first: boolean; time: nu
   const push = first ? lerp(1.3, 1, move(time, s.start, 0.7)) : 1;
   return (
     <div style={{ position: "absolute", left: 0, top: split ? FOOT : 0, width: W, height: split ? H - FOOT : H, overflow: "hidden" }}>
-      <Video src={staticFile(`${r.slug}/${s.picture.src}`)} muted loop playbackRate={s.picture.rate} trimBefore={Math.round(s.picture.start * 30)} objectFit="cover" style={{ width: "100%", height: "100%", filter, scale: String(push) }} />
+      <Video src={staticFile(`${r.slug}/${s.picture.src}`)} muted loop playbackRate={s.picture.rate} trimBefore={Math.round(s.picture.start * r.fps)} objectFit="cover" style={{ width: "100%", height: "100%", filter, scale: String(push) }} />
     </div>
   );
 };
@@ -105,8 +108,7 @@ const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number; hooked: boo
 
 export const Clean: React.FC<Resolved> = (r) => {
   const time = useCurrentFrame() / r.fps;
-  const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
-  const shot = r.shots[index] ?? r.shots[r.shots.length - 1];
+  const { shot } = shotAt(r.shots, time);
   const words = useMemo(() => r.chunks.flatMap((c) => c.words), [r.chunks]);
   const chunks = useMemo(() => chunkClean(words), [words]);
   const faceless = !r.video && !r.cut && !r.standIn;
@@ -155,6 +157,7 @@ export const Clean: React.FC<Resolved> = (r) => {
   const hitY = glass ? GLASS.top + GLASS.height + 90 : shot.layout === "diagram" ? 1560 : split ? BAND.top + (BAND.height - hitSize) / 2 : 870;
 
   return (
+    <SoftThemeContext.Provider value={DEFAULT_SOFT_THEME}>
     <PaletteContext.Provider value={pal}>
     <AbsoluteFill style={{ background: bgOf(shot, pal), ...grid(pal, shot) }}>
       {/* One continuous speaker video, never unmounted; hidden where a picture or card covers it. */}
@@ -240,5 +243,6 @@ export const Clean: React.FC<Resolved> = (r) => {
       <Soundtrack r={r} />
     </AbsoluteFill>
     </PaletteContext.Provider>
+    </SoftThemeContext.Provider>
   );
 };

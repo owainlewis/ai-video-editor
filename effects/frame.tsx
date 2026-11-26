@@ -7,7 +7,7 @@ import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, Sequ
 import { UI_KINDS, UiVisual } from "./ui";
 import type { Resolved, ResolvedShot } from "../engine/schema";
 import { easeInOut, FAST, In, lerp, Mark, markColor, MOVE, prog, runs, STAG } from "./motion";
-import { pal, isBlack, type V } from "./soft";
+import { pal, usePal, useSoftTheme, type V } from "./soft";
 import { CutVideo } from "./cut";
 import { t as type } from "./theme";
 
@@ -35,7 +35,8 @@ export const Footage: React.FC<{ r: Resolved; from: number; style?: React.CSSPro
 
 // ---------- chapter: "05 / 06", a bold title with one marked phrase, the route as segments ----------
 const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
-  const c = pal(shot.tone);
+  const theme = useSoftTheme();
+  const c = pal(shot.tone, theme);
   const at = shot.start;
   const here = parseInt(v.number, 10);
   const n = v.of ?? 0;
@@ -56,7 +57,7 @@ const Chapter: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, v }) => {
           <div style={{ fontFamily: type.sans, fontWeight: 700, fontSize: narrow ? 150 : 124, letterSpacing: "-0.035em", lineHeight: 1.02, color: c.ink, textWrap: "balance" }}>
             {runs(v.label).map((p, i) =>
               // On black the marked phrase is set in Signifier italic instead of the highlighter.
-              p.marked && isBlack() ? (
+              p.marked && theme.black ? (
                 <span key={i} style={{ fontFamily: type.serif, fontStyle: "italic", fontWeight: 400, fontSize: "1.1em", letterSpacing: "-0.01em" }}>{p.text}</span>
               ) : p.marked ? (
                 <Mark key={i} t={time} at={at + 1.0} color={markColor(c.accent)}>
@@ -112,7 +113,7 @@ export const Digits: React.FC<{ value: number; size: number }> = ({ value, size 
 };
 
 const Odometer: React.FC<Props & { v: V<"odometer"> }> = ({ shot, time, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const times = v.times ?? [];
   const steps = v.steps.map((s, i) => ({ value: s.value, at: times[i] ?? shot.start + 0.3 + i }));
   // Roll into each value so it lands as the number is said.

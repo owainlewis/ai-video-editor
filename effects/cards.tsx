@@ -1,6 +1,6 @@
 import React from "react";
 import { Img, interpolate } from "remotion";
-import { pal, type Props, SoftAccented, src, type V } from "./soft";
+import { pal, type Props, SoftAccented, src, usePal, type V } from "./soft";
 import { browserGeom } from "./browser";
 import { style } from "./style";
 import { clamp, ease } from "./theme";
@@ -100,7 +100,7 @@ export const agendaGeom = (v: V<"agenda">, w: number, h: number) => {
 };
 
 export const AgendaCard: React.FC<Props & { v: V<"agenda"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = agendaGeom(v, w, h);
   const times = timesOf(v, v.items.length, shot.start);
   const now = v.active ?? current(times, time);
@@ -143,7 +143,7 @@ export const checklistGeom = (v: V<"checklist">, w: number, h: number) => {
 };
 
 export const ChecklistCard: React.FC<Props & { v: V<"checklist"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = checklistGeom(v, w, h);
   const times = timesOf(v, v.items.length, shot.start);
   const enter = prog(time, shot.start);
@@ -204,7 +204,7 @@ export const beforeAfterGeom = (v: V<"beforeafter">, w: number, h: number) => {
 };
 
 export const BeforeAfterCard: React.FC<Props & { v: V<"beforeafter"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = beforeAfterGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start + 0.8;
   const a = prog(time, shot.start);
@@ -290,7 +290,7 @@ const counted = (value: string, p: number) => {
 };
 
 export const KpiCard: React.FC<Props & { v: V<"kpi"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = kpiGeom(v, w, h);
   const times = timesOf(v, v.items.length, shot.start);
   const hi = v.highlight ?? v.items.length - 1;
@@ -353,7 +353,7 @@ export const matrixGeom = (v: V<"matrix">, w: number, h: number) => {
 };
 
 export const MatrixCard: React.FC<Props & { v: V<"matrix"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = matrixGeom(v, w, h);
   const times = timesOf(v, v.items.length, shot.start + 0.4);
   const now = current(times, time);
@@ -435,7 +435,7 @@ export const timelineGeom = (v: V<"timeline">, w: number, h: number) => {
 };
 
 export const TimelineCard: React.FC<Props & { v: V<"timeline"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = timelineGeom(v, w, h);
   const n = v.items.length;
   const times = timesOf(v, n, shot.start);
@@ -527,7 +527,7 @@ export const levelsGeom = (v: V<"levels">, w: number, h: number) => {
 };
 
 export const LevelsCard: React.FC<Props & { v: V<"levels"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = levelsGeom(v, w, h);
   const times = timesOf(v, v.items.length, shot.start);
   const now = current(times, time);
@@ -574,7 +574,7 @@ export const quoteGeom = (v: V<"quote">, w: number, h: number) => {
 };
 
 export const QuoteCard: React.FC<Props & { v: V<"quote"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = quoteGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start + 0.15;
   const words = v.text.split(/\s+/);
@@ -633,7 +633,7 @@ export const logowallGeom = (v: V<"logowall">, w: number, h: number) => {
 };
 
 export const LogowallCard: React.FC<Props & { v: V<"logowall"> }> = ({ slug, shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = logowallGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start;
   return (
@@ -717,7 +717,7 @@ export const bentoGeom = (v: V<"bento">, w: number, h: number) => {
 };
 
 export const BentoCard: React.FC<Props & { v: V<"bento"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = bentoGeom(v, w, h);
   const times = timesOf(v, v.cells.length, shot.start);
   const now = current(times, time);
@@ -773,7 +773,7 @@ export const ringGeom = (v: V<"ring">, w: number, h: number) => {
 };
 
 export const RingCard: React.FC<Props & { v: V<"ring"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = ringGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start + 0.3;
   const enter = prog(time, shot.start);
@@ -825,12 +825,12 @@ export const meterGeom = (v: V<"meter">, w: number, h: number) => {
 };
 
 export const MeterCard: React.FC<Props & { v: V<"meter"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = meterGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start + 0.3;
   const enter = prog(time, shot.start);
   const p = countProg(time, at);
-  const share = Math.min(1, v.value / v.max) * p;
+  const share = v.max > 0 ? Math.min(1, Math.max(0, v.value / v.max)) * p : 0;
   const shown = Number.isInteger(v.value) ? Math.round(v.value * p).toLocaleString("en-US") : (v.value * p).toFixed(1);
   const tickY = g.trackY + g.track + 18;
   return (
@@ -875,7 +875,7 @@ export const waffleGeom = (v: V<"waffle">, w: number, h: number) => {
 };
 
 export const WaffleCard: React.FC<Props & { v: V<"waffle"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = waffleGeom(v, w, h);
   const at = v.times?.[0] ?? shot.start + 0.3;
   const enter = prog(time, shot.start);
