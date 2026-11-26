@@ -17,7 +17,7 @@ import { clippedWords, joins, loudJoins, mapTimes, placed } from "../engine/cut.
 import { resolveParts } from "../engine/parts.ts";
 import { resolveCta } from "../engine/cta.ts";
 import { MAIN } from "../engine/schema.ts";
-import { ffmpeg, FPS, imageSize, mediaProbe, readJson, ROOT, writeJson } from "./tools.ts";
+import { ffmpeg, FPS, imageSize, isSafeName, mediaProbe, readJson, ROOT, safePath, writeJson } from "./tools.ts";
 
 // Where the placeholder speaker's face sits in its 1080x1920 frame (see effects/Speaker.tsx).
 const PLACEHOLDER_FACE = { x: 0.5, y: 0.3, h: 0.17 };
@@ -28,14 +28,30 @@ export const LIBRARY = join(ROOT, "library");
 // from instead of playing segments.
 export function resolveProject(projects: string, slug: string, exportCut?: { video: string; voice: string }): { resolved?: Resolved; issues: Issue[] } {
   const dir = join(projects, slug);
-  const meta0 = readJson<{ duration: number; size?: [number, number]; script?: boolean }>(join(dir, "project.json"));
+  let meta0: { duration: number; size?: [number, number]; script?: boolean };
+  try {
+    meta0 = readJson<{ duration: number; size?: [number, number]; script?: boolean }>(join(dir, "project.json"));
+  } catch (e) {
+    return { issues: [{ level: "error", message: `project.json: ${String((e as Error).message ?? e)}` }] };
+  }
   // Everything below works on the timeline: with a cut, its words and length; with none, the clip as it is.
-  const line = timeline(dir);
+  let line: ReturnType<typeof timeline>;
+  try {
+    line = timeline(dir);
+  } catch (e) {
+    return { issues: [{ level: "error", message: `timeline: ${String((e as Error).message ?? e)}` }] };
+  }
   const { cut, explicit } = line;
   const words: Word[] = line.words;
   const meta = { ...meta0, duration: line.duration };
   if (line.error) return { issues: [{ level: "error", message: line.error }] };
-  const parsed = Edit.safeParse(readJson(join(dir, "edit.json")));
+  let rawEdit: unknown;
+  try {
+    rawEdit = readJson(join(dir, "edit.json"));
+  } catch (e) {
+    return { issues: [{ level: "error", message: `edit.json: ${String((e as Error).message ?? e)}` }] };
+  }
+  const parsed = Edit.safeParse(rawEdit);
   if (!parsed.success) return { issues: parsed.error.issues.map((i) => ({ level: "error", message: `edit.json ${i.path.join(".")}: ${i.message}` })) };
   const plan = parsed.data;
   const youtube = plan.canvas === "youtube";
@@ -74,19 +90,28 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   // full-size photo is several megabytes.
   let cover: Resolved["cover"];
   if (clean && plan.cover) {
-    const from = ["png", "jpg"].map((x) => join(LIBRARY, "covers", `${plan.cover!.image}.${x}`)).find((f) => existsSync(f));
-    if (!from) issues.push({ level: "error", message: `no cover card library/covers/${plan.cover.image}.png; drop Owain's blank card there` });
+    const coverImage = plan.cover.image;
+    const coversDir = join(LIBRARY, "covers");
+    const from = isSafeName(coverImage)
+      ? ["png", "jpg"].map((x) => safePath(coversDir, `${coverImage}.${x}`)).find((f): f is string => !!f && existsSync(f))
+      : undefined;
+    if (!isSafeName(coverImage)) issues.push({ level: "error", message: `invalid cover image "${coverImage}"` });
+    else if (!from) issues.push({ level: "error", message: `no cover card library/covers/${coverImage}.png; drop Owain's blank card there` });
     else {
-      const rel = `assets/cover-${plan.cover.image}.jpg`;
-      if (!existsSync(join(dir, rel)) || statSync(join(dir, rel)).mtimeMs < statSync(from).mtimeMs)
-        mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1680:force_original_aspect_ratio=increase,crop=1080:1680:(iw-1080)/2:0", "-q:v", "2", join(dir, rel)]);
-      const logos = plan.cover.logos.flatMap((l) => {
-        const name = typeof l === "string" ? l : l.logo;
-        const src = useLogo(name);
-        if (!src) issues.push({ level: "error", message: `the cover's logo "${name}" is not in library/logos` });
-        return src ? [{ src, name: typeof l === "string" ? undefined : l.name }] : [];
-      });
-      cover = { title: plan.cover.title, image: `${slug}/${rel}`, ...(logos.length ? { logos } : {}) };
+      const rel = `assets/cover-${coverImage}.jpg`;
+      const dest = safePath(dir, rel);
+      if (!dest) issues.push({ level: "error", message: `invalid cover image "${coverImage}"` });
+      else {
+        if (!existsSync(dest) || statSync(dest).mtimeMs < statSync(from).mtimeMs)
+          mkdirSync(join(dir, "assets"), { recursive: true }), ffmpeg(["-i", from, "-vf", "scale=1080:1680:force_original_aspect_ratio=increase,crop=1080:1680:(iw-1080)/2:0", "-q:v", "2", dest]);
+        const logos = plan.cover.logos.flatMap((l) => {
+          const name = typeof l === "string" ? l : l.logo;
+          const src = useLogo(name);
+          if (!src) issues.push({ level: "error", message: `the cover's logo "${name}" is not in library/logos` });
+          return src ? [{ src, name: typeof l === "string" ? undefined : l.name }] : [];
+        });
+        cover = { title: plan.cover.title, image: `${slug}/${rel}`, ...(logos.length ? { logos } : {}) };
+      }
     }
   }
   const onCamera = youtube ? cameraOnTimeline(dir, cut) : undefined;
@@ -117,16 +142,26 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const pictures = new Map<string, number>();
   for (const s of shots) {
     if (!s.picture) continue;
+    let file: string | null = null;
     if (s.picture.src.startsWith("broll:")) {
       const rel = useClip(dir, s.picture.src.slice(6));
       if (!rel) issues.push({ level: "error", message: `no b-roll ${s.picture.src} in the library` });
-      else s.picture = { ...s.picture, src: rel };
-    } else if (!existsSync(join(dir, s.picture.src))) issues.push({ level: "error", message: `missing picture ${s.picture.src}` });
+      else {
+        s.picture = { ...s.picture, src: rel };
+        file = safePath(dir, rel);
+      }
+    } else {
+      file = safePath(dir, s.picture.src);
+      if (!file) {
+        issues.push({ level: "error", message: `invalid picture path ${s.picture.src}` });
+        continue;
+      }
+      if (!existsSync(file)) issues.push({ level: "error", message: `missing picture ${s.picture.src}` });
+    }
     pictures.set(s.picture.src, (pictures.get(s.picture.src) ?? 0) + 1);
     // A picture shorter than its shot loops back to its first frame, which reads as a glitch (Owain,
     // 2026-11-08: "some of it was 1s loops").
-    const file = join(dir, s.picture.src);
-    if (existsSync(file)) {
+    if (file && existsSync(file)) {
       const plays = (probe.duration(file) - s.picture.start) / s.picture.rate;
       if (s.end - s.start > plays + 0.05) issues.push({ level: "error", message: `picture ${s.picture.src} at "${s.anchor}" plays ${plays.toFixed(1)}s but the shot holds ${(s.end - s.start).toFixed(1)}s, so it loops; use a longer shot or cut the shot sooner` });
     }
@@ -147,13 +182,33 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     const srcs = !v ? [] : v.kind === "image" || v.kind === "video" ? [v.src] : v.kind === "logos" || v.kind === "logowall" || v.kind === "windows" ? v.items.map((i) => i.src) : v.kind === "cta" && v.src ? [v.src] : [];
     // The style's cards are sized for their slots' max lengths.
     if (v && !s.keep) for (const m of slotIssues(v)) issues.push({ level: "warn", message: `"${s.anchor}": ${m}` });
-    for (const src of srcs) if (!src.startsWith("data:") && !existsSync(join(dir, src))) issues.push({ level: "error", message: `missing asset ${src}` });
-    if (v?.kind === "windows") s.visual = { ...v, items: v.items.map((it) => ({ ...it, ...(existsSync(join(dir, it.src)) ? { size: imageSize(join(dir, it.src)) } : {}) })) };
-    if (v?.kind === "image" && existsSync(join(dir, v.src))) {
-      const size = imageSize(join(dir, v.src));
+    for (const src of srcs) {
+      if (src.startsWith("data:")) continue;
+      const f = safePath(dir, src);
+      if (!f) issues.push({ level: "error", message: `invalid asset path ${src}` });
+      else if (!existsSync(f)) issues.push({ level: "error", message: `missing asset ${src}` });
+    }
+    if (v?.kind === "windows")
+      s.visual = {
+        ...v,
+        items: v.items.map((it) => {
+          const f = safePath(dir, it.src);
+          return { ...it, ...(f && existsSync(f) ? { size: imageSize(f) } : {}) };
+        }),
+      };
+    const imgFile = v?.kind === "image" ? safePath(dir, v.src) : null;
+    if (v?.kind === "image" && imgFile && existsSync(imgFile)) {
+      const size = imageSize(imgFile);
       // A page from `capture` has its words beside it, so the plan names words, not rects.
-      const pageFile = join(dir, v.src.replace(/\.\w+$/, ".json"));
-      const read = existsSync(pageFile) ? readJson<Page>(pageFile) : undefined;
+      const pageFile = safePath(dir, v.src.replace(/\.\w+$/, ".json"));
+      let read: Page | undefined;
+      if (pageFile && existsSync(pageFile)) {
+        try {
+          read = readJson<Page>(pageFile);
+        } catch {
+          issues.push({ level: "warn", message: `unreadable page metadata ${v.src.replace(/\.\w+$/, ".json")}` });
+        }
+      }
       const page = Array.isArray(read?.runs) ? read : undefined;
       const { visual, errors } = placePhrases(v, page);
       for (const message of errors) issues.push({ level: "error", message: `"${s.anchor}": ${message}` });
@@ -174,17 +229,25 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
       if (!youtube && !s.keep && (!to || !from || from.some((n, i) => Math.abs(n - to[i]) > 1e-3)))
         issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} zooms or pans during the shot; give "from" and "to" the same framing, and cut to a new shot for a new framing` });
     }
-    if (v?.kind === "video" && existsSync(join(dir, v.src))) {
-      const moves = join(dir, v.src.replace(/\.\w+$/, ".json"));
-      const screen = v.sync && existsSync(moves) ? readJson<{ zooms: ScreenZoom[]; ticks: number[]; warnings?: string[] }>(moves) : undefined;
-      s.visual = { ...v, size: probe.size(join(dir, v.src)), ...(screen && { zooms: screen.zooms, ticks: screen.ticks }) };
+    const vidFile = v?.kind === "video" ? safePath(dir, v.src) : null;
+    if (v?.kind === "video" && vidFile && existsSync(vidFile)) {
+      const moves = safePath(dir, v.src.replace(/\.\w+$/, ".json"));
+      let screen: { zooms: ScreenZoom[]; ticks: number[]; warnings?: string[] } | undefined;
+      if (v.sync && moves && existsSync(moves)) {
+        try {
+          screen = readJson<{ zooms: ScreenZoom[]; ticks: number[]; warnings?: string[] }>(moves);
+        } catch {
+          issues.push({ level: "warn", message: `unreadable screen metadata ${v.src.replace(/\.\w+$/, ".json")}` });
+        }
+      }
+      s.visual = { ...v, size: probe.size(vidFile), ...(screen && { zooms: screen.zooms, ticks: screen.ticks }) };
       const clashes = zoomClashes(screen?.zooms ?? []).map((z) => `the zoom at ${z.t.toFixed(2)}s has not settled when the next one starts; hold it longer, or make the next a hard cut`);
       for (const message of [...(screen?.warnings ?? []), ...clashes]) if (!issues.some((i) => i.message === message)) issues.push({ level: "warn", message });
       // A recording is timed to the cut it was made for; it does not follow a re-cut as the anchors do.
       const cutFile = join(dir, "cut.json");
-      if (v.sync && !s.keep && existsSync(cutFile) && statSync(cutFile).mtimeMs > statSync(join(dir, v.src)).mtimeMs) issues.push({ level: "warn", message: `"${s.anchor}": cut.json changed after ${v.src} was made, so the screen may be out of step with the words` });
+      if (v.sync && !s.keep && existsSync(cutFile) && statSync(cutFile).mtimeMs > statSync(vidFile).mtimeMs) issues.push({ level: "warn", message: `"${s.anchor}": cut.json changed after ${v.src} was made, so the screen may be out of step with the words` });
       // A slowed clip lasts longer on screen.
-      const left = (probe.duration(join(dir, v.src)) - (v.sync ? s.start : v.start)) / (v.rate ?? 1);
+      const left = (probe.duration(vidFile) - (v.sync ? s.start : v.start)) / (v.rate ?? 1);
       if (!v.loop && s.end - s.start > left + 0.04) issues.push({ level: "error", message: `"${s.anchor}": shot is ${(s.end - s.start).toFixed(2)}s but ${v.src} has ${left.toFixed(2)}s from start ${v.start}` });
     }
     // A kept shot carries on the same clip; that is one use, not two.
@@ -194,9 +257,14 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
     }
   }
   if (plan.music) {
-    const track = plan.music.track ? join(LIBRARY, "music", plan.music.track) : "";
-    const any = existsSync(join(LIBRARY, "music")) && readdirSync(join(LIBRARY, "music"), { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
-    if (track ? !existsSync(track) : !any) issues.push({ level: "warn", message: `no music found${track ? ` at library/music/${plan.music.track}` : " in library/music"}; the video will have no bed` });
+    if (plan.music.track) {
+      const track = safePath(join(LIBRARY, "music"), plan.music.track);
+      if (!track) issues.push({ level: "error", message: `invalid music track ${plan.music.track}` });
+      else if (!existsSync(track)) issues.push({ level: "warn", message: `no music found at library/music/${plan.music.track}; the video will have no bed` });
+    } else {
+      const any = existsSync(join(LIBRARY, "music")) && readdirSync(join(LIBRARY, "music"), { recursive: true }).some((f) => /\.(mp3|wav|m4a|flac|aiff?)$/i.test(String(f)));
+      if (!any) issues.push({ level: "warn", message: "no music found in library/music; the video will have no bed" });
+    }
   }
   if (!explicit && existsSync(join(dir, "source/voice.wav"))) {
     const tail = meta.duration - probe.speechEnd(join(dir, "source/voice.wav"));
@@ -242,7 +310,15 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   };
   // Plan checks from QC (engine/qc.ts): pacing, reading time, cuts in the footage, numbers on screen.
   const cutsFile = join(dir, "build/cuts.json");
-  const found = existsSync(cutsFile) ? readJson<{ cuts: number[] }>(cutsFile).cuts : [];
+  let found: number[] = [];
+  if (existsSync(cutsFile)) {
+    try {
+      const data = readJson<{ cuts?: number[] }>(cutsFile);
+      found = Array.isArray(data?.cuts) ? data.cuts : [];
+    } catch {
+      issues.push({ level: "warn", message: "build/cuts.json is unreadable" });
+    }
+  }
   // Cuts found in the main clip, moved through the cut, plus every join in the cut itself.
   const cuts = [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b);
   issues.push(...qcPlan(resolved, words, [], cuts));
@@ -270,9 +346,10 @@ const LIBRARY_LOGOS = join(ROOT, "library", "logos");
 // A library logo as a data URL, so any visual can draw it without knowing the project's folder.
 // The official SVG when there is one (crisp at any size), else the PNG.
 export function useLogo(name: string): string | undefined {
+  if (!isSafeName(name)) return undefined;
   for (const [ext, type] of [["svg", "image/svg+xml"], ["png", "image/png"]]) {
-    const from = join(LIBRARY_LOGOS, `${name}.${ext}`);
-    if (existsSync(from)) return `data:${type};base64,${readFileSync(from).toString("base64")}`;
+    const from = safePath(LIBRARY_LOGOS, `${name}.${ext}`);
+    if (from && existsSync(from)) return `data:${type};base64,${readFileSync(from).toString("base64")}`;
   }
   return undefined;
 }

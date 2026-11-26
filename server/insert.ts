@@ -8,7 +8,7 @@ import { cards } from "../styles/blueprint/style.ts";
 import { cardLayout } from "../effects/preview.ts";
 import { findPhrase, lastKept } from "../engine/resolve.ts";
 import { resolveProject } from "../media/project.ts";
-import { probeDuration, readJson, writeJson } from "../media/tools.ts";
+import { probeDuration, readJson, safePath, writeJson } from "../media/tools.ts";
 import { loadLibrary } from "../media/broll.ts";
 import { timeline } from "../media/bin.ts";
 
@@ -59,7 +59,11 @@ export function insertAt(projects: string, slug: string, added: { start: number;
   // A video shown longer than it runs is slowed to fit (never below 0.65x).
   const first = added[0]?.shot as { visual?: { kind?: string; src?: string; start?: number; rate?: number } };
   if (shown && first?.visual?.kind === "video" && first.visual.src) {
-    const file = first.visual.src.startsWith("broll:") ? null : join(dir, first.visual.src);
+    let file: string | null = null;
+    if (!first.visual.src.startsWith("broll:")) {
+      file = safePath(dir, first.visual.src);
+      if (!file) throw Object.assign(new Error(`invalid video path ${first.visual.src}`), { code: 400 });
+    }
     const clip = file && existsSync(file) ? probeDuration(file) : brollLength(first.visual.src.slice(6));
     const rate = clip ? Math.min(1, (clip - (first.visual.start ?? 0)) / shown) : 1;
     if (rate < 1) first.visual.rate = Math.max(0.65, Math.floor(rate * 100) / 100);
@@ -132,7 +136,15 @@ export function placeOver(projects: string, slug: string, shot: Shot, start: num
 
 // Dropping a clip on the timeline: b-roll from that moment for the clip's length.
 export function dropBroll(projects: string, slug: string, ref: string, at: number, length: number) {
-  const src = ref.startsWith("broll:") || ref.startsWith("assets/") ? ref : `assets/broll/${ref}`;
+  let src: string;
+  if (ref.startsWith("broll:")) {
+    if (!/^[\w-]+$/.test(ref.slice(6))) throw Object.assign(new Error(`invalid b-roll reference ${ref}`), { code: 400 });
+    src = ref;
+  } else {
+    src = ref.startsWith("assets/") ? ref : `assets/broll/${ref}`;
+    const assetsDir = join(projects, slug, "assets");
+    if (!safePath(assetsDir, src.slice("assets/".length))) throw Object.assign(new Error(`invalid asset reference ${ref}`), { code: 400 });
+  }
   // Short clips may be slowed to as little as 0.65x to reach the next word.
   placeOver(projects, slug, { at: "", layout: "cutaway", visual: { kind: "video", src, start: 0 } }, at, length - 0.1, 1 / 0.65);
 }
@@ -167,7 +179,11 @@ export function moveShotStart(projects: string, slug: string, from: number, to: 
       const shot = plan.shots[p] as Shot & { visual: { src: string; start?: number; rate?: number } };
       const now = moved?.shots.find((s) => s.anchor === shot.at);
       if (!now) continue;
-      const file = shot.visual.src.startsWith("broll:") ? null : join(dir, shot.visual.src);
+      let file: string | null = null;
+      if (!shot.visual.src.startsWith("broll:")) {
+        file = safePath(dir, shot.visual.src);
+        if (!file) throw Object.assign(new Error(`invalid video path ${shot.visual.src}`), { code: 400 });
+      }
       const clip = file && existsSync(file) ? probeDuration(file) : brollLength(shot.visual.src.slice(6));
       const rate = clip ? Math.min(1, (clip - (shot.visual.start ?? 0)) / (now.end - now.start + 0.05)) : 1;
       shot.visual = { ...shot.visual, rate: Math.max(0.65, Math.floor(rate * 100) / 100) };

@@ -9,7 +9,7 @@ import { openBrowser } from "@remotion/renderer";
 import { GRID } from "../engine/resolve.ts";
 import type { EditPlan } from "../engine/schema.ts";
 import { useLogo } from "./project.ts";
-import { ffmpeg, type Log, probeSize } from "./tools.ts";
+import { ffmpeg, isSafeName, type Log, probeSize, safePath } from "./tools.ts";
 
 const LIBRARY = join(import.meta.dirname, "../library");
 
@@ -70,7 +70,8 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
   const out = join(dir, "renders/cover-kit");
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
-  const card = ["png", "jpg"].map((x) => join(LIBRARY, "covers", `${cover.image}.${x}`)).find((f) => existsSync(f));
+  if (!isSafeName(cover.image)) throw new Error(`invalid cover image "${cover.image}"`);
+  const card = ["png", "jpg"].map((x) => safePath(join(LIBRARY, "covers"), `${cover.image}.${x}`)).find((f): f is string => !!f && existsSync(f));
   if (!card) throw new Error(`no cover card library/covers/${cover.image}.png`);
   copyFileSync(card, join(out, `portrait${card.slice(card.lastIndexOf("."))}`));
   const names: string[] = [];
@@ -85,8 +86,8 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
   }
   if (tiles.length) await logoTiles(tiles, out);
   if (cover.backdrop) {
-    const from = join(dir, cover.backdrop);
-    if (!existsSync(from)) throw new Error(`the cover's backdrop ${cover.backdrop} is not in the project`);
+    const from = safePath(dir, cover.backdrop);
+    if (!from || !existsSync(from)) throw new Error(`the cover's backdrop ${cover.backdrop} is not in the project`);
     copyFileSync(from, join(out, "backdrop.png"));
   }
   writeFileSync(join(out, "prompt.txt"), coverPrompt(cover.title, names, !!cover.backdrop));

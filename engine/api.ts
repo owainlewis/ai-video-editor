@@ -32,7 +32,21 @@ export const Actions = {
   redo: none,
   cut: z.object({ cut: Cut }),
   // `force`: export with QC errors, plan warnings or items not yet approved. Owain's call only.
-  render: z.object({ part: z.string().optional(), from: z.number().optional(), to: z.number().optional(), force: z.boolean().optional() }),
+  render: z
+    .object({
+      part: z
+        .string()
+        .trim()
+        .min(1, "part name cannot be empty")
+        .refine((s) => !s.startsWith("-") && !/[\0\r\n]/.test(s), "invalid part name")
+        .optional(),
+      from: z.number().finite().min(0).optional(),
+      to: z.number().finite().min(0).optional(),
+      force: z.boolean().optional(),
+    })
+    .refine((d) => !(d.part !== undefined && (d.from !== undefined || d.to !== undefined)), "use part, or from and to, not both")
+    .refine((d) => (d.from === undefined) === (d.to === undefined), "from and to must both be provided")
+    .refine((d) => d.from === undefined || d.to! > d.from, "to must be after from"),
   // Review (engine/review.ts). `hash` is the item as the page last saw it: a save against an item
   // that has changed since is refused, so a decision never lands on a graphic Owain has not seen.
   review: z.object({ id: z.string(), hash: z.string(), status: z.enum(["waiting", "approved", "change"]).optional(), comment: z.string().optional() }),

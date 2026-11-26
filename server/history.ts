@@ -27,8 +27,16 @@ export const redoable = (project: string) => listIn(redoDir(project)).length;
 
 // Saves the current plan and cut if either changed. Returns true when a new version was written.
 export function snapshot(project: string, by: string): boolean {
-  const plan = readFileSync(join(project, "edit.json"), "utf8");
+  const planFile = join(project, "edit.json");
+  if (!existsSync(planFile)) return false;
+  const plan = readFileSync(planFile, "utf8");
   const cut = read(join(project, "cut.json"));
+  try {
+    JSON.parse(plan);
+    if (cut !== null) JSON.parse(cut);
+  } catch {
+    return false;
+  }
   const all = files(project);
   const last = all[all.length - 1];
   if (last && readFileSync(join(dirOf(project), last), "utf8") === plan && read(join(dirOf(project), "cut", cutName(last))) === cut) return false;

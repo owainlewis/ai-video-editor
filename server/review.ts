@@ -11,7 +11,14 @@ import { readJson, writeJson } from "../media/tools.ts";
 const file = (dir: string) => join(dir, "review.json");
 const repliesFile = (dir: string) => join(dir, "review-replies.json");
 
-const read = (dir: string): Review => (existsSync(file(dir)) ? { ...emptyReview(), ...readJson<Review>(file(dir)) } : emptyReview());
+const read = (dir: string): Review => {
+  if (!existsSync(file(dir))) return emptyReview();
+  try {
+    return { ...emptyReview(), ...readJson<Review>(file(dir)) };
+  } catch {
+    return emptyReview();
+  }
+};
 
 export type ReviewState = { review: Review; items: Item[]; counts: ReturnType<typeof counts>; open: number };
 
@@ -98,29 +105,41 @@ export function startSend(dir: string, slug: string, r: Resolved, words: Word[])
 
 // End of a send: Claude's answers go on their notes and items. An item Claude changed is already
 // back to waiting (its hash moved), so its answer goes on the note it answers, now in its history.
+// Any note left in "sent" without a reply (e.g. Claude failed before writing review-replies.json)
+// goes back to "open" so it is not stuck.
 export function finishSend(dir: string) {
-  if (!existsSync(repliesFile(dir))) return;
+  const hasReplies = existsSync(repliesFile(dir));
   let replies: Record<string, unknown> = {};
-  try {
-    replies = readJson(repliesFile(dir));
-  } catch {
-    // A file Claude left half-written: the changes are in the plan either way.
+  if (hasReplies) {
+    try {
+      const parsed = readJson<unknown>(repliesFile(dir));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) replies = parsed as Record<string, unknown>;
+    } catch {
+      // A file Claude left half-written: the changes are in the plan either way.
+    }
   }
   const review = read(dir);
+  let dirty = hasReplies;
   for (const [key, value] of Object.entries(replies)) {
     if (typeof value !== "string") continue;
     const [kind, ...rest] = key.split(":");
     const id = rest.join(":");
     if (kind === "note") {
       const note = review.notes.find((x) => x.id === id);
-      if (note) note.reply = value;
+      if (note) (note.reply = value), (dirty = true);
     } else if (kind === "item") {
       const rv = review.items[id] ?? review.removed[id];
       const last = rv?.history.at(-1);
-      if (rv?.status === "waiting" && last) last.reply = value;
-      else if (rv) rv.reply = value;
+      if (rv?.status === "waiting" && last) (last.reply = value), (dirty = true);
+      else if (rv) (rv.reply = value), (dirty = true);
     }
   }
-  writeJson(file(dir), review);
-  rmSync(repliesFile(dir), { force: true });
+  for (const note of review.notes) {
+    if (note.status === "sent" && !note.reply) {
+      note.status = "open";
+      dirty = true;
+    }
+  }
+  if (dirty) writeJson(file(dir), review);
+  if (hasReplies) rmSync(repliesFile(dir), { force: true });
 }

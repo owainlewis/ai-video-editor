@@ -2,7 +2,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -108,6 +108,18 @@ export function envValue(name: string): string | undefined {
 
 // A folder setting as a full path: "~" is the home folder, a relative path is from the repo.
 export const expandHome = (p: string) => resolve(ROOT, p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
+
+// Resolve `rel` strictly inside `root`, rejecting absolute paths, null bytes, backslashes, and `..` traversal.
+export function safePath(root: string, rel: string): string | null {
+  if (!rel || isAbsolute(rel) || rel.includes("\0") || rel.includes("\\")) return null;
+  const base = resolve(root);
+  const target = resolve(base, rel);
+  if (target === base || !target.startsWith(base + sep)) return null;
+  return target;
+}
+
+// A safe single filename segment (e.g. logo or cover name): no separators, leading dots, or `..`.
+export const isSafeName = (name: string): boolean => /^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(name) && !name.includes("..");
 
 export const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8"));
 

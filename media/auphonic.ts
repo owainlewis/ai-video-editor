@@ -3,7 +3,7 @@
 // gets sent, so a second run starts from the same place. Timing never changes: fillers and silence
 // come back as a cut list in build/auphonic/, not cut, so words and picture stay in sync.
 import { copyFileSync, existsSync, mkdirSync, openAsBlob, readdirSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { envValue, ffmpeg, probeDuration, type Log } from "./tools.ts";
 
 const API = "https://auphonic.com/api";
@@ -38,6 +38,12 @@ async function call<T>(path: string, key: string, init: RequestInit = {}): Promi
 
 type Production = { uuid: string; status: number; status_string: string; error_message?: string; output_files: { format: string; ending: string; filename: string; download_url: string }[] };
 
+export function safeAuphonicFilename(name: string): string {
+  const base = basename(name.replace(/\\/g, "/"));
+  if (!base || base === "." || base === "..") throw new Error(`Auphonic returned invalid filename: ${name}`);
+  return base;
+}
+
 // One clip's folder: the project itself, or clips/<id>.
 export async function cleanVoice(dir: string, title: string, log: Log = () => {}) {
   const voice = join(dir, "source/voice.wav"), original = join(dir, "source/voice.original.wav");
@@ -64,14 +70,15 @@ export async function cleanVoice(dir: string, title: string, log: Log = () => {}
   for (const f of p.output_files) {
     const res = await fetch(f.download_url, { headers: { Authorization: `bearer ${key}` } });
     if (!res.ok) throw new Error(`Auphonic download ${f.filename}: ${res.status}`);
-    writeFileSync(join(out, f.filename), Buffer.from(await res.arrayBuffer()));
+    writeFileSync(join(out, safeAuphonicFilename(f.filename)), Buffer.from(await res.arrayBuffer()));
   }
   const wav = p.output_files.find((f) => f.format === "wav-24bit");
   if (!wav) throw new Error("Auphonic returned no voice");
+  const wavFile = join(out, safeAuphonicFilename(wav.filename));
   // A change in length would slide every graphic off its word, so it never replaces the voice.
-  const [before, after] = [probeDuration(original), probeDuration(join(out, wav.filename))];
+  const [before, after] = [probeDuration(original), probeDuration(wavFile)];
   if (Math.abs(before - after) > 0.05) throw new Error(`Auphonic changed the length: ${before.toFixed(3)}s to ${after.toFixed(3)}s`);
-  ffmpeg(["-i", join(out, wav.filename), "-ac", "2", "-ar", "48000", "-c:a", "pcm_s24le", `${voice}.new.wav`], log);
+  ffmpeg(["-i", wavFile, "-ac", "2", "-ar", "48000", "-c:a", "pcm_s24le", `${voice}.new.wav`], log);
   renameSync(`${voice}.new.wav`, voice);
   ffmpeg(["-i", voice, "-c:a", "aac", "-b:a", "192k", join(dir, "build/preview.m4a")], log);
 }
