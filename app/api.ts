@@ -2,6 +2,7 @@
 import type { ActionInput, ActionName } from "../engine/api";
 import type { ApprovalRecord, ApprovalState } from "../engine/approve";
 import type { Issue } from "../engine/resolve";
+import type { Strip } from "./film";
 import type { Item, Review } from "../engine/review";
 import type { CutPlan, Resolved, Word } from "../engine/schema";
 
@@ -49,6 +50,8 @@ export type Project = {
   variants?: Variants | null;
   render?: { file: string; at: number } | null;
   previews?: Record<string, { file: string; at: number }>;
+  // The timeline's filmstrip per clip id (media/strip.ts), once drawn.
+  strips?: Record<string, Strip>;
   redo?: number;
   bin?: BinClip[];
   cut?: CutPlan;

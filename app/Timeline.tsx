@@ -1,4 +1,7 @@
+import { Thumbnail } from "@remotion/player";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { compositionFor } from "../effects/canvas";
+import { settledTime, shotPlan } from "../effects/preview";
 import { type Beat, beatAt } from "../engine/beats";
 import { atTime, cutLength, insertSegment, type Levels, moveSegment, placed, slotAt, snapEdge, splitAt, trimEdge } from "../engine/cut";
 import { partFile } from "../engine/parts";
@@ -6,7 +9,9 @@ import type { CutPlan, Resolved, ResolvedShot, Word } from "../engine/schema";
 import { lastKept } from "../engine/resolve";
 import { type BinClip, clock, type Suggestion } from "./api";
 import { ask } from "./dialog";
-import { Clock, playhead, usePlayhead } from "./playhead";
+import { levelValue, type Strip, stripTiles, wavePath } from "./film";
+import { component } from "./Gallery";
+import { playhead, usePlayhead } from "./playhead";
 
 export type Range = { start: number; end: number; label?: string };
 
@@ -60,7 +65,12 @@ export const Timeline: React.FC<{
   rendering?: boolean;
   onParts?: (change: { add?: { name: string; at: number }; rename?: { name: string; to: string }; remove?: string }) => void;
   onRender?: (ask: { part?: string; from?: number; to?: number }) => void;
-}> = ({ r, words, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick, beats = [], onBeat, notes = [], previews = {}, rendering = false, onParts, onRender }) => {
+  // The film itself: a filmstrip per clip (media/strip.ts).
+  strips?: Record<string, Strip>;
+  // Skimming (S): the viewer follows the pointer over the lanes (null when it leaves).
+  skim?: boolean;
+  onSkim?: (t: number | null) => void;
+}> = ({ r, words, selection, camera, music, onSeek, onSelect, onDropClip, drafts = [], cut, bin, clipWords, levels, segment, onSegment, onCut, onShotStart, picked = null, onPick, beats = [], onBeat, notes = [], previews = {}, rendering = false, onParts, onRender, strips = {}, skim = false, onSkim }) => {
   // The timeline is redrawn when the playhead crosses into another beat, not on every frame; the
   // playhead line, the clock and the sentence being said redraw on their own.
   const beat = usePlayhead((t) => beatAt(beats, t));
@@ -72,6 +82,11 @@ export const Timeline: React.FC<{
   const [drag, setDrag] = useState<Drag | null>(null);
   const names = useMemo(() => new Map(bin.map((c) => [c.id, c])), [bin]);
   const box = useRef<HTMLDivElement>(null);
+  const skimLine = useRef<HTMLDivElement>(null);
+  // Turning skimming off puts the viewer back on the playhead.
+  useEffect(() => {
+    if (!skim && skimLine.current) skimLine.current.style.display = "none";
+  }, [skim]);
   const sentences = useMemo(() => toSentences(words), [words]);
   // Fit shows the whole video in the visible width; zoom in from there.
   const [view, setView] = useState(1100);
@@ -230,17 +245,17 @@ export const Timeline: React.FC<{
 
   // A visual and the keep shots after it are one clip.
   const clips = useMemo(() => {
-    const out: { shot: ResolvedShot; end: number }[] = [];
+    const out: { shot: ResolvedShot; end: number; index: number; hash: string }[] = [];
     r.shots.forEach((s, i) => {
       if (s.keep) return;
       const last = lastKept(r.shots, i);
-      out.push({ shot: s, end: r.shots[last].end });
+      out.push({ shot: s, end: r.shots[last].end, index: i, hash: JSON.stringify(s) });
     });
     return out;
   }, [r.shots]);
   const isBroll = (s: ResolvedShot) => s.layout === "cutaway" || s.visual?.kind === "video";
   const isText = (s: ResolvedShot) => s.layout === "over";
-  const clip = (c: { shot: ResolvedShot; end: number }, pps: number, cls: string, label: string, edges = false) => {
+  const clip = (c: { shot: ResolvedShot; end: number; index: number; hash: string }, pps: number, cls: string, label: string, edges = false, thumb = false) => {
     // A b-roll edge being dragged shows where it will land.
     const d = drag?.kind === "shot" && (drag.edge === "in" ? drag.from === c.shot.start : drag.from === c.end) ? drag : null;
     const a = d?.edge === "in" ? d.t : c.shot.start;
@@ -259,8 +274,11 @@ export const Timeline: React.FC<{
       }}
     >
       {edges && <i className="edge in" title="Drag to trim the start" onPointerDown={(e) => trimShot(e, c.shot.start, "in")} onClick={(e) => e.stopPropagation()} />}
-      <b>{label}</b>
-      <span>{gist(c.shot.visual) || c.shot.anchor}</span>
+      {thumb && (b - a) * pps > 64 && <ShotThumb r={r} index={c.index} hash={c.hash} root={box} />}
+      <div className="words">
+        <b>{label}</b>
+        <span>{gist(c.shot.visual) || c.shot.anchor}</span>
+      </div>
       {edges && <i className="edge out" title="Drag to trim the end" onPointerDown={(e) => trimShot(e, c.end, "out")} onClick={(e) => e.stopPropagation()} />}
     </div>
     );
@@ -322,10 +340,10 @@ export const Timeline: React.FC<{
     {
       id: "graphics",
       label: "Graphics",
-      height: 44,
+      height: 50,
       render: (pps) => (
         <>
-          {clips.filter((c) => c.shot.visual && !isBroll(c.shot) && !isText(c.shot)).map((c) => clip(c, pps, "graphic", c.shot.visual!.kind))}
+          {clips.filter((c) => c.shot.visual && !isBroll(c.shot) && !isText(c.shot)).map((c) => clip(c, pps, `graphic ${kindGroup(c.shot.visual!.kind)}`, c.shot.visual!.kind, false, true))}
           {drafts.map((d) => (
             <div key={d.id} className="clip draft" style={{ left: d.start * pps, width: Math.max(3, (d.end - d.start) * pps - 2) }} title={`Suggested: ${d.reason}`} onClick={() => onSeek(d.start + 0.05)}>
               <b>{d.visual.kind}?</b>
@@ -340,7 +358,7 @@ export const Timeline: React.FC<{
     {
       id: "aroll",
       label: "A-roll",
-      height: 40,
+      height: 52,
       render: (pps) => {
         const segs = placed(shown);
         const slot = drag?.kind === "move" ? drag.slot : -1;
@@ -357,9 +375,9 @@ export const Timeline: React.FC<{
                   title={`${clip?.name ?? s.src}, ${clock(s.in)} to ${clock(s.out)}. Drag to move, drag an edge to trim (Alt: by frame), Delete to remove.`}
                   onPointerDown={(e) => grab(e, s.id)}
                 >
+                  <Film strip={strips[s.src]} levels={levels[s.src]} inSec={s.in} outSec={s.out} width={Math.max(3, (s.end - s.start) * pps - 2)} pps={pps} />
                   <i className="edge in" onPointerDown={(e) => trim(e, s.id, "in")} />
                   <b>{clip?.name.replace(/\.\w+$/, "") ?? s.src}</b>
-                  <span>{clock(s.in)}</span>
                   <i className="edge out" onPointerDown={(e) => trim(e, s.id, "out")} />
                 </div>
               );
@@ -390,8 +408,8 @@ export const Timeline: React.FC<{
             )),
         }]
       : []),
-    ...(music ? [{ id: "music", label: "Music", height: 22, render: (pps: number) => <div className="tbar music" style={{ left: 0, width: r.duration * pps }} /> }] : []),
-    ...(r.sfx.length ? [{ id: "sfx", label: "Sound", height: 22, render: (pps: number) => r.sfx.map((s, i) => <div key={i} className="sfx" style={{ left: s.t * pps }} title={s.kind} />) }] : []),
+    ...(music ? [{ id: "music", label: "Music", height: 22, render: (pps: number) => <div className="tbar music" style={{ left: 0, width: r.duration * pps }} title="Music" /> }] : []),
+    ...(r.sfx.length ? [{ id: "sfx", label: "Sound", height: 24, render: (pps: number) => r.sfx.map((s, i) => <div key={i} className="sfx" style={{ left: s.t * pps }} title={`${s.kind} at ${clock(s.t)}`} />) }] : []),
   ];
 
   const step = pps < 1 ? 120 : pps < 3 ? 60 : pps < 12 ? 30 : pps < 30 ? 15 : pps < 70 ? 5 : 1;
@@ -400,9 +418,6 @@ export const Timeline: React.FC<{
   return (
     <div className="timeline">
       <div className="tl-bar">
-        <span className="time">
-          <Clock /> <span className="muted">/ {clock(r.duration)}</span>
-        </span>
         {selection && (
           <span className="muted small">
             Selected {clock(selection.start)} to {clock(selection.end)}
@@ -452,6 +467,7 @@ export const Timeline: React.FC<{
           <div className="head ruler-head" />
           {tracks.map((t) => (
             <div key={t.id} className="head" style={{ height: t.height }}>
+              <TrackIcon id={t.id} />
               {t.label}
             </div>
           ))}
@@ -460,6 +476,17 @@ export const Timeline: React.FC<{
           className="lanes-scroll"
           ref={box}
           onPointerDown={down}
+          onPointerMove={(e) => {
+            if (!skim || e.buttons || dragCleanup.current) return;
+            const t = at(e.clientX);
+            onSkim?.(t);
+            const line = skimLine.current;
+            if (line) (line.style.left = `${t * pps}px`), (line.style.display = "block");
+          }}
+          onPointerLeave={() => {
+            if (skimLine.current) skimLine.current.style.display = "none";
+            onSkim?.(null);
+          }}
           onDragOver={(e) => {
             if (e.dataTransfer.types.includes(SOURCE)) {
               // A clip from the bin goes in where the line shows.
@@ -511,6 +538,7 @@ export const Timeline: React.FC<{
             ))}
             {selection && <div className="selection" style={{ left: selection.start * pps, width: (selection.end - selection.start) * pps }} />}
             <Playhead pps={pps} />
+            <div className="skimmer" ref={skimLine} />
             {ghost && <div className="ghost" style={{ left: ghost.at * pps, width: Math.max(6, ghost.length * pps) }} />}
           </div>
         </div>
@@ -563,3 +591,92 @@ export function toSentences(words: Word[]) {
   });
   return out;
 }
+
+// Which colour a graphic takes on the timeline: the real app windows, real pages, cards of words,
+// diagrams, and code.
+export function kindGroup(kind: string): "app" | "page" | "card" | "diagram" | "code" {
+  if (["cli", "claudeapp", "grokbot", "windows"].includes(kind)) return "app";
+  if (["image", "gallery", "float", "video", "logos", "logowall"].includes(kind)) return "page";
+  if (["flow", "doc", "chart", "prompt", "map", "pipeline", "journey", "funnel", "matrix", "timeline", "compare", "beforeafter", "grid", "bento", "kpi", "ring", "meter", "waffle", "levels"].includes(kind)) return "diagram";
+  if (kind === "code") return "code";
+  return "card";
+}
+
+// Renders its children only once it is near the visible part of the timeline.
+const Near: React.FC<{ root: React.RefObject<HTMLDivElement | null>; className: string; children: React.ReactNode }> = ({ root, className, children }) => {
+  const el = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    if (!el.current) return;
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { root: root.current, rootMargin: "0px 300px" });
+    io.observe(el.current);
+    return () => io.disconnect();
+  }, [root]);
+  return <div ref={el} className={className}>{near && children}</div>;
+};
+
+// A graphic's settled frame, alone (no footage), small, at the left of its clip. A reel's split
+// shows its top half, where the graphic is; anything else its middle. Drawn again only when the
+// shot itself changes.
+const ShotThumb: React.FC<{ r: Resolved; index: number; hash: string; root: React.RefObject<HTMLDivElement | null> }> = React.memo(
+  ({ r, index, root }) => {
+    const shot = r.shots[index];
+    const plan = useMemo(() => shotPlan(r, index, false), [r, index]);
+    const comp = compositionFor(r.canvas);
+    const reel = r.canvas !== "youtube";
+    // Drawn a little wider than its box and cropped, so the graphic itself fills it. A reel's split
+    // is centred on its top panel (the top 45% of the frame); anything else on the frame's middle.
+    const w = reel ? 76 : 72;
+    const h = (w * comp.height) / comp.width;
+    const top = -Math.max(0, h * (reel && shot.layout === "split" ? 0.225 : 0.5) - 21);
+    const frames = Math.max(1, Math.round(r.duration * r.fps));
+    return (
+      <Near root={root} className="thumb">
+        <div style={{ width: w, height: h, marginTop: top }}>
+          <Thumbnail component={component(plan)} inputProps={plan} durationInFrames={frames} fps={r.fps} compositionWidth={comp.width} compositionHeight={comp.height}
+            style={{ width: w, height: h }} frameToDisplay={Math.min(frames - 1, Math.round(settledTime(shot) * r.fps))} />
+        </div>
+      </Near>
+    );
+  },
+  (a, b) => a.hash === b.hash && a.index === b.index && a.r.canvas === b.r.canvas && a.r.duration === b.r.duration,
+);
+
+// A segment's frames and its voice, drawn under its name.
+const Film: React.FC<{ strip?: Strip; levels?: Levels; inSec: number; outSec: number; width: number; pps: number }> = React.memo(({ strip, levels, inSec, outSec, width, pps }) => {
+  const height = 52 - 8;
+  const tiles = strip ? stripTiles(strip, inSec, width, pps, height) : null;
+  const wave = levels ? wavePath(levelValue(levels.db, levels.quiet), levels.db.length, levels.rate, inSec, outSec, width, 18) : "";
+  return (
+    <div className="film" aria-hidden>
+      {tiles?.tiles.map((t, i) => (
+        <i key={i} style={{ left: t.x, width: tiles.tile, backgroundImage: `url(/${strip!.file})`, backgroundSize: `${strip!.count * tiles.tile}px ${height}px`, backgroundPosition: `${t.pos}px 0` }} />
+      ))}
+      {wave && (
+        <svg className="wave" width={width} height={18} viewBox={`0 0 ${width} 18`} preserveAspectRatio="none">
+          <path d={wave} />
+        </svg>
+      )}
+    </div>
+  );
+});
+
+const TrackIcon: React.FC<{ id: string }> = ({ id }) => {
+  const path: Record<string, React.ReactNode> = {
+    parts: <path d="M3 3.5h10M3 8h10M3 12.5h6" />,
+    beats: <path d="M3 4v8M6.5 4v8M10 4v8M13.5 4v8" />,
+    graphics: <><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M2.5 10l3-3 3 3 2-2 3 3" /></>,
+    text: <path d="M3.5 4h9M8 4v8.5" />,
+    broll: <><rect x="2.5" y="4" width="8" height="8" rx="1.5" /><path d="M10.5 7l3-1.5v5L10.5 9" /></>,
+    aroll: <><rect x="2.5" y="4" width="8" height="8" rx="1.5" /><path d="M10.5 7l3-1.5v5L10.5 9" /></>,
+    said: <path d="M3 5h10M3 8h7M3 11h9" />,
+    notes: <path d="M4 2.5v11M4 3h8l-2 2.5 2 2.5H4" />,
+    music: <><path d="M6 11.5V4l7-1.5V10" /><circle cx="4.5" cy="11.5" r="1.5" /><circle cx="11.5" cy="10" r="1.5" /></>,
+    sfx: <path d="M3 6.5v3h2.5L9 12.5v-9L5.5 6.5zM11 6a2.5 2.5 0 010 4" />,
+  };
+  return (
+    <svg className="ticon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {path[id] ?? null}
+    </svg>
+  );
+};

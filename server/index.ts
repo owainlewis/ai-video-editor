@@ -26,7 +26,8 @@ import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } from "./variants.ts";
 import { brollFolder, clipsFolder, loadLibrary } from "../media/broll.ts";
-import { cameraOnTimeline, clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
+import { cameraOnTimeline, clipDir, clipLevels, clipPath, clips, timeline } from "../media/bin.ts";
+import { makeStrip, stripInfo } from "../media/strip.ts";
 import { effectList } from "../effects/preview.ts";
 import { readCardLibrary, saveInLibrary } from "../media/cardlibrary.ts";
 import type { Resolved } from "../engine/schema.ts";
@@ -478,6 +479,9 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
       // Each clip's levels (build/level.json), which the editor reads to snap trims to pauses.
       for (const c of clips(dir)) if (c.ready) clipLevels(dir, c.id);
       const bin = clips(dir);
+      // The timeline's filmstrips, drawn in the background; a status event brings the editor back
+      // for them when they are ready (media/strip.ts).
+      for (const c of bin) if (c.ready) makeStrip(dir, c.id).then((made) => made && broadcast({ type: "status", slug }));
       // The words only change with the cut or a transcript. An editor that already holds them says
       // so (`have`), and a reload after a plan change comes back without them.
       const transcripts = bin.filter((c) => c.ready).map((c) => join(clipDir(dir, c.id), "transcript.json"));
@@ -562,6 +566,8 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
         // The scan is in the main clip's time; with a cut it is shown where those stretches play.
         camera: cameraInfo,
         render: existsSync(join(dir, "renders/final.mp4")) ? { file: `${slug}/renders/final.mp4`, at: statSync(join(dir, "renders/final.mp4")).mtimeMs } : null,
+        // The timeline's filmstrip per clip, once drawn.
+        strips: Object.fromEntries(bin.filter((c) => c.ready).flatMap((c) => { const st = stripInfo(dir, c.id, clipPath(slug, c.id)); return st ? [[c.id, st]] : []; })),
         // Finished renders of one part, by file name.
         previews: existsSync(join(dir, "renders")) ? Object.fromEntries(readdirSync(join(dir, "renders")).filter((f) => /^part-.*\.mp4$/.test(f)).map((f) => [f, { file: `${slug}/renders/${f}`, at: statSync(join(dir, "renders", f)).mtimeMs }])) : {},
       });

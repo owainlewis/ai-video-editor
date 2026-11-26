@@ -97,7 +97,7 @@ The goal: any small change is quicker by hand than by asking.
 1. **Timeline.** Drag a graphic to move it (it snaps to words and re-anchors), drag its edges to trim, drag its reveal ticks onto other words. Waveform on the A-roll (the levels are already in `build/level.json`). Thumbnails on segments. Multi-select, copy, paste, duplicate. Arrow keys step a frame, Shift steps a second, beats move to Alt. Zoom to the cursor with pinch or Cmd-scroll. Snap line shown while dragging.
 2. **Layout.** Chat and inspector side by side, panels resizable, sizes remembered. A command palette (Cmd-K) and a shortcuts sheet (?).
 3. **Player.** Click a graphic in the picture to pick it. Guides for safe areas. Loop the selection. Custom transport in place of the stock controls.
-4. **Inspector.** A word picker for every `at` (click the word in the transcript, no typing phrases). Reveal times listed and editable. Style options a card supports shown as controls, with the JSON view kept as the fallback.
+4. **Inspector.** Kept small (Owain, 2026-11-26: "too much fuss on editing text and details"): the big words on screen, start and end, layout. Small print and style details go through Claude, not more controls.
 5. **Captions, music, sound.** Fix a transcript word and it fixes captions and anchors. Move, add and remove a sound effect on its track. Set music level and in and out points on the Music track.
 6. **Versions panel.** The list of versions with who made each (the data is already saved), restore any, name a checkpoint, compare two side by side.
 7. **Real dialogs.** Replace every `prompt()` and `confirm()`.

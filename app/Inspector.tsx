@@ -8,12 +8,45 @@ import { settledTime, shotPlan } from "../effects/preview";
 import { Tile } from "./Gallery";
 import { playhead } from "./playhead";
 
-// The inspector: one graphic, edited by hand. Every change shows in the player at once (the shot is
-// patched in the browser) and is saved to the plan a moment after the last keystroke, where the
-// server resolves it and puts it back with the reason if it breaks the plan. Claude is for the big
-// asks; a typo, a word, a layout or a different card is quicker here.
+// The inspector: one graphic, and the few things quicker by hand than by asking: its big words on
+// screen, where it starts and ends, and its layout. Everything else (a flow's nodes, a page's
+// highlights, an app's script) is Claude's: select the graphic and ask (Owain, 2026-11-26: "too much
+// fuss on editing text and details"). Every change shows in the player at once (the shot is patched
+// in the browser) and is saved to the plan a moment after the last keystroke, where the server
+// resolves it and puts it back with the reason if it breaks the plan.
 
 export type PlanShot = { at: string; layout: string; visual?: VisualSpec & Record<string, unknown>; header?: string | false; [k: string]: unknown };
+
+// The big words a graphic puts on screen, each with how to write it back: the hit word, a diagram's
+// title, the header, the words of a beats card, and a card's own title, text or label. Small print
+// (labels in a flow, a page's highlights, an app's lines) is left to Claude.
+export type BigWords = { key: string; label: string; value: string; set: (shot: PlanShot, value: string) => PlanShot };
+export function bigWords(shot: PlanShot): BigWords[] {
+  const out: BigWords[] = [];
+  const hit = shot.hit as { text?: unknown } | undefined;
+  if (typeof hit?.text === "string") out.push({ key: "hit", label: "Hit word", value: hit.text, set: (s, v) => ({ ...s, hit: { ...(s.hit as object), text: v } }) });
+  const title = shot.title as { lines?: unknown } | undefined;
+  if (Array.isArray(title?.lines))
+    out.push({ key: "title", label: "Title", value: (title.lines as string[]).join("\n"), set: (s, v) => {
+      const [a = "", ...rest] = v.split("\n");
+      return { ...s, title: { ...(s.title as object), lines: [a, rest.join(" ")] } };
+    } });
+  if (typeof shot.header === "string") out.push({ key: "header", label: "Header", value: shot.header, set: (s, v) => ({ ...s, header: v || undefined }) });
+  const v = shot.visual as Record<string, unknown> | undefined;
+  if (v?.kind === "beats" && Array.isArray(v.items))
+    (v.items as { text: string }[]).forEach((item, i) =>
+      out.push({ key: `beat-${i}`, label: `Beat ${i + 1}`, value: item.text, set: (s, t) => {
+        const items = ((s.visual as { items: { text: string }[] }).items).map((x, j) => (j === i ? { ...x, text: t } : x));
+        return { ...s, visual: { ...(s.visual as object), items } as PlanShot["visual"] };
+      } }),
+    );
+  for (const k of ["title", "text", "label"] as const)
+    if (typeof v?.[k] === "string") {
+      out.push({ key: `visual-${k}`, label: k[0].toUpperCase() + k.slice(1), value: v[k] as string, set: (s, t) => ({ ...s, visual: { ...(s.visual as object), [k]: t } as PlanShot["visual"] }) });
+      break;
+    }
+  return out;
+}
 
 const LAYOUTS = { youtube: ["full", "side", "over", "media"], reel: ["split", "media", "scene", "full", "punch", "cutaway"], clean: ["split", "full", "card", "diagram", "over"] };
 
@@ -55,7 +88,6 @@ export const Inspector: React.FC<{
   }, [plan, r.shots, k]);
   const [shot, setShot] = useState<PlanShot | null>(fromPlan);
   const [error, setError] = useState("");
-  const [raw, setRaw] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
   const [trying, setTrying] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -92,10 +124,9 @@ export const Inspector: React.FC<{
     api.post(slug, "shot", { id, remove: true }).then(onClose).catch((e) => setError(String(e.message)));
   };
 
-  if (!rs || !shot) return <aside className="chat inspector"><div className="pad muted">That graphic is no longer in the plan. <button className="small" onClick={onClose}>Back</button></div></aside>;
+  if (!rs || !shot) return <aside className="inspector"><div className="pad muted">That graphic is no longer in the plan. <button className="small" onClick={onClose}>Close</button></div></aside>;
 
   const canvas = r.canvas === "youtube" ? "youtube" : r.style === "clean" ? "clean" : "reel";
-  const kinds = cards.filter((c) => c.sample && (canvas === "youtube" ? c.tier === "overlay" || c.layouts.some((l) => l === "side" || l === "over" || l === "media") : c.tier !== "overlay"));
   const card = cards.find((c) => c.kind === shot.visual?.kind);
   const sample = !!card?.sample && JSON.stringify(stripAnchors(shot.visual)) === JSON.stringify(stripAnchors(card.sample.visual));
   // The clean style has its own few layouts, whatever the graphic.
@@ -116,19 +147,15 @@ export const Inspector: React.FC<{
     if (end >= r.duration - 0.05) return setError("This graphic runs to the end of the video.");
     api.post(slug, "shot-end", { id, to: playhead.get() }).then(() => setError("")).catch((e) => setError(String(e.message)));
   };
-  const swap = (id: string) => {
-    const c = cards.find((x) => x.id === id);
-    if (!c?.sample) return;
-    const layout = c.layouts.includes(shot.layout as never) ? shot.layout : c.layouts.find((l) => (LAYOUTS[canvas] as string[]).includes(l)) ?? shot.layout;
-    save({ ...shot, layout: canvas === "youtube" && c.tier === "overlay" ? "over" : layout, visual: stripAnchors(c.sample.visual) as PlanShot["visual"] });
-  };
+  const onScreen = bigWords(shot);
 
   return (
-    <aside className="chat inspector">
-      <div className="insp-head">
-        <button className="quiet small" onClick={onClose} title="Back to the chat (Esc)">← Chat</button>
+    <aside className="inspector">
+      <div className="panel-bar">
         <b>{shot.visual?.kind ?? "picture"}</b>
-        <span className="muted small">{clock(rs.start)} to {clock(end)}</span>
+        <span className="muted">{clock(rs.start)} to {clock(end)}</span>
+        <span className="spacer" />
+        <button className="icon close" onClick={onClose} title="Close the graphic (Esc)" aria-label="Close">×</button>
       </div>
       {error && <p className="insp-error">Not saved: {error}</p>}
       <div className="insp-body">
@@ -154,33 +181,18 @@ export const Inspector: React.FC<{
             {layouts.map((l) => <button key={l} className={shot.layout === l ? "on" : ""} onClick={() => save({ ...shot, layout: l })}>{l}</button>)}
           </div>
         </div>
-        {canvas === "reel" && (
-          <label className="f">
-            <span>Header</span>
-            <input value={typeof shot.header === "string" ? shot.header : ""} placeholder="One *accent* word" onChange={(e) => save({ ...shot, header: e.target.value || undefined })} />
-          </label>
+        {onScreen.length > 0 && (
+          <div className="f">
+            <span>On screen</span>
+            {onScreen.map((w) => (
+              <label key={w.key} className="f">
+                <span className="sub">{w.label}</span>
+                <textarea className="field-text" rows={w.value.includes("\n") ? 2 : 1} value={w.value} onChange={(e) => save(w.set(shot, e.target.value))} />
+              </label>
+            ))}
+          </div>
         )}
-        {shot.visual && (
-          <label className="f">
-            <span>Graphic</span>
-            <select value={card?.id ?? ""} onChange={(e) => swap(e.target.value)}>
-              {(!card || !kinds.includes(card)) && <option value={card?.id ?? ""}>{shot.visual.kind} (drawn for this video)</option>}
-              {kinds.map((c) => <option key={c.id} value={c.id}>{c.kind}: {c.summary.slice(0, 60)}</option>)}
-            </select>
-          </label>
-        )}
-        {shot.visual && (raw === null ? (
-          <Fields value={shot.visual} onChange={(v) => save({ ...shot, visual: v as PlanShot["visual"] })} />
-        ) : (
-          <textarea className="json" value={raw} spellCheck={false} onChange={(e) => {
-            setRaw(e.target.value);
-            try {
-              save({ ...shot, visual: JSON.parse(e.target.value) });
-            } catch {
-              // Saved once it parses again.
-            }
-          }} />
-        ))}
+        <p className="muted small">For anything else on this graphic, ask Claude.</p>
         <Takes
           r={r}
           k={k}
@@ -196,61 +208,12 @@ export const Inspector: React.FC<{
         />
       </div>
       <div className="insp-foot">
-        {shot.visual && <button className="small" onClick={() => setRaw(raw === null ? JSON.stringify(shot.visual, null, 2) : null)}>{raw === null ? "JSON" : "Form"}</button>}
-        <button className="small" onClick={onAsk} title="Select this graphic and ask Claude to change it">Ask Claude</button>
+        <button className="small" onClick={onAsk} title="Select this graphic and write to Claude about it">Ask Claude</button>
         <span className="spacer" />
         {shot.visual && <button className="small quiet" onClick={remove} title="Take the graphic off; the picture plays as cut (Delete)">Remove</button>}
       </div>
     </aside>
   );
-};
-
-const LABELS: Record<string, string> = { at: "lands on", text: "text", title: "title", label: "label", items: "items" };
-const blank = (v: unknown): unknown => (typeof v === "string" ? "" : Array.isArray(v) ? [] : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, blank(x)])) : v);
-
-// A form for any visual: text, numbers, switches, lists and groups, read from the value itself, so
-// every kind in the schema is editable without a form of its own.
-export const Fields: React.FC<{ value: unknown; onChange: (v: unknown) => void; name?: string }> = ({ value, onChange, name }) => {
-  const label = name && <span>{LABELS[name] ?? name}</span>;
-  if (typeof value === "string")
-    return (
-      <label className="f">
-        {label}
-        <textarea className="field-text" rows={value.length > 48 || value.includes("\n") ? 3 : 1} value={value} onChange={(e) => onChange(e.target.value)} />
-      </label>
-    );
-  if (typeof value === "number") return <label className="f">{label}<input type="number" value={value} step="any" onChange={(e) => onChange(+e.target.value)} /></label>;
-  if (typeof value === "boolean") return <label className="f check"><input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />{label}</label>;
-  if (Array.isArray(value)) {
-    // A rectangle or a point: numbers on one line.
-    if (value.every((x) => typeof x === "number"))
-      return <label className="f">{label}<input defaultValue={value.join(", ")} onBlur={(e) => onChange(e.target.value.split(",").map((x) => +x.trim()))} /></label>;
-    return (
-      <div className="f">
-        {label}
-        <div className="items">
-          {value.map((x, i) => (
-            <div key={i} className="item">
-              <span className="n">{i + 1}</span>
-              <div className="grow"><Fields value={x} onChange={(v) => onChange(value.map((y, j) => (j === i ? v : y)))} /></div>
-              <button className="quiet small" title="Remove" onClick={() => onChange(value.filter((_, j) => j !== i))}>×</button>
-            </div>
-          ))}
-          {value.length > 0 && <button className="small" onClick={() => onChange([...value, blank(value[value.length - 1])])}>Add</button>}
-        </div>
-      </div>
-    );
-  }
-  if (value && typeof value === "object")
-    return (
-      <div className={name ? "f group" : "fields"}>
-        {label}
-        {Object.entries(value as Record<string, unknown>)
-          .filter(([k]) => k !== "kind")
-          .map(([k, x]) => <Fields key={k} name={k} value={x} onChange={(v) => onChange({ ...(value as object), [k]: v })} />)}
-      </div>
-    );
-  return null;
 };
 
 // Claude's takes on this graphic, side by side, each playing live with the footage. Click one to
@@ -304,3 +267,14 @@ const Takes: React.FC<{
     </div>
   );
 };
+
+// The inspector with nothing picked.
+export const NoInspector: React.FC = () => (
+  <aside className="inspector">
+    <div className="panel-bar"><b>Inspector</b></div>
+    <div className="panel-empty">
+      <b>Nothing selected</b>
+      Click a graphic on the timeline or in the Graphics tab to edit it here.
+    </div>
+  </aside>
+);

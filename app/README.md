@@ -40,7 +40,9 @@ The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `r
 - `Approval.tsx`: `ApprovalBadge` (`a`), the pill by the title; `ApprovalLine` (`slug`, `a`, `running`, `onError`), the line on the export sheet; `useApproval(slug, onError)` (`approve`, `unapprove`, `reveal`, `busy`); `explain(a)`, `LABEL`, `shortDate`.
 - `ui.tsx`: `ThemeSwitch`, `KeysButton` (`keys`), `UndoIcon`, `RedoIcon`, `ago(ms)`.
 - `project.ts`: `useProject(slug)` loads a project and keeps it current. `playhead.tsx`: `playhead` (`get`, `set`, `subscribe`), `usePlayhead(select?)`, `Clock`. `Preflight.tsx` also exports `preflight(p)`, the lines of the sheet.
-- `Timeline`, `Inspector` and `Library`: props are in their files. `Editor` is the only parent.
+- `Timeline`, `Inspector` and `Library`: props are in their files. `Editor` is the only parent. `NoInspector` is the inspector with nothing picked.
+- `Transport.tsx`: `Transport`, the viewer's own controls (play, a frame back and forward, the time, Voice or Mix, the frame's shape, the safe area, full screen); `useFit(el, aspect, key)`, the largest box of that shape inside `el`; `SafeArea`, a box over the picture from `SAFE` in `engine/qc.ts`; `usePlaying(player, key)`.
+- `film.ts`: the timeline's drawing maths and the `Strip` type. `stripTiles` (which frame of a clip's filmstrip each tile shows), `wavePath` (a waveform as an SVG path), `levelValue` (a clip's dB levels as 0 to 1).
 - Helpers: `previewShot`, `gist`, `toSentences`. Types: `PlanShot`, `Range`, `Item`.
 - Drag types: `CLIP` (`application/x-studio-clip`, a library or asset clip for the timeline) and `SOURCE` (`application/x-studio-source`, a bin clip for the cut).
 
@@ -58,11 +60,13 @@ Handled in `Editor`, on `window`:
 | Left, Right | Step to the previous or next beat. With no beats (YouTube): a frame, or a second with Shift |
 | M | Write a review note at the playhead |
 | ? | Open or close the keys sheet (`KeysButton`, on `window`, in the editor and the review) |
-| Cmd/Ctrl+1, 2, 3 | Show or hide the library, the timeline, or the right-hand panel (Claude and the inspector), even while typing |
+| Cmd/Ctrl+1, 2, 3, 4 | Show or hide the library, the timeline, Claude, or the inspector, even while typing |
+| G | Show or hide the safe area over the picture (kept in `localStorage` as `studio-safe`) |
+| S | Skimming on or off: while on and paused, the viewer shows the frame under the pointer on the timeline, and goes back to the playhead when the pointer leaves. The playhead does not move |
 
 ### Panels
 
-`layout.tsx`: `usePanels(kind)` keeps each panel's size and whether it shows, per reel or YouTube, in `localStorage` (`studio-panels-<kind>`). `panelStyle` puts the sizes on `.editor` as `--left`, `--right` and `--bottom`; `Splitters` are the edges a panel is dragged by (double-click for its usual size); `PanelToggles` are the three buttons in the header. Opening a graphic shows the right-hand panel.
+`layout.tsx`: `usePanels(kind)` keeps each panel's size and whether it shows, per reel or YouTube, in `localStorage` (`studio-panels-<kind>`). The panels are the library, the viewer, the inspector, Claude, and the timeline across the bottom, each a card with a 6 px gap (`PAD`, `GAP`). `panelStyle` puts each side panel's width plus its gap on `.editor` as `--left`, `--inspector`, `--right` and `--bottom`, and 0 for a hidden one, so it leaves no gap; `Splitters` are the edges a panel is dragged by, on the middle of each gap (double-click for its usual size); `PanelToggles` are the four buttons in the header. Opening a graphic shows the inspector. On YouTube the inspector starts hidden, so the 16:9 viewer has the width.
 
 In the Mac app (`mac-app` on `<html>`, set in `index.html`) the header is the window's title bar: it drags the window and leaves room for the traffic lights.
 | J, K, L | Shuttle back, stop, shuttle forward (up to 4x) |
@@ -110,6 +114,7 @@ Handled in `Review`, on `window`:
 - `Home` shows a card per project from the summary (`thumb`, `exported`, `review`, `approval`, `modified`), filtered by a search box and a format switch. Delete is on the card, not in the editor's header. A reel's card shows its approval state (Draft, Exported, Approved, Out of date) unless a job is running or failed. With any reel, the page shows "This week: N of 7 approved", counted Monday to Sunday from each reel's approval time (`engine/approve.ts`).
 - A reel's approval: the editor shows `ApprovalBadge` by the title. When the final export is current and not yet approved (Exported, or Out of date after a new export), Approve is the header's filled button and Export is not. Approved shows Show in Finder when the server can (`reveal`); otherwise the export sheet shows the path. The export sheet's Approval line sits apart from the pre-flight lines and never changes whether the export is ready. Unapprove asks first.
 - A sentence on the Said track narrower than 44 px is drawn as a mark, without its words.
+- The timeline shows the film: each graphic its settled frame alone (`shotPlan` at `settledTime`), drawn only once its clip is near the visible part and again only when the shot changes, on a colour for its kind (`kindGroup`: app windows, pages, cards, diagrams, code); each A-roll segment its clip's frames and voice. The selected clip has an ink outline, so it keeps its colour and frame.
 - The playhead's time is not React state. `Editor` writes it to the `playhead` store on every frame; only `Clock`, the playhead line, the lit sentence, the lit word in the script and the current beat subscribe. Handlers read `playhead.get()`.
 - The picked graphic is a shot id, not a start time. `Inspector` saves by id, and the server writes the id into the plan when the anchor changes, so the inspector stays on the shot.
 - Export always goes through `Preflight`. Export is disabled there with plan errors. "Export anyway" sends `force` only when QC is up to date and has errors.
@@ -133,7 +138,7 @@ Handled in `Review`, on `window`:
 
 ## Side Effects
 
-- HTTP through `api.ts`, plus direct GETs for `build/level.json`, thumbnails, `checks/frame.jpg`, the render download, and `build/edit.resolved.json` in QC.
+- HTTP through `api.ts`, plus direct GETs for `build/level.json`, each clip's `build/strip.jpg` (the filmstrip on the A-roll), thumbnails, `checks/frame.jpg`, the render download, and `build/edit.resolved.json` in QC. The project's payload says where the strips are once they are drawn (`strips`, from `media/strip.ts`).
 - `Home`, `Gallery`, `Editor`, `Library` and `watchRestarts` share one singleton `EventSource` on `/api/events` through `api.events`. There is no polling of the server.
 - Changes `location.hash` to navigate. `Gallery` calls `history.replaceState`.
 - Adds `window` listeners for keys, hash changes and drags, and removes them on cleanup.

@@ -4,28 +4,46 @@
    (light-dark); the page follows the system unless the switch has set data-theme on <html>. */
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f6f6f8, #161618);
-  --side: light-dark(#efeff3, #111113);
-  --panel: light-dark(#ffffff, #1d1d20);
-  --raise: light-dark(#f0f0f4, #26262b);
+  /* The page between the panels, the panels, and what sits on them. Cool and quiet, as in
+     Airtime and OpenFilm: white panels with small gaps of grey between, thin lines, small type. */
+  --bg: light-dark(#f6f6f8, #141416);
+  /* The editor's gaps between its panels. */
+  --gutter: light-dark(#e4e4e9, #0b0b0d);
+  --side: light-dark(#f1f1f4, #111113);
+  --panel: light-dark(#ffffff, #18181b);
+  --raise: light-dark(#f1f1f4, #222226);
   --fill: var(--raise);
-  --fill-2: light-dark(#e4e4ea, #313137);
-  --stage: light-dark(#ebebef, #0f0f11);
-  --line: light-dark(#e2e2e8, #2f2f35);
-  --ink: light-dark(#18181c, #ececef);
-  --ink-2: light-dark(#3a3a42, #c9c9cf);
-  --muted: light-dark(#5f5f6b, #a1a1aa);
-  --faint: light-dark(#8d8d98, #71717a);
-  --on-ink: light-dark(#ffffff, #18181c);
-  --accent: light-dark(#3b5bdb, #4c6ef5);
+  --fill-2: light-dark(#e6e6eb, #2c2c31);
+  --stage: light-dark(#f4f4f6, #111113);
+  --line: light-dark(rgba(16, 16, 24, 0.085), rgba(255, 255, 255, 0.075));
+  --line-2: light-dark(rgba(16, 16, 24, 0.16), rgba(255, 255, 255, 0.14));
+  --ink: light-dark(#161619, #ececef);
+  --ink-2: light-dark(#3a3a40, #c9c9cf);
+  --muted: light-dark(#5d5d63, #a1a1aa);
+  --faint: light-dark(#8b8b92, #71717a);
+  --on-ink: light-dark(#ffffff, #161619);
+  --accent: light-dark(#3b5bdb, #5b7cf7);
   --accent-fg: #ffffff;
-  --accent-soft: light-dark(#e6ebfd, #232a55);
-  --wash: light-dark(rgba(59, 91, 219, 0.1), rgba(76, 110, 245, 0.16));
+  --accent-soft: light-dark(#e8edfd, #222a52);
+  --wash: light-dark(rgba(59, 91, 219, 0.1), rgba(91, 124, 247, 0.16));
   --error: light-dark(#c4321f, #ff7b68);
   --warn: light-dark(#a86b00, #e3b341);
   --warn-wash: light-dark(#fdf1d8, #352b12);
-  --shadow: 0 10px 30px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.5));
+  --shadow: 0 12px 32px light-dark(rgba(16, 16, 24, 0.12), rgba(0, 0, 0, 0.5)), 0 4px 8px light-dark(rgba(16, 16, 24, 0.05), rgba(0, 0, 0, 0.3));
   --radius: 8px;
+  /* Clips on the timeline, one muted colour per kind of thing, white words on each. */
+  --clip-app: light-dark(#5a6ea6, #52659a);
+  --clip-page: light-dark(#3e7f8e, #377381);
+  --clip-card: light-dark(#ad6e3e, #9c6338);
+  --clip-diagram: light-dark(#7864a6, #6c5a96);
+  --clip-code: light-dark(#5d6979, #535e6d);
+  --clip-broll: light-dark(#9b5679, #8b4d6c);
+  --clip-footage: light-dark(#2e3138, #24262b);
+  --clip-music: light-dark(#3b7c7c, #336d6d);
+  --clip-sound: light-dark(#9b5679, #b46a8f);
+  --clip-text: #ffffff;
+  --wave: rgba(255, 255, 255, 0.55);
+  --playhead: light-dark(#161619, #ececef);
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -207,32 +225,58 @@ button.danger:hover:not(:disabled) { background: var(--error); color: #fff; opac
 .keys dd { margin: 0; }
 kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); font: 500 12px/1.4 "Helvetica Neue", Helvetica, Arial, sans-serif; text-align: center; }
 
-/* Editor: library | player | chat on top, the timeline across the bottom. Panels are white and set
-   apart by lines; the player sits on the grey page between them. */
+/* Editor: library | viewer | inspector | Claude on top, the timeline across the bottom. Each panel
+   is a white card with small grey gaps between, as OpenFilm and Final Cut. A side panel's column
+   holds its width and the gap beside it (app/layout.tsx), so a hidden panel leaves no gap. */
 .app { display: flex; flex-direction: column; height: 100%; font-size: 13px; }
-.editor { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 280px) minmax(0, 1fr) var(--right, 340px); grid-template-rows: minmax(0, 1fr) var(--bottom, 300px); }
-.editor.no-left > .library, .editor.no-right > .chat, .editor.no-right > .inspector, .editor.no-bottom > .bottom { display: none; }
+.editor {
+  position: relative; flex: 1; min-height: 0; display: grid; padding: 6px; background: var(--gutter);
+  grid-template-columns: var(--left, 286px) minmax(0, 1fr) var(--inspector, 286px) var(--right, 346px);
+  grid-template-rows: minmax(0, 1fr) var(--bottom, 306px);
+}
+.editor > .library, .editor > .stage, .editor > .inspector, .editor > .chat, .editor > .bottom { border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+.editor.no-left > .library, .editor.no-inspector > .inspector, .editor.no-right > .chat, .editor.no-bottom > .bottom { display: none; }
 .stage { grid-column: 2; grid-row: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px 10px; background: var(--bg); }
 .stage .screen { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
-/* Under the viewer, in one row: the beat and what it shows, then Voice or Mix. */
-.stage-foot { flex: none; width: 100%; max-width: 720px; display: flex; align-items: center; gap: 12px; }
+/* The editor's viewer: a panel, the picture fitted in it (app/Transport.tsx useFit), the transport under it. */
+.editor > .stage { justify-content: flex-start; gap: 0; padding: 0; background: var(--panel); }
+.editor > .stage .screen { position: relative; padding: 14px 16px 8px; }
+.editor > .stage .frame { position: relative; flex: none; box-shadow: 0 1px 3px rgba(16, 16, 24, 0.12); }
+.editor > .stage .frame > div:first-child { position: absolute !important; inset: 0; }
+/* The safe area QC holds every graphic to (engine/qc.ts SAFE), over the picture. */
+.safe { position: absolute; pointer-events: none; outline: 1px dashed rgba(255, 255, 255, 0.85); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); z-index: 2; }
+.stage-foot { flex: none; width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 12px 8px; }
 .stage-foot .beatbar { max-width: none; flex: 1; min-width: 0; }
 .stage-foot .spacer { flex: 1; }
+.editor > .stage .notebox { margin: 0 12px 10px; width: auto; align-self: stretch; }
+
+/* The transport under the viewer: play and step on the left with the time, view switches on the right. */
+.transport { flex: none; width: 100%; display: flex; align-items: center; gap: 2px; padding: 4px 10px 6px; font-variant-numeric: tabular-nums; }
+.transport button.icon { width: 28px; height: 28px; border-radius: 6px; }
+.transport button.icon svg { width: 15px; height: 15px; }
+.transport button.icon.on { color: var(--accent); background: var(--accent-soft); }
+.transport .play { color: var(--ink); }
+.transport .when { font-size: 12px; color: var(--ink); margin: 0 8px 0 6px; white-space: nowrap; }
+.transport .when .muted { color: var(--faint); }
+.transport .rate { font-size: 11px; color: var(--accent); font-weight: 600; }
+.transport .aspect { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin: 0 4px; }
 
 /* The edges a panel is dragged by: a few pixels over each line between panels, a line in the accent
    while hovered or dragged. */
 .splitters { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
 .split { position: absolute; pointer-events: auto; }
 .split::after { content: ""; position: absolute; background: var(--accent); opacity: 0; transition: opacity 0.12s; }
-.split:hover::after, .splitters.drag-left .split-left::after, .splitters.drag-right .split-right::after, .splitters.drag-bottom .split-bottom::after { opacity: 1; transition-delay: 0.08s; }
-.split-col { top: 0; bottom: var(--bottom); width: 9px; cursor: col-resize; }
+.split:hover::after, .splitters.drag-left .split-left::after, .splitters.drag-right .split-right::after, .splitters.drag-bottom .split-bottom::after, .splitters.drag-inspector .split-inspector::after { opacity: 1; transition-delay: 0.08s; }
+/* Each sits on the gap's middle: the editor's 6 px padding, the column, less half the 6 px gap. */
+.split-col { top: 6px; bottom: calc(var(--bottom) + 6px); width: 9px; cursor: col-resize; }
 .split-col::after { top: 0; bottom: 0; left: 4px; width: 1px; }
-.split-left { left: calc(var(--left) - 5px); }
-.split-right { right: calc(var(--right) - 5px); }
-.split-row { left: 0; right: 0; bottom: calc(var(--bottom) - 5px); height: 9px; cursor: row-resize; }
+.split-left { left: calc(var(--left) - 1.5px); }
+.split-inspector { right: calc(var(--right) + var(--inspector) - 1.5px); }
+.split-right { right: calc(var(--right) - 1.5px); }
+.split-row { left: 6px; right: 6px; bottom: calc(var(--bottom) - 1.5px); height: 9px; cursor: row-resize; }
 .split-row::after { left: 0; right: 0; top: 4px; height: 1px; }
 .splitters.dragging { pointer-events: auto; }
-.splitters.drag-left, .splitters.drag-right { cursor: col-resize; }
+.splitters.drag-left, .splitters.drag-right, .splitters.drag-inspector { cursor: col-resize; }
 .splitters.drag-bottom { cursor: row-resize; }
 /* While a panel is dragged, the player and timeline under the pointer do not take it. */
 .splitters.dragging ~ * { user-select: none; }
@@ -242,11 +286,19 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 
 /* A panel's heading, as Airtime's Details panel: small, upper case, faint. */
 .panel-h { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+/* A panel's top bar: its name in plain 12 px, what it is about, its own buttons on the right. */
+.panel-bar { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); flex: none; font-size: 12px; white-space: nowrap; }
+.panel-bar b { font-weight: 600; color: var(--ink); }
+.panel-bar .muted { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.panel-bar button { font-size: 12px; padding: 3px 8px; }
+.panel-bar button.icon { width: 24px; height: 24px; padding: 0; font-size: 16px; }
+.panel-empty { margin: auto 0; padding: 0 24px; text-align: center; color: var(--faint); font-size: 12px; line-height: 1.6; }
+.panel-empty b { display: block; color: var(--ink-2); font-weight: 600; font-size: 13px; margin-bottom: 2px; }
 
-.library { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); }
+.library { grid-column: 1; grid-row: 1; margin-right: 6px; min-height: 0; display: flex; flex-direction: column; background: var(--panel); }
 /* Tabs are underlined, as Airtime's platform tabs. */
 .tabs { display: flex; gap: 2px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; flex: none; border-bottom: 1px solid var(--line); }
-.tabs button { padding: 13px 6px 11px; border-radius: 0; font-size: 13px; font-weight: 500; color: var(--muted); flex: none; }
+.tabs button { padding: 10px 6px 9px; border-radius: 0; font-size: 12px; font-weight: 500; color: var(--muted); flex: none; }
 .tabs button:hover:not(:disabled) { background: transparent; color: var(--ink); }
 .tabs button.on, .tabs button.on:hover:not(:disabled) { color: var(--ink); background: transparent; box-shadow: inset 0 -2px 0 var(--ink); }
 .assets { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
@@ -287,18 +339,16 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .script .gap.off { color: var(--muted); outline-style: dashed; }
 
 /* Chat: Airtime's Details panel. */
-.chat { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
-.suggest-bar { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; height: 44px; border-bottom: 1px solid var(--line); flex: none; }
-.suggest-bar button { padding: 4px 10px; font-size: 12px; }
+.chat { grid-column: 4; grid-row: 1; margin-left: 6px; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
 .drafts { max-height: 45%; overflow-y: auto; padding: 12px 16px 4px; display: flex; flex-direction: column; gap: 8px; }
 .draft-card { border-radius: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); }
 .draft-card p { margin: 4px 0 10px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
 .draft-card .when { padding: 0; font-size: 12px; color: var(--ink); font-weight: 500; }
 .draft-card .when:hover:not(:disabled) { background: transparent; text-decoration: underline; }
 .draft-card .row { justify-content: flex-end; gap: 6px; }
-.messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.messages .hint { margin: auto 0; padding: 0 12px; text-align: center; color: var(--muted); line-height: 1.6; }
-.messages .hint b { display: block; color: var(--ink); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.messages { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.messages .hint { margin: auto 0; padding: 0 12px; text-align: center; color: var(--faint); font-size: 12px; line-height: 1.6; }
+.messages .hint b { display: block; color: var(--ink-2); font-weight: 600; font-size: 13px; margin-bottom: 2px; }
 .msg { padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; max-width: 92%; line-height: 1.5; }
 .msg.user { align-self: flex-end; background: var(--raise); }
 .msg.claude { align-self: flex-start; padding-left: 0; padding-right: 0; }
@@ -308,7 +358,7 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .checks .n { font-variant-numeric: tabular-nums; }
 .checks .n.error, .checks .n.warn { font-weight: 600; }
 .checks p { margin: 4px 6px; line-height: 1.5; }
-.compose { padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 8px; flex: none; }
+.compose { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; flex: none; }
 .compose .box { display: flex; flex-direction: column; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); padding: 4px; }
 .compose .box:focus-within { border-color: var(--accent); }
 .compose textarea { min-height: 64px; resize: none; background: transparent; border: 0; padding: 8px 9px; }
@@ -318,60 +368,78 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .chip.muted { background: transparent; padding-left: 2px; color: var(--faint); }
 .chip button { padding: 0 6px; }
 
-.bottom { grid-column: 1 / span 3; grid-row: 2; background: var(--panel); border-top: 1px solid var(--line); min-width: 0; min-height: 0; position: relative; }
+.bottom { grid-column: 1 / span 4; grid-row: 2; margin-top: 6px; background: var(--panel); min-width: 0; min-height: 0; position: relative; }
 .toast { position: absolute; right: 16px; bottom: 16px; max-width: 420px; padding: 10px 14px; border-radius: 10px; background: var(--panel); color: var(--error); border: 1px solid var(--error); box-shadow: var(--shadow); font-size: 13px; cursor: pointer; z-index: 5; }
 
-/* Timeline: a row per track with a line between, labels in a column on the left, a ruler with ticks.
-   Graphics are tinted in the accent so they read apart from the footage at any zoom. */
+/* Timeline: a row per track with a line between, labels with an icon in a column on the left, a
+   ruler with ticks. Clips show the film: graphics their own frame on a colour for their kind, the
+   A-roll its frames and its voice. The selected clip has an ink outline. */
 .timeline { height: 100%; display: flex; flex-direction: column; }
-.tl-bar { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12px; flex: none; border-bottom: 1px solid var(--line); }
-.tl-bar .time { font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600; margin-right: 6px; }
-.tl-bar .time .muted { font-weight: 400; color: var(--muted); }
+.tl-bar { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 8px 0 12px; font-size: 12px; flex: none; border-bottom: 1px solid var(--line); }
+.tl-bar button { font-size: 12px; padding: 3px 8px; }
 .zoom { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.zoom input { width: 120px; }
+.zoom input { width: 110px; }
 .tl-body { flex: 1; min-height: 0; display: flex; overflow-y: auto; }
-.heads { width: 84px; flex: none; border-right: 1px solid var(--line); }
-.head { display: flex; align-items: center; padding: 0 14px; font-size: 12px; font-weight: 500; color: var(--muted); box-shadow: inset 0 -1px 0 var(--line); }
+.heads { width: 96px; flex: none; border-right: 1px solid var(--line); background: var(--panel); }
+.head { display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 11px; font-weight: 500; color: var(--muted); box-shadow: inset 0 -1px 0 var(--line); }
+.head .ticon { width: 13px; height: 13px; flex: none; color: var(--faint); }
 .ruler-head { height: 24px; }
-.lanes-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; user-select: none; cursor: text; }
+.lanes-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; user-select: none; cursor: text; background: var(--stage); }
 .lanes { position: relative; }
-.ruler { position: relative; height: 24px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; box-shadow: inset 0 -1px 0 var(--line); }
+.ruler { position: relative; height: 24px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; box-shadow: inset 0 -1px 0 var(--line); background: var(--panel); }
 .ruler span { position: absolute; top: 0; bottom: 0; padding-left: 4px; line-height: 24px; white-space: nowrap; border-left: 1px solid var(--line); }
 .track { position: relative; box-shadow: inset 0 -1px 0 var(--line); }
 .clip {
-  position: absolute; top: 4px; bottom: 4px; border-radius: 6px; padding: 3px 8px; overflow: hidden; font-size: 12px; cursor: pointer;
+  position: absolute; top: 4px; bottom: 4px; border-radius: 5px; padding: 3px 7px; overflow: hidden; font-size: 11px; cursor: pointer;
   display: flex; flex-direction: column; justify-content: center; line-height: 1.25; background: var(--fill-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line);
 }
-.clip:hover { filter: brightness(0.97); }
+.clip:hover { filter: brightness(1.06); }
 .clip b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.clip span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-.clip.graphic { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
-.clip.graphic span { color: var(--ink-2); }
-.clip.text span { font-size: 11px; }
-/* Footage is hatched, graphics are tinted. */
-.clip.broll { background: repeating-linear-gradient(135deg, var(--fill-2) 0 5px, var(--raise) 5px 10px); }
-.clip.on, .clip.graphic.on, .clip.seg.on { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
-.clip.on span { color: var(--accent-fg); opacity: 0.85; }
+.clip span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+.clip .words { display: flex; flex-direction: column; min-width: 0; }
+/* A graphic: its frame at the left, its kind and words beside it, on its kind's colour. */
+.clip.graphic { flex-direction: row; align-items: center; justify-content: flex-start; gap: 7px; padding: 0 7px 0 0; color: var(--clip-text); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); background: var(--clip-card); }
+.clip.graphic:not(:has(.thumb)) { padding-left: 7px; }
+.clip.graphic span { color: var(--clip-text); opacity: 0.78; }
+.clip.graphic.app { background: var(--clip-app); }
+.clip.graphic.page { background: var(--clip-page); }
+.clip.graphic.diagram { background: var(--clip-diagram); }
+.clip.graphic.code { background: var(--clip-code); }
+.clip .thumb { flex: none; width: 52px; height: 100%; overflow: hidden; background: #fff; border-right: 1px solid rgba(0, 0, 0, 0.15); display: flex; align-items: flex-start; justify-content: center; }
+.wide .clip .thumb { width: 72px; }
+.clip.text { background: var(--clip-card); color: var(--clip-text); }
+.clip.text span { font-size: 10px; color: var(--clip-text); opacity: 0.78; }
+.clip.broll { background: var(--clip-broll); color: var(--clip-text); }
+.clip.broll span { color: var(--clip-text); opacity: 0.78; }
+/* Selected: an outline in ink, so the clip keeps its colour and frame. */
+.clip.on, .clip.graphic.on, .clip.seg.on { box-shadow: inset 0 0 0 2px var(--playhead), 0 0 0 1px var(--panel); filter: none; }
 .clip.part { top: 3px; bottom: 3px; background: var(--raise); flex-direction: row; justify-content: flex-start; align-items: center; gap: 8px; }
-.clip.beat { top: 7px; bottom: 7px; padding: 0 4px; border-radius: 0; background: transparent; box-shadow: inset 1px 0 0 var(--line); align-items: flex-start; }
+.clip.part.on { background: var(--accent-soft); }
+.clip.beat { top: 7px; bottom: 7px; padding: 0 4px; border-radius: 0; background: transparent; box-shadow: inset 1px 0 0 var(--line-2); align-items: flex-start; }
 .clip.beat b { font-size: 10px; font-weight: 500; opacity: 0; }
 .clip.beat.held { box-shadow: inset 1px 0 0 var(--warn); }
-.clip.beat.on { background: var(--accent-soft); color: var(--ink); }
+.clip.beat.on { background: var(--accent-soft); color: var(--ink); box-shadow: inset 1px 0 0 var(--accent); }
 .clip.beat.on b { opacity: 1; }
-.clip.draft { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); color: var(--muted); border-radius: 6px; }
-.clip.seg { cursor: grab; }
+.clip.draft { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); color: var(--muted); border-radius: 5px; }
+/* The A-roll: the footage's frames with its voice over the bottom, the clip's name on top. */
+.clip.seg { cursor: grab; padding: 0; justify-content: flex-start; background: var(--clip-footage); color: var(--clip-text); }
+.clip.seg > b { position: relative; z-index: 1; align-self: flex-start; margin: 3px 0 0 5px; padding: 0 5px; border-radius: 3px; font-size: 10px; line-height: 15px; background: rgba(0, 0, 0, 0.45); max-width: calc(100% - 10px); }
 .clip.seg.moving { opacity: 0.45; }
-.clip .edge { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 1; }
+.film { position: absolute; inset: 0; pointer-events: none; }
+.film i { position: absolute; top: 0; bottom: 0; background-repeat: no-repeat; opacity: 0.9; }
+.film .wave { position: absolute; left: 0; bottom: 0; background: linear-gradient(transparent, rgba(0, 0, 0, 0.55)); }
+.wave path { fill: var(--wave); }
+.clip .edge { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 2; }
 .clip .edge.in { left: 0; }
 .clip .edge.out { right: 0; }
-.clip .edge:hover { background: var(--accent); opacity: 0.5; }
+.clip .edge:hover { background: var(--accent); opacity: 0.6; }
 .tbar { position: absolute; top: 6px; bottom: 6px; border-radius: 4px; }
 .tbar.camera { background: var(--muted); }
-.track.aroll .tbar.camera { top: auto; bottom: 1px; height: 2px; border-radius: 1px; }
+.track.aroll .tbar.camera { top: auto; bottom: 1px; height: 2px; border-radius: 1px; z-index: 1; }
 .tbar.punch { background: var(--warn-wash); }
-.tbar.music { background: var(--fill-2); }
+.tbar.music { background: color-mix(in srgb, var(--clip-music) 45%, transparent); }
 /* A child of its track only: the Sound track's own class is "sfx" too. */
-.track > .sfx { position: absolute; top: 7px; width: 4px; height: 9px; margin-left: -2px; border-radius: 2px; background: var(--muted); }
+.track > .sfx { position: absolute; top: 6px; width: 4px; height: 12px; margin-left: -2px; border-radius: 2px; background: var(--clip-sound); }
 .sentence {
   position: absolute; top: 4px; bottom: 4px; padding: 3px 6px; font-size: 11px; line-height: 15px; color: var(--muted);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
@@ -381,8 +449,10 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .sentence.mark { top: 15px; bottom: 15px; padding: 0; border-radius: 2px; background: color-mix(in srgb, var(--faint) 55%, transparent); }
 .sentence.mark.now { background: var(--accent); }
 .selection { position: absolute; top: 24px; bottom: 0; background: var(--wash); box-shadow: inset 1px 0 0 var(--accent), inset -1px 0 0 var(--accent); pointer-events: none; }
-.playhead { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -1px; background: var(--accent); pointer-events: none; z-index: 2; }
-.playhead::before { content: ""; position: absolute; top: 0; left: -5px; width: 11px; height: 11px; border-radius: 2px 2px 6px 6px; background: var(--accent); }
+.playhead { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: var(--playhead); pointer-events: none; z-index: 3; }
+.playhead::before { content: ""; position: absolute; top: 0; left: -5px; width: 11px; height: 12px; background: var(--playhead); clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%); }
+/* Where the pointer is while skimming: the frame the viewer shows. */
+.skimmer { display: none; position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: var(--error); pointer-events: none; z-index: 3; }
 .ghost { position: absolute; top: 24px; bottom: 0; background: var(--wash); outline: 1px dashed var(--accent); outline-offset: -1px; border-radius: 6px; pointer-events: none; }
 .slot { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); border-radius: 1px; pointer-events: none; z-index: 2; }
 /* A clip from the bin over the A-roll: the track lights up and a line shows where it goes in. */
@@ -407,29 +477,25 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .notebox input { flex: 1; background: transparent; border: 0; padding: 6px 0; }
 .notebox input:focus { border: 0; }
 
-/* Inspector: one graphic, edited by hand. */
-.inspector .insp-head { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; min-height: 44px; border-bottom: 1px solid var(--line); flex: none; }
-.inspector .insp-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-.inspector .insp-foot { display: flex; gap: 6px; padding: 12px 16px 16px; border-top: 1px solid var(--line); flex: none; }
+/* Inspector: one graphic, edited by hand, in its own column left of Claude. */
+.inspector { grid-column: 3; grid-row: 1; margin-left: 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); font-size: 12px; }
+.inspector .insp-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+.inspector .insp-foot { display: flex; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid var(--line); flex: none; }
+.inspector input:not([type="checkbox"], [type="range"], [type="file"]), .inspector textarea, .inspector select { font-size: 12px; padding: 5px 8px; background: var(--raise); border-color: transparent; }
+.inspector input:focus, .inspector textarea:focus, .inspector select:focus { border-color: var(--accent); }
+.inspector .seg button { font-size: 12px; padding: 3px 8px; }
 .inspector .said { font-size: 12px; color: var(--muted); font-style: italic; line-height: 1.5; }
 .inspector .f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.inspector .f > span { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: capitalize; }
+.inspector .f > span { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: capitalize; }
 .inspector .f.check { flex-direction: row; align-items: center; gap: 8px; }
-.inspector .f.group { padding-left: 12px; border-left: 1px solid var(--line); }
-.inspector .fields { display: flex; flex-direction: column; gap: 12px; }
+.inspector .f > .f > span.sub { font-size: 11px; font-weight: 400; color: var(--faint); text-transform: none; }
 .inspector input:not([type="checkbox"]), .inspector textarea, .inspector select { width: 100%; }
 .inspector textarea { min-height: 60px; resize: vertical; }
 .inspector textarea.field-text { min-height: 0; field-sizing: content; resize: vertical; }
-.inspector textarea.json { min-height: 280px; font: 12px/1.45 ui-monospace, Menlo, monospace; }
-.inspector .items { display: flex; flex-direction: column; gap: 6px; }
-.inspector .item { display: flex; gap: 6px; align-items: flex-start; }
-.inspector .item .n { font-size: 11px; color: var(--faint); width: 14px; padding-top: 9px; text-align: right; }
-.inspector .item .grow { flex: 1; min-width: 0; }
-.inspector .item .fields { gap: 4px; }
 .inspector .row.gap { gap: 6px; }
 .inspector .row.gap button { flex: none; }
 .inspector .row.gap input, .inspector .row.gap .grow { flex: 1; }
-.inspector .insp-error { margin: 12px 16px 0; padding: 8px 10px; border-radius: var(--radius); font-size: 12px; color: var(--error); border: 1px solid var(--error); }
+.inspector .insp-error { margin: 10px 12px 0; padding: 8px 10px; border-radius: var(--radius); font-size: 12px; color: var(--error); border: 1px solid var(--error); }
 .inspector .takes { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
 .inspector .take-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .inspector .take { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); }
