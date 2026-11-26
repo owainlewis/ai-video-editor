@@ -3,7 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { approvalState, fileTitle, thisWeek, weekStart } from "../engine/approve.ts";
-import { approval, approve, approvedFolder, folderLabel, listApproved, loadRecord, unapprove, weekCount } from "../media/approve.ts";
+import { approval, approve, approvedFolder, folderLabel, listApproved, loadRecord, moveToTrash, unapprove, weekCount } from "../media/approve.ts";
 
 // Every test approves into a temporary folder through STUDIO_APPROVED, and trashes into another.
 let root: string, projects: string, folder: string, trash: string;
@@ -193,11 +193,60 @@ describe("approving a reel", () => {
     expect(weekCount(projects, day("2026-11-15T23:59:00"))).toEqual({ count: 2, target: 7 });
     expect(weekCount(projects, day("2026-11-16T00:00:00")).count).toBe(0);
   });
+
+  it("does not deadlock approval on an empty, corrupt, or non-positive export.lock", async () => {
+    const dir = reel("a");
+    mkdirSync(join(dir, "build"), { recursive: true });
+    const lock = join(dir, "build/export.lock");
+
+    for (const bad of ["", "   \n", "corrupt", "0", "-1", "NaN", "99999999"]) {
+      writeFileSync(lock, bad);
+      expect(approval(dir), `lock=${JSON.stringify(bad)}`).toMatchObject({ state: "exported", ready: true });
+    }
+
+    // A live PID still blocks approval.
+    writeFileSync(lock, String(process.pid));
+    expect(approval(dir)).toMatchObject({ state: "draft", ready: false });
+    await expect(approve(projects, "a", { plainCover: true, cover })).rejects.toThrow(/export is running/i);
+
+    // An empty lock does not block approve().
+    writeFileSync(lock, "");
+    const r = await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-13T12:00:00") });
+    expect(existsSync(r.video)).toBe(true);
+  });
+
+  it("does not split dotted directory names on Trash collision, while preserving file extensions", () => {
+    const src1 = join(root, "src1", "2026-11-13 Claude 3.5 Sonnet");
+    const src2 = join(root, "src2", "2026-11-13 Claude 3.5 Sonnet");
+    mkdirSync(src1, { recursive: true });
+    mkdirSync(src2, { recursive: true });
+    writeFileSync(join(src1, "reel.mp4"), "first");
+    writeFileSync(join(src2, "reel.mp4"), "second");
+
+    const first = moveToTrash(src1, trash);
+    const second = moveToTrash(src2, trash);
+    expect(first).toBe(join(trash, "2026-11-13 Claude 3.5 Sonnet"));
+    const secondName = second.slice(trash.length + 1);
+    expect(secondName).toMatch(/^2026-11-13 Claude 3\.5 Sonnet \d\d\.\d\d\.\d\d( \d+)?$/);
+    expect(readFileSync(join(second, "reel.mp4"), "utf8")).toBe("second");
+
+    // Regular files still keep their extension at the end on collision.
+    const f1 = join(root, "src1", "clip.mp4");
+    const f2 = join(root, "src2", "clip.mp4");
+    writeFileSync(f1, "a");
+    writeFileSync(f2, "b");
+    moveToTrash(f1, trash);
+    const trashedFile = moveToTrash(f2, trash);
+    expect(trashedFile.slice(trash.length + 1)).toMatch(/^clip \d\d\.\d\d\.\d\d( \d+)?\.mp4$/);
+  });
 });
 
-it("shows Google Drive's synced folder by its short name", () => {
+it("shows Google Drive's synced folder by its short name and respects home path boundaries", () => {
   expect(folderLabel(join(homedir(), "Library/CloudStorage/GoogleDrive-someone@example.com/My Drive/Content/Reels/Approved"))).toBe("Google Drive/Content/Reels/Approved");
   expect(folderLabel(join(homedir(), "Reels/Approved"))).toBe("~/Reels/Approved");
+  expect(folderLabel(homedir())).toBe("~");
+  expect(folderLabel(`${homedir()}-backup/Approved`)).toBe(`${homedir()}-backup/Approved`);
+  expect(folderLabel(`/Volumes/Backup${homedir()}/Approved`)).toBe(`/Volumes/Backup${homedir()}/Approved`);
   expect(folderLabel("/Volumes/Disk/Approved")).toBe("/Volumes/Disk/Approved");
 });
 

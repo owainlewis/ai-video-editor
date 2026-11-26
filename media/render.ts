@@ -1,7 +1,7 @@
 // Audio mix, stills and the final render. Rendering happens once, at the end: while editing, the
 // player draws the plan live from the preview copy, so nothing here runs on each change.
 import { spawn } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
 import { frameWindow, type Preview, type Range } from "../engine/parts.ts";
@@ -10,7 +10,7 @@ import { type FlatCut, hasCut, renderCut } from "./cutrender.ts";
 import { holdEnd, renderNoCta } from "./nocta.ts";
 import { END_HOLD } from "../engine/cta.ts";
 import type { Issue } from "../engine/resolve.ts";
-import { FPS, type Log, loudness, probeAudioDuration, probeDuration, probeSize, probeVideoDuration, ROOT, run, writeJson } from "./tools.ts";
+import { FPS, type Log, loudness, probeAudioDuration, probeDuration, probeSize, probeVideoDuration, ROOT, run, tempSibling, writeJson } from "./tools.ts";
 
 // `flat`: mix the flattened cut's voice, with the settings its export wrote.
 export function mixAudio(projects: string, slug: string, log?: Log, flat?: FlatCut) {
@@ -55,7 +55,8 @@ export function coverStill(projects: string, slug: string, file: string, log?: L
     const read = (c: Buffer) => (tail = (tail + c.toString()).slice(-2000));
     p.stdout.on("data", read);
     p.stderr.on("data", read);
-    p.on("close", (code) => (code === 0 ? ok() : fail(new Error(`the cover still failed:\n${tail}`))));
+    p.on("error", fail);
+    p.on("close", (code, signal) => (code === 0 ? ok() : fail(new Error(`the cover still failed:\n${tail || (signal ? `signal ${signal}` : `exit ${code}`)}`))));
   });
 }
 
@@ -64,17 +65,20 @@ export function coverStill(projects: string, slug: string, file: string, log?: L
 export function verifyReel(out: string, length: number, size: [number, number]) {
   const issues: Issue[] = [];
   const got = probeDuration(out);
-  if (Math.abs(got - length) > 0.15) issues.push({ level: "error", message: `the export is ${got.toFixed(2)}s; the plan is ${length.toFixed(2)}s` });
+  if (!Number.isFinite(got)) issues.push({ level: "error", message: "could not measure the export duration" });
+  else if (Math.abs(got - length) > 0.15) issues.push({ level: "error", message: `the export is ${got.toFixed(2)}s; the plan is ${length.toFixed(2)}s` });
   const [w, h] = probeSize(out);
   if (w !== size[0] || h !== size[1]) issues.push({ level: "error", message: `the export is ${w}x${h}; a reel is ${size[0]}x${size[1]}` });
   // The picture can stop short of the file too: a held last frame that never came (2026-11-14).
   const picture = probeVideoDuration(out);
-  if (Math.abs(picture - got) > 0.15) issues.push({ level: "error", message: `the picture runs ${picture.toFixed(2)}s of the ${got.toFixed(2)}s file` });
+  if (!Number.isFinite(picture)) issues.push({ level: "error", message: "could not measure the export video duration" });
+  else if (Number.isFinite(got) && Math.abs(picture - got) > 0.15) issues.push({ level: "error", message: `the picture runs ${picture.toFixed(2)}s of the ${got.toFixed(2)}s file` });
   const sound = probeAudioDuration(out);
-  if (Number.isNaN(sound)) issues.push({ level: "error", message: "the export has no sound" });
-  else if (Math.abs(sound - got) > 0.15) issues.push({ level: "error", message: `the sound runs ${sound.toFixed(2)}s of the ${got.toFixed(2)}s picture` });
+  if (!Number.isFinite(sound)) issues.push({ level: "error", message: "the export has no sound" });
+  else if (Number.isFinite(got) && Math.abs(sound - got) > 0.15) issues.push({ level: "error", message: `the sound runs ${sound.toFixed(2)}s of the ${got.toFixed(2)}s picture` });
   const lufs = loudness(out);
-  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; Instagram plays around -14` });
+  if (!Number.isFinite(lufs)) issues.push({ level: "error", message: "could not measure the export loudness" });
+  else if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; Instagram plays around -14` });
   return { issues, lufs, length: got, size: `${w}x${h}` };
 }
 
@@ -101,39 +105,46 @@ export async function renderFinal(projects: string, slug: string, onProgress: (d
   mkdirSync(join(projects, slug, "renders"), { recursive: true });
   const win = preview && frameWindow(preview.range, resolved.fps);
   // A whole reel renders to build/ first, then gets its end hold (END_HOLD) on the way to renders/.
-  const drawn = preview ? out : join(projects, slug, "build/render.mp4");
-  return new Promise<string>((ok, fail) => {
-    const p = spawn("npx", ["remotion", "render", "effects/index.ts", compositionFor(resolved.canvas).id, drawn, `--props=${join(projects, slug, flat ? "build/edit.export.json" : "build/edit.resolved.json")}`, ...(win ? [`--frames=${win.a}-${win.b - 1}`] : [])], { cwd: ROOT });
-    let tail = "";
-    const read = (chunk: Buffer) => {
-      const s = chunk.toString();
-      tail = (tail + s).slice(-4000);
-      const m = [...s.matchAll(/Rendered (\d+)\/(\d+)/g)].pop();
-      if (m) onProgress(+m[1], +m[2]);
-    };
-    p.stdout.on("data", read);
-    p.stderr.on("data", read);
-    p.on("close", (code) => (code === 0 ? ok(drawn) : fail(new Error(`render failed:\n${tail}`))));
-  }).then((drawn) => {
-    if (!preview) holdEnd(drawn, out, resolved.duration, END_HOLD, log);
-    const file = out;
-    onStage("Checking the export");
-    const comp = compositionFor(resolved.canvas);
-    const size: [number, number] = [comp.width, comp.height];
-    const check = verifyReel(file, win ? (win.b - win.a) / resolved.fps : resolved.duration + END_HOLD, size);
-    // A whole export also makes the version without the call to action (engine/cta.ts), and the
-    // export check covers both, so approval never copies one that failed.
-    let noCta: { length: number; lufs: number } | undefined;
-    if (!preview) {
-      if (resolved.cta) onStage("Making the version without the call to action");
-      const made = renderNoCta(join(projects, slug), resolved, file, flat ? "build/audio.export.json" : "build/audio.json", size, log);
-      if (made) {
-        check.issues.push(...made.check.issues.map((i) => ({ ...i, message: `without the call to action: ${i.message}` })));
-        noCta = { length: made.check.length, lufs: made.check.lufs };
-      }
+  // A part preview renders to a sibling temp file in renders/ and renames into place on success.
+  const drawn = preview ? tempSibling(out) : join(projects, slug, "build/render.mp4");
+  try {
+    await new Promise<void>((ok, fail) => {
+      const p = spawn("npx", ["remotion", "render", "effects/index.ts", compositionFor(resolved.canvas).id, drawn, `--props=${join(projects, slug, flat ? "build/edit.export.json" : "build/edit.resolved.json")}`, ...(win ? [`--frames=${win.a}-${win.b - 1}`] : [])], { cwd: ROOT });
+      let tail = "";
+      const read = (chunk: Buffer) => {
+        const s = chunk.toString();
+        tail = (tail + s).slice(-4000);
+        const m = [...s.matchAll(/Rendered (\d+)\/(\d+)/g)].pop();
+        if (m) onProgress(+m[1], +m[2]);
+      };
+      p.stdout.on("data", read);
+      p.stderr.on("data", read);
+      p.on("error", fail);
+      p.on("close", (code, signal) => (code === 0 ? ok() : fail(new Error(`render failed:\n${tail || (signal ? `signal ${signal}` : `exit ${code}`)}`))));
+    });
+    if (preview) renameSync(drawn, out);
+    else holdEnd(drawn, out, resolved.duration, END_HOLD, log);
+  } catch (e) {
+    if (preview) rmSync(drawn, { force: true });
+    throw e;
+  }
+  const file = out;
+  onStage("Checking the export");
+  const comp = compositionFor(resolved.canvas);
+  const size: [number, number] = [comp.width, comp.height];
+  const check = verifyReel(file, win ? (win.b - win.a) / resolved.fps : resolved.duration + END_HOLD, size);
+  // A whole export also makes the version without the call to action (engine/cta.ts), and the
+  // export check covers both, so approval never copies one that failed.
+  let noCta: { length: number; lufs: number } | undefined;
+  if (!preview) {
+    if (resolved.cta) onStage("Making the version without the call to action");
+    const made = renderNoCta(join(projects, slug), resolved, file, flat ? "build/audio.export.json" : "build/audio.json", size, log);
+    if (made) {
+      check.issues.push(...made.check.issues.map((i) => ({ ...i, message: `without the call to action: ${i.message}` })));
+      noCta = { length: made.check.length, lufs: made.check.lufs };
     }
-    writeJson(join(projects, slug, preview ? `checks/${preview.file.replace(/\.mp4$/, "")}-check.json` : "checks/export-check.json"), { at: new Date().toISOString(), ...check, ...(noCta ? { noCta } : {}) });
-    for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
-    return file;
-  });
+  }
+  writeJson(join(projects, slug, preview ? `checks/${preview.file.replace(/\.mp4$/, "")}-check.json` : "checks/export-check.json"), { at: new Date().toISOString(), ...check, ...(noCta ? { noCta } : {}) });
+  for (const i of check.issues) log?.(`${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
+  return file;
 }

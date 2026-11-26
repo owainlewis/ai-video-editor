@@ -4,12 +4,12 @@
 // over them. A project with a cut gets its voice joined from the clips' voice tracks first; the
 // export's own join (media/cutrender.ts) is frame-exact and crossfaded, this one is for listening.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import { placed } from "../engine/cut.ts";
 import { clipDir, loadCut } from "./bin.ts";
 import { resolveProject } from "./project.ts";
-import { ffmpeg, type Log, readJson, run, writeJson } from "./tools.ts";
+import { ffmpeg, type Log, readJson, run, tempSibling, writeJson } from "./tools.ts";
 
 // Each mix has its own file name, from what it was made of: the player keeps a file it has already
 // loaded, so a new mix under the old name would never be heard.
@@ -60,8 +60,19 @@ export function previewMix(projects: string, slug: string, log?: Log, onStage: (
   }
   onStage("Mixing audio");
   run("uv", ["run", "--quiet", "--with", "numpy", "--with", "scipy", "--with", "soundfile", "python", "-m", "audio.mix", dir, config, "build/preview/mix.wav"], { log });
-  for (const f of readdirSync(join(dir, "build"))) if (/^preview-mix-.*\.m4a$/.test(f)) rmSync(join(dir, "build", f));
-  ffmpeg(["-i", join(dir, "build/preview/mix.wav"), "-c:a", "aac", "-b:a", "192k", join(dir, outFor(key))], log);
+  const out = join(dir, outFor(key));
+  const outName = basename(out);
+  const tmp = tempSibling(out);
+  try {
+    ffmpeg(["-i", join(dir, "build/preview/mix.wav"), "-c:a", "aac", "-b:a", "192k", tmp], log);
+    renameSync(tmp, out);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
   writeJson(join(dir, STATE), { key, at: new Date().toISOString() });
-  return join(dir, outFor(key));
+  for (const f of readdirSync(join(dir, "build"))) {
+    if (/^preview-mix-.*\.m4a$/.test(f) && f !== outName) rmSync(join(dir, "build", f), { force: true });
+  }
+  return out;
 }

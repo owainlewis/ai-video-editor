@@ -12,7 +12,7 @@ The Python mix. It takes a finished voice track, a music bed and sound effects, 
 uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <project_dir> [config] [out]
 ```
 
-`config` is relative to the project and defaults to `build/audio.json`. `media/project.ts` writes that file. `out` defaults to `build/mix.wav`; with any other path (the editor's preview mix) the working files go in `build/audio-preview/` instead of `build/audio/`.
+`config` is relative to the project and defaults to `build/audio.json`. `media/project.ts` writes that file. `out` defaults to `build/mix.wav`. Each mix run uses its own temporary working directory under `build/` and removes it on exit.
 
 ### Config keys
 
@@ -48,7 +48,7 @@ uv run --quiet --with numpy --with scipy --with soundfile python -m audio.mix <p
 
 - Reads the config file, the voice file, and `sounds/<kind>/` and `music/` under `library_root()`.
 - `library_root()` uses `STUDIO_LIBRARY` if set. Otherwise it uses `<repo>/library`, or the main checkout's library when the repo's has no sounds, found through `git rev-parse`.
-- Writes `build/audio/` (`voice.wav`, `music.wav`, `sfx.wav`, `premaster.wav`, and `ducked.wav` when `under` is set) and the final `build/mix.wav`, 24-bit at 48000 Hz.
+- Uses a temporary working directory under `build/` (`voice.wav`, `music.wav`, `sfx.wav`, `premaster.wav`, and `ducked.wav` when `under` is set), removes it on exit, and writes the final `build/mix.wav`, 24-bit at 48000 Hz.
 - Caches decoded audio in `<repo>/.cache/audio/`. Nothing evicts it.
 - Runs `ffmpeg` for decoding, loudness measurement, ducking, mixing and the final encode.
 - Prints progress to stdout.
