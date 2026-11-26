@@ -1,12 +1,27 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { dirname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const FPS = 30;
+
+// Pick an ephemeral free localhost TCP port.
+export function freePort(): Promise<number> {
+  return new Promise((ok, no) => {
+    const srv = createServer();
+    srv.unref();
+    srv.on("error", no);
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      srv.close((err) => (err ? no(err) : ok(port)));
+    });
+  });
+}
 
 export type Log = (line: string) => void;
 
