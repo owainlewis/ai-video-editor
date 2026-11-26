@@ -3,7 +3,7 @@
 // footage, numbers that were never said. Layout checks read measurements of real frames, taken in a
 // headless browser by `studio qc` (media/qc.ts): safe area, collisions, orphans, type size, contrast,
 // balance. Errors stop an export; warnings are reported.
-import { COVER, HOOK, type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
+import { COVER, GRID, HOOK, type Issue, isGraphic as graphic, lastKept, type ScreenZoom, shotLabel as label, zoomAt } from "./resolve.ts";
 import type { Resolved, Word } from "./schema.ts";
 import { isApp } from "./apps.ts";
 import { actionBeats, actionOffset } from "./actions.ts";
@@ -332,6 +332,8 @@ export const qcCover = (m: Measure, size: [number, number], band: { top: number;
     const [x, y, w, h] = t.box;
     if (x < W * SAFE.x || x + w > W * (1 - SAFE.x) || y < band.top + inset || y + h > band.top + band.height - inset)
       issues.push({ level: "error", message: `${where}: "${short(t.text)}" is outside the grid's 3:4 crop (${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)})` });
+    else if (y < band.top + band.height * GRID.titleTop)
+      issues.push({ level: "error", message: `${where}: "${short(t.text)}" starts ${Math.round(((y - band.top) / band.height) * 100)}% down the grid's 3:4, under the reel icon; start it ${Math.round(GRID.titleTop * 100)}% down or lower` });
   }
   const blocks = new Set(title.map((t) => t.block));
   const ws = m.words.filter((w) => blocks.has(w.block));

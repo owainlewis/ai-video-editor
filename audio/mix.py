@@ -75,6 +75,7 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
     work.mkdir(parents=True, exist_ok=True)
     n = int(seconds * SR)
     gain = float(cfg.get("voiceGain", 0))
+    mixed = bool(cfg.get("mixed"))
 
     def fit(x: np.ndarray) -> np.ndarray:
         x = x[:n]
@@ -129,11 +130,20 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
     graph = (
         duck_graph(gain, music_db) + ";"
         f"[2:a]volume={fx_db}dB[fx];"
-        "[v][duck][fx]amix=inputs=3:normalize=0,alimiter=limit=0.89:attack=3:release=60[mix]"
+        f"[v][duck][fx]amix=inputs=3:normalize=0,alimiter=limit={0.99 if mixed else 0.89}:attack=3:release=60{':level=0' if mixed else ''}[mix]"
     )
     pre = work / "premaster.wav"
     ffmpeg(["-i", str(work / "voice.wav"), "-i", str(work / "music.wav"), "-i", str(work / "sfx.wav"),
             "-filter_complex", graph, "-map", "[mix]", "-c:a", "pcm_f32le", str(pre)])
+
+    out = project / out_path
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if mixed:
+        # Owain's own mix goes out at his level: the effects sit on it, nothing is normalised.
+        ffmpeg(["-i", str(pre), "-ar", str(SR), "-c:a", "pcm_s24le", str(out)])
+        final = loudness(out)
+        print(f"  mix: {out.relative_to(project)} at {float(final['input_i']):.1f} LUFS (his level), {float(final['input_tp']):.1f} dBTP")
+        return
 
     # Two-pass loudness normalisation for an exact integrated target.
     s = loudness(pre)
@@ -141,8 +151,6 @@ def main(project: Path, config: str = "build/audio.json", out_path: str = "build
         f"loudnorm=I={TARGET_LUFS}:TP={TRUE_PEAK}:LRA=11:measured_I={s['input_i']}:measured_TP={s['input_tp']}:"
         f"measured_LRA={s['input_lra']}:measured_thresh={s['input_thresh']}:offset={s['target_offset']}:linear=true"
     )
-    out = project / out_path
-    out.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg(["-i", str(pre), "-af", norm, "-ar", str(SR), "-c:a", "pcm_s24le", str(out)])
     final = loudness(out)
     print(f"  mix: {out.relative_to(project)} at {float(final['input_i']):.1f} LUFS, {float(final['input_tp']):.1f} dBTP")

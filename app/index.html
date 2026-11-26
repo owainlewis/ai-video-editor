@@ -11,6 +11,9 @@
         const theme = localStorage.getItem("studio-theme");
         if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
       } catch {}
+      // In the Mac app the window has no title bar of its own: the header is the title bar, with the
+      // traffic lights inset at its left (electron/main.ts). The stylesheet makes room for them.
+      if (/\bElectron\//.test(navigator.userAgent) && /Mac/.test(navigator.platform)) document.documentElement.classList.add("mac-app");
     </script>
   </head>
   <body>

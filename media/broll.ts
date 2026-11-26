@@ -1,12 +1,12 @@
-// The b-roll library, shared by every project: library/broll/. Owain drops clips in (from the
-// editor or by hand); `index` splits each into its shots in library/broll/.clips/ with an entry in
-// library/broll/index.json, and `describe` has Claude write each shot's description and tags from
-// its frames. Plans use a shot as "broll:<id>"; it is copied into the project when the plan is
+// The b-roll library, shared by every project: the folder STUDIO_BROLL names (environment or .env;
+// on Owain's Mac ~/YouTube/b-roll), else library/broll/. Owain drops clips in (from the editor or by
+// hand); `index` splits each into its shots in .clips/ with an entry in index.json, both inside that
+// folder, and `describe` has Claude write each shot's description and tags from its frames. Plans use a shot as "broll:<id>"; it is copied into the project when the plan is
 // resolved. Ported from ai-reel-editor's tools/broll.ts.
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
-import { ffmpeg, type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
+import { envValue, expandHome, ffmpeg, type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
 
 export type Clip = {
   id: string;
@@ -20,15 +20,17 @@ export type Clip = {
   tags: string[];
 };
 
-export const BROLL = join(ROOT, "library", "broll");
-const CLIPS = join(BROLL, ".clips");
-const INDEX = join(BROLL, "index.json");
+// Read on every call, so a changed setting needs no restart of the CLI.
+export const brollFolder = () => expandHome(envValue("STUDIO_BROLL") ?? join(ROOT, "library", "broll"));
+export const clipsFolder = () => join(brollFolder(), ".clips");
+const indexFile = () => join(brollFolder(), "index.json");
 const VIDEO = new Set([".mp4", ".mov", ".m4v", ".mkv", ".webm"]);
 
 const ff = (args: string[]) => spawnSync("ffmpeg", ["-hide_banner", "-nostdin", ...args], { encoding: "utf8", maxBuffer: 1 << 26 });
 const probe = (file: string) => {
-  const j = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", file], { encoding: "utf8" }));
-  return { w: j.streams[0].width as number, h: j.streams[0].height as number, duration: parseFloat(j.format.duration) };
+  const j = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate:format=duration", "-of", "json", file], { encoding: "utf8" }));
+  const [num, den] = String(j.streams[0].r_frame_rate).split("/").map(Number);
+  return { w: j.streams[0].width as number, h: j.streams[0].height as number, fps: num / (den || 1) || 30, duration: parseFloat(j.format.duration) };
 };
 
 // The picture area inside any letterbox or pillarbox. Small dark edges inside the picture are kept.
@@ -55,9 +57,11 @@ const brightnessOf = (file: string) => {
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
 };
 
-export const loadLibrary = (): Clip[] => (existsSync(INDEX) ? readJson<Clip[]>(INDEX) : []);
+export const loadLibrary = (): Clip[] => (existsSync(indexFile()) ? readJson<Clip[]>(indexFile()) : []);
 
 export function indexLibrary(log: Log = () => {}): Clip[] {
+  const BROLL = brollFolder();
+  const CLIPS = clipsFolder();
   mkdirSync(CLIPS, { recursive: true });
   let index = loadLibrary();
   const known = new Set(index.map((c) => c.source));
@@ -67,7 +71,7 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
     if (known.has(stamp)) continue;
     // A changed or re-copied file replaces its old shots.
     index = index.filter((c) => !c.source.startsWith(`${f}@`));
-    const { w, h, duration } = probe(file);
+    const { w, h, fps, duration } = probe(file);
     const { cw, ch, cx, cy } = detectCrop(file, w, h);
     const bounds = detectCuts(file, duration);
     log(`${f}: ${bounds.length - 1} shots`);
@@ -78,11 +82,14 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
       const end = +(bounds[i + 1] - 0.12).toFixed(3);
       const id = `${base}-${i + 1}`;
       const out = join(CLIPS, `${id}.mp4`);
-      // Landscape keeps its shape at 1920 wide; portrait at 1080x1920.
-      const scale = cw >= ch ? "scale=1920:-2" : "scale=1080:-2";
-      ffmpeg(["-ss", String(start), "-to", String(end), "-i", file, "-vf", `crop=${cw}:${ch}:${cx}:${cy},${scale},fps=30,setsar=1`, "-an", "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]);
+      // Full resolution up to 4K and the source's own frame rate: a 9:16 crop of 4K landscape is
+      // 1215x2160, enough for a full reel frame without upscaling, and 60 fps stays slow-motion ready
+      // (RULES 2026-11-06). Only a larger source is scaled down.
+      const long = cw >= ch ? "w" : "h";
+      const scale = Math.max(cw, ch) > 3840 ? (long === "w" ? "scale=3840:-2," : "scale=-2:3840,") : "";
+      ffmpeg(["-ss", String(start), "-to", String(end), "-i", file, "-vf", `crop=${cw}:${ch}:${cx}:${cy},${scale}setsar=1`, "-an", "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]);
       // Three frames (start, middle, end) for describing it; one for the editor's thumbnail.
-      const n = Math.floor((end - start) * 30);
+      const n = Math.floor((end - start) * fps);
       ffmpeg(["-i", out, "-vf", `select='eq(n\\,0)+eq(n\\,${Math.floor(n / 2)})+eq(n\\,${Math.max(0, n - 2)})',scale=360:-2,tile=3x1:padding=4`, "-frames:v", "1", "-fps_mode", "vfr", join(CLIPS, `${id}.jpg`)]);
       index.push({ id, source: stamp, start, end, duration: +(end - start).toFixed(3), crop: `crop=${cw}:${ch}:${cx}:${cy}`, brightness: brightnessOf(out), description: "", tags: [] });
     }
@@ -92,7 +99,7 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
     if (!existsSync(thumb) && existsSync(join(CLIPS, `${c.id}.mp4`))) ffmpeg(["-ss", String(Math.min(0.5, c.duration / 2)), "-i", join(CLIPS, `${c.id}.mp4`), "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "4", thumb]);
   }
   index.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-  writeJson(INDEX, index);
+  writeJson(indexFile(), index);
   return index;
 }
 
@@ -100,9 +107,10 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
 export function describeLibrary(log?: Log) {
   const blank = loadLibrary().filter((c) => !c.description);
   if (!blank.length) return 0;
-  const prompt = `Describe these b-roll shots in library/broll/index.json: ${blank.map((c) => c.id).join(", ")}.
-For each, look at library/broll/.clips/<id>.jpg (start, middle and end frames) and set "description" to one plain sentence of what is visible (no interpretation), and "tags" to 4 to 8 lowercase words. Change nothing else in the file.`;
-  run("claude", ["-p", prompt, "--permission-mode", "acceptEdits", "--allowedTools", "Read", "Edit"], { log });
+  // Claude works in the library folder, which may be outside the repo.
+  const prompt = `Describe these b-roll shots in index.json: ${blank.map((c) => c.id).join(", ")}.
+For each, look at .clips/<id>.jpg (start, middle and end frames) and set "description" to one plain sentence of what is visible (no interpretation), and "tags" to 4 to 8 lowercase words. Change nothing else in the file.`;
+  run("claude", ["-p", prompt, "--permission-mode", "acceptEdits", "--allowedTools", "Read", "Edit"], { cwd: brollFolder(), log });
   return blank.length;
 }
 
@@ -112,12 +120,13 @@ export function searchLibrary(query: string): Clip[] {
   return loadLibrary().map((c) => ({ c, s: score(c) })).filter((r) => !words.length || r.s > 0).sort((a, b) => b.s - a.s).map((r) => r.c);
 }
 
-// Copy a library shot into a project so the renderer can serve it.
+// Copy a library shot into a project so the renderer can serve it. A shot the library no longer
+// holds (it moved, or the setting changed) keeps playing from the project's own copy.
 export function useClip(projectDir: string, id: string): string | null {
-  const src = join(CLIPS, `${id}.mp4`);
-  if (!existsSync(src)) return null;
+  const src = join(clipsFolder(), `${id}.mp4`);
   const rel = `assets/broll/${id}.mp4`;
   const dest = join(projectDir, rel);
+  if (!existsSync(src)) return existsSync(dest) ? rel : null;
   mkdirSync(join(projectDir, "assets/broll"), { recursive: true });
   if (!existsSync(dest) || statSync(dest).mtimeMs < statSync(src).mtimeMs) copyFileSync(src, dest);
   return rel;

@@ -80,6 +80,15 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 /* The header of the editor and the review: where you are on the left, what you can do on the right. */
 .bar { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 12px 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
 .bar .brand { margin-right: 6px; }
+/* The Mac app: the header is the window's title bar. It drags the window, leaves room on the left
+   for the traffic lights, and its controls still take clicks. The projects page and the gallery
+   have no header, so the top of their sidebar does the same. */
+.mac-app .bar { padding-left: 86px; -webkit-app-region: drag; }
+.mac-app .bar button, .mac-app .bar a, .mac-app .bar input, .mac-app .bar select, .mac-app .bar .seg, .mac-app .bar .approval { -webkit-app-region: no-drag; }
+.mac-app .sidebar { padding-top: 52px; -webkit-app-region: drag; }
+.mac-app .sidebar > * { -webkit-app-region: no-drag; }
+.mac-app .main .page-head { -webkit-app-region: drag; }
+.mac-app .main .page-head > * { -webkit-app-region: no-drag; }
 .bar .crumb { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--faint); }
 .bar .crumb a { color: var(--muted); text-decoration: none; white-space: nowrap; }
 .bar .crumb a:hover { color: var(--ink); }
@@ -201,10 +210,35 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 /* Editor: library | player | chat on top, the timeline across the bottom. Panels are white and set
    apart by lines; the player sits on the grey page between them. */
 .app { display: flex; flex-direction: column; height: 100%; font-size: 13px; }
-.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: clamp(250px, 21vw, 310px) minmax(240px, 1fr) clamp(300px, 25vw, 360px); grid-template-rows: minmax(0, 1fr) 300px; }
-.stage { grid-column: 2; min-height: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px 24px; background: var(--bg); }
+.editor { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 280px) minmax(0, 1fr) var(--right, 340px); grid-template-rows: minmax(0, 1fr) var(--bottom, 300px); }
+.editor.no-left > .library, .editor.no-right > .chat, .editor.no-right > .inspector, .editor.no-bottom > .bottom { display: none; }
+.stage { grid-column: 2; grid-row: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px 10px; background: var(--bg); }
 .stage .screen { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
-.stage-tools { flex: none; display: flex; align-items: center; gap: 8px; }
+/* Under the viewer, in one row: the beat and what it shows, then Voice or Mix. */
+.stage-foot { flex: none; width: 100%; max-width: 720px; display: flex; align-items: center; gap: 12px; }
+.stage-foot .beatbar { max-width: none; flex: 1; min-width: 0; }
+.stage-foot .spacer { flex: 1; }
+
+/* The edges a panel is dragged by: a few pixels over each line between panels, a line in the accent
+   while hovered or dragged. */
+.splitters { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.split { position: absolute; pointer-events: auto; }
+.split::after { content: ""; position: absolute; background: var(--accent); opacity: 0; transition: opacity 0.12s; }
+.split:hover::after, .splitters.drag-left .split-left::after, .splitters.drag-right .split-right::after, .splitters.drag-bottom .split-bottom::after { opacity: 1; transition-delay: 0.08s; }
+.split-col { top: 0; bottom: var(--bottom); width: 9px; cursor: col-resize; }
+.split-col::after { top: 0; bottom: 0; left: 4px; width: 1px; }
+.split-left { left: calc(var(--left) - 5px); }
+.split-right { right: calc(var(--right) - 5px); }
+.split-row { left: 0; right: 0; bottom: calc(var(--bottom) - 5px); height: 9px; cursor: row-resize; }
+.split-row::after { left: 0; right: 0; top: 4px; height: 1px; }
+.splitters.dragging { pointer-events: auto; }
+.splitters.drag-left, .splitters.drag-right { cursor: col-resize; }
+.splitters.drag-bottom { cursor: row-resize; }
+/* While a panel is dragged, the player and timeline under the pointer do not take it. */
+.splitters.dragging ~ * { user-select: none; }
+
+.panel-toggles { display: inline-flex; gap: 0; margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--line); }
+.panel-toggles button.icon.on { color: var(--ink-2); }
 
 /* A panel's heading, as Airtime's Details panel: small, upper case, faint. */
 .panel-h { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }

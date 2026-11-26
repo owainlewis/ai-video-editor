@@ -62,7 +62,9 @@ const ImageVisual: React.FC<Props & { v: V<"image"> }> = (props) => {
     // A browser keeps a window's shape (at least 62% of the panel) with its bar on top; the page
     // around the region fills the rest, so it reads as the site, not a strip cut from it.
     const region = Math.max(tall(vFrom), tall(vTo ?? vFrom));
-    const cardH = v.frame === "browser" ? Math.min(h, Math.max(h * 0.62, region + chromeHeight(w))) : Math.min(h, Math.max(260, region));
+    // "none" is the site full bleed: it fills the whole panel (Owain, 2026-11-25: "the website could be
+    // full in the top window split rather than in a small browser").
+    const cardH = v.frame === "none" ? h : v.frame === "browser" ? Math.min(h, Math.max(h * 0.62, region + chromeHeight(w))) : Math.min(h, Math.max(260, region));
     return (
       <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <ImageCard {...props} h={cardH} />

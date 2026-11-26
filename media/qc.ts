@@ -26,7 +26,7 @@ import { itemHash } from "../engine/review.ts";
 import type { Resolved, ResolvedShot } from "../engine/schema.ts";
 import { serveFile } from "../server/index.ts";
 import { GRAPHITE, BLACK, tokens } from "../styles/ivory/tokens.ts";
-import { resolveProject } from "./project.ts";
+import { handCover, resolveProject } from "./project.ts";
 import { ffmpeg, type Log, readJson, ROOT, run, writeJson } from "./tools.ts";
 
 // Cuts in the footage, by scene detection on the light preview. Cached until the preview changes.
@@ -295,7 +295,9 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   const todo = graphics.filter((g) => g.check).length;
   // The hook is measured on every run: a few frames, and the graphics under it move with it.
   const hook = !!r.hook && (!at || at.some((t) => t < r.hook!.until)) && (!range || range.start < r.hook.until);
-  const cover = !!r.cover && !at && (!range || range.start === 0);
+  // The drawn card is only a stand-in for a reel with no cover.png from Higgsfield; with one, that
+  // image is the cover and approval lays it out (uploadCover), so the stand-in is not checked.
+  const cover = !!r.cover && !handCover(join(projects, slug)) && !at && (!range || range.start === 0);
   const hookIssues: Issue[] = [];
   const sheets: string[] = [];
   const settledShots: string[] = [];

@@ -28,7 +28,7 @@ Electron 45 runs the shell's TypeScript as it is (Node 24 strips the types), so 
 
 - **The server.** It runs on port 4747 from the repo, with the PATH a terminal gets, so `node`, `claude`, `ffmpeg` and `python3` are found when the app opens from the Finder. If a Studio server already answers on 4747, the app uses that one rather than start a second, which would save every plan change twice.
 - **Restarts.** A change to `engine/`, `media/`, `server/`, `styles/`, `effects/`, `cli.ts` or `package.json` restarts the server. The editor reloads by itself. Imports and renders are detached and carry on. A Claude note runs inside the server, so the restart waits until `GET /api/busy` says none is running. `app/` changes hot reload through Vite with no restart.
-- **The window.** Closing it keeps Studio in the menu bar. Quit from the menu bar or with Cmd-Q, which stops the server (Ctrl-C and kill do the same).
+- **The window.** It has no title bar of its own: the editor's header is the title bar, with the traffic lights inset at its left (`titleBarStyle: "hiddenInset"`), and dragging the header moves the window. Closing it keeps Studio in the menu bar. Quit from the menu bar or with Cmd-Q, which stops the server (Ctrl-C and kill do the same).
 - **The menu bar.** Lists each job running and each note Claude is working on (click one to open that reel), and the week's approvals. It also opens the approved folder and restarts the server.
 - **Notifications.** Sent when an import is ready, an export finishes, any job fails, or Claude answers a note. Sent only when the editor isn't in front. Clicking one opens the reel.
 - **Links.** `studio://p/<slug>`, `studio://p/<slug>/review` and `studio://gallery` open the app on that page.

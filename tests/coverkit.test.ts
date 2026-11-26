@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { coverPrompt, uploadCover } from "../media/coverkit.ts";
+import { coverPrompt, titleShift, uploadCover } from "../media/coverkit.ts";
 import { probeSize } from "../media/tools.ts";
 
 describe("the Higgsfield cover prompt", () => {
@@ -48,5 +48,46 @@ describe("the cover for upload", () => {
     expect(probeSize(out)).toEqual([1080, 1920]);
     expect(pixel(out, 540, 4)[2]).toBeGreaterThan(180);
     expect(pixel(out, 540, 200)[0]).toBeGreaterThan(200);
+  });
+});
+
+// Instagram's grid draws its reel icon over the top-right of the 3:4 tile (Owain, 2026-11-14).
+describe("the cover's title under the grid's reel icon", () => {
+  // A dark 9:16 cover with white type from row `at` (in Higgsfield's 1520x2688).
+  const cover = (at: number) => {
+    const dir = mkdtempSync(join(tmpdir(), "cover-"));
+    const src = join(dir, "cover.png");
+    spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "color=0x141414:s=1520x2688", "-vf", `drawbox=x=300:y=${at}:w=900:h=120:color=white:t=fill`, "-frames:v", "1", src]);
+    return { src, out: join(dir, "upload.jpg") };
+  };
+
+  it("moves a title that starts near the top of the grid's 3:4 down, below the icon", () => {
+    const { src, out } = cover(400); // 286 in the frame, 3% down the 3:4
+    uploadCover(src, out);
+    // 12% down the 3:4 (y 240 to 1680) is frame row 413.
+    expect(pixel(out, 540, 400)[0]).toBeLessThan(60);
+    expect(pixel(out, 540, 425)[0]).toBeGreaterThan(200);
+  });
+
+  it("leaves a title that is already low enough where it is", () => {
+    const { src, out } = cover(800); // 571 in the frame
+    uploadCover(src, out);
+    expect(pixel(out, 540, 560)[0]).toBeLessThan(60);
+    expect(pixel(out, 540, 580)[0]).toBeGreaterThan(200);
+  });
+
+  it("moves a cover a tenth of the frame at most, and says so", () => {
+    const W = 1080, H = 1920;
+    const px = Buffer.alloc(W * H, 20);
+    px.fill(255, 10 * W + 300, 10 * W + 700);
+    px.fill(255, 11 * W + 300, 11 * W + 700);
+    px.fill(255, 12 * W + 300, 12 * W + 700);
+    const said: string[] = [];
+    expect(titleShift(px, W, H, (m) => said.push(m))).toBe(192);
+    expect(said.join()).toContain("Make the cover again");
+  });
+
+  it("finds no title on a light cover", () => {
+    expect(titleShift(Buffer.alloc(1080 * 1920, 240), 1080, 1920)).toBe(0);
   });
 });

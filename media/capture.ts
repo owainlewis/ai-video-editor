@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openBrowser } from "@remotion/renderer";
 import type { Box, Page } from "../engine/page.ts";
+import { cookieParams, loadSession, storageScript } from "./session.ts";
 import { type Log, writeJson } from "./tools.ts";
 
 export type CaptureOptions = {
@@ -22,6 +23,10 @@ export type CaptureOptions = {
   width?: number;
   // Without `to`, how tall the capture is, in CSS px.
   height?: number;
+  // A saved sign-in (.sessions/<name>.json, from `studio signin`) for a page behind a login.
+  session?: string;
+  // Text of a tab or button to click once the page has loaded, for a view with no URL of its own.
+  click?: string;
 };
 
 type Cdp = { send(method: string, params?: object): Promise<{ value?: unknown } & Record<string, unknown>> };
@@ -56,9 +61,21 @@ export async function capture(projects: string, slug: string, url: string, opts:
     await cdp.send("Network.setUserAgentOverride", { userAgent: ua.replace(/HeadlessChrome/g, "Chrome") });
     // tsx names functions with a `__name` helper the page does not have.
     await page.evaluateOnNewDocument("globalThis.__name = (f) => f");
+    if (opts.session) {
+      const saved = loadSession(opts.session);
+      await cdp.send("Network.setCookies", { cookies: cookieParams(saved) });
+      await page.evaluateOnNewDocument(storageScript(saved));
+      log?.(`signed in with the saved session "${opts.session}"`);
+    }
     log?.(`opening ${url}`);
     await page.goto({ url, timeout: 60000 } as never);
     await settle(page);
+    if (opts.click) {
+      const clicked = await page.evaluate(clickText, opts.click);
+      if (!clicked) throw new Error(`nothing on ${url} to click reads "${opts.click}"`);
+      log?.(`clicked "${opts.click}"`);
+      await settle(page);
+    }
 
     let m: Measured | undefined;
     for (let pass = 0; pass < 3; pass++) {
@@ -153,6 +170,15 @@ export async function capture(projects: string, slug: string, url: string, opts:
 }
 
 // Wait for the page to finish: fonts loaded, images in, and nothing changing for most of a second.
+// Clicks the smallest visible button, link or tab whose text is `text`. Runs in the page.
+function clickText(text: string): boolean {
+  const want = text.trim().toLowerCase();
+  const all = [...document.querySelectorAll<HTMLElement>("button, a, [role=tab], [role=button]")].filter((e) => e.offsetParent && (e.innerText ?? "").trim().toLowerCase() === want);
+  const el = all.sort((a, b) => a.innerText.length - b.innerText.length)[0];
+  el?.click();
+  return !!el;
+}
+
 async function settle(page: { evaluate: (f: () => unknown) => Promise<unknown> }) {
   await page.evaluate(() => document.fonts?.ready.then(() => true));
   await page.evaluate(

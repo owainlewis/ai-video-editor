@@ -12,7 +12,8 @@
 //   npm run studio -- qc --library [--canvas youtube|reel] [--card quote]   the same checks on every card in the style
 //   npm run studio -- mix <slug>                   mix the sound as the export will, for the editor to play (build/preview-mix.m4a)
 //   npm run studio -- record <slug>                film the real pages in record.json, timed to the spoken words
-//   npm run studio -- capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--scale 3] [--width 900] [--height 1400]
+//   npm run studio -- capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--session name] [--click "Tab"] [--scale 3] [--width 900] [--height 1400]
+//   npm run studio -- signin <name> <url>                                         sign in once for pages behind a login
 //                                                  a live page's section as a crisp PNG and its words' boxes, to assets/pages/
 //   npm run studio -- auphonic <slug>              clean the voice with Auphonic (timing unchanged; key in .env)
 //   npm run studio -- render <slug> [--force]      QC, then mix the audio and render renders/final.mp4
@@ -29,6 +30,7 @@ import { pickPreview } from "./engine/parts.ts";
 import { resolveProject } from "./media/project.ts";
 import { record } from "./media/record.ts";
 import { capture } from "./media/capture.ts";
+import { signin } from "./media/session.ts";
 import { previewMix } from "./media/previewmix.ts";
 import { coverStill, renderFinal, stills } from "./media/render.ts";
 import { coverKit } from "./media/coverkit.ts";
@@ -36,7 +38,7 @@ import { Edit } from "./engine/schema.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
 import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
+import { brollFolder, describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
 import { readJson, ROOT, run, writeJson } from "./media/tools.ts";
@@ -148,8 +150,14 @@ async function main() {
       const url = args[2];
       if (!url || url.startsWith("--")) throw new Error("capture needs a URL: npm run studio -- capture <slug> <url>");
       const num = (n: string) => (flag(n) ? Number(flag(n)) : undefined);
-      const { png, json } = await capture(projects, need(target), url, { name: flag("name"), from: flag("from"), to: flag("to"), dark: args.includes("--dark"), scale: num("scale"), width: num("width"), height: num("height") }, log);
+      const { png, json } = await capture(projects, need(target), url, { name: flag("name"), from: flag("from"), to: flag("to"), dark: args.includes("--dark"), session: flag("session"), click: flag("click"), scale: num("scale"), width: num("width"), height: num("height") }, log);
       console.log(`Wrote ${png}\n      ${json}`);
+      return;
+    }
+    case "signin": {
+      const url = args[2];
+      if (!target || !url) throw new Error("signin needs a name and a URL: npm run studio -- signin <name> <url>");
+      console.log(`Wrote ${await signin(target, url, log)}`);
       return;
     }
     case "stills": {
@@ -196,7 +204,7 @@ async function main() {
       if (target === "index") {
         const index = indexLibrary(log);
         const n = describeLibrary(log);
-        console.log(`${index.length} shots in library/broll${n ? `; described ${n} new ones` : ""}`);
+        console.log(`${index.length} shots in ${brollFolder()}${n ? `; described ${n} new ones` : ""}`);
         return;
       }
       if (target === "describe") return void console.log(`Described ${describeLibrary(log)} shots`);
@@ -303,7 +311,7 @@ async function main() {
       return;
     }
     default:
-      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, capture <slug> <url>, render <slug> [--part <name> | --from <s> --to <s>] [--force], approve <slug>, unapprove <slug>, approved");
+      console.log("Commands: serve, ingest <file>, check <slug>, qc <slug>, stills <slug> --at <s>, frames <slug>, scan <slug> --ref <s>, capture <slug> <url>, signin <name> <url>, render <slug> [--part <name> | --from <s> --to <s>] [--force], approve <slug>, unapprove <slug>, approved");
   }
 }
 

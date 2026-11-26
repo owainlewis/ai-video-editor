@@ -14,7 +14,13 @@ type Props = { shot: ResolvedShot; time: number; w: number; h: number };
 
 // An element that never arrives (at = Infinity) stays at 0.
 const prog = (time: number, at: number, dur = 0.28) => (isFinite(at) ? interpolate(time, [at, at + dur], [0, 1], { ...clamp, easing: ease }) : 0);
-const fmt = (n: number, unit = "") => `${unit === "$" ? "$" : ""}${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}${unit && unit !== "$" ? unit : ""}`;
+// A value as the source wrote it, never rounded into a different number ($2.95 once showed as $3):
+// as many decimals as `exact` has, up to two; money with cents always shows both digits.
+const decimals = (x: number) => (Number.isInteger(x) ? 0 : Math.min(2, (String(x).split(".")[1] ?? "").length));
+const fmt = (n: number, unit = "", exact = n) => {
+  const d = unit === "$" && !Number.isInteger(exact) ? 2 : decimals(exact);
+  return `${unit === "$" ? "$" : ""}${n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}${unit && unit !== "$" ? unit : ""}`;
+};
 
 // A bar or line chart. Each point grows or draws on its word; the last (or `highlight`) point takes
 // the accent and a large value label. `source` prints small under the chart: charts say where
@@ -65,7 +71,7 @@ export const ChartVisual: React.FC<Props & { v: V<"chart"> }> = ({ shot, time, w
                 <div style={{ position: "absolute", left: x, width: bw, top: top + plotH - bh, height: bh, background: pt.bound ? "transparent" : on ? c.accent : c.ink, border: pt.bound ? `3px dashed ${on ? c.accent : c.ink}` : "none", borderBottom: "none", boxSizing: "border-box", opacity: on ? 1 : 0.85, borderRadius: "6px 6px 0 0" }} />
                 <div style={{ position: "absolute", left: x - 30, width: bw + 60, top: top + plotH - bh - 66, textAlign: "center", fontFamily: t.label, fontSize: on ? 46 : 38, fontWeight: 600, color: on ? c.accentText : c.ink, opacity: grow }}>
                   {pt.bound ? "≤" : ""}
-                  {fmt(Number.isInteger(pt.value) ? Math.round(pt.value * grow) : pt.value * grow, v.unit)}
+                  {fmt(Number.isInteger(pt.value) ? Math.round(pt.value * grow) : pt.value * grow, v.unit, pt.value)}
                 </div>
                 <div style={{ position: "absolute", left: x - 40, width: bw + 80, top: top + plotH + 16, textAlign: "center", fontFamily: t.sans, fontWeight: 700, fontSize: 30, color: c.muted }}>{pt.label}</div>
               </React.Fragment>

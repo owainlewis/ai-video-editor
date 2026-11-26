@@ -10,14 +10,14 @@ import { uploadCover } from "./coverkit.ts";
 import { NO_CTA } from "./nocta.ts";
 import { handCover } from "./project.ts";
 import { coverStill } from "./render.ts";
-import { envValue, type Log, readJson, writeJson } from "./tools.ts";
+import { envValue, expandHome, type Log, readJson, writeJson } from "./tools.ts";
 
 export { handCover };
 
 export { WEEKLY_TARGET, thisWeek, fileTitle };
 export type { ApprovalRecord, ApprovalState };
 
-const home = (p: string) => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
+const home = expandHome;
 
 // Where approved reels go: STUDIO_APPROVED (environment or .env), else ~/Reels/Approved.
 export const approvedFolder = () => home(envValue("STUDIO_APPROVED") ?? "~/Reels/Approved");
@@ -35,6 +35,9 @@ export type Options = {
   log?: Log;
   // Draws the plain cover card into `file` when the reel has no cover.png; tests pass their own.
   cover?: (projects: string, slug: string, file: string) => Promise<void>;
+  // Approve with the plain card when there is no cover.png. Off by default: a reel went out with its
+  // first frame as the cover (Owain, 2026-11-23: "didn't have a correct cover").
+  plainCover?: boolean;
 };
 
 const fail = (message: string, code = 409) => Object.assign(new Error(message), { code });
@@ -127,6 +130,7 @@ export async function approve(projects: string, slug: string, opts: Options = {}
   mkdirSync(join(dir, "build"), { recursive: true });
   rmSync(drawn, { force: true });
   const made = handCover(dir);
+  if (!made && !opts.plainCover) throw fail(`cannot approve ${slug}: no cover yet. Run \`cover ${slug} --prompt\`, make it in Higgsfield and save it as projects/${slug}/cover.png`);
   if (made) {
     opts.log?.(`Using the cover ${basename(made)}`);
     uploadCover(made, drawn, opts.log);

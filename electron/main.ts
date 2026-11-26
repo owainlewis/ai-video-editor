@@ -82,6 +82,10 @@ function createWindow() {
     title: "Studio",
     show: false,
     backgroundColor: background(),
+    // The editor's header is the title bar: macOS draws only the traffic lights, inset into it, as
+    // Final Cut and Xcode do. app/index.html marks the page so its header leaves room for them.
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 19 },
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.once("ready-to-show", () => win?.show());
@@ -103,6 +107,20 @@ function createWindow() {
     void shell.openExternal(url);
     return { action: "deny" };
   });
+  // A blank window never stays blank (Owain, 2026-11-24: "Just a white screen", with the server
+  // up). Electron shows plain white when a page fails to load (the server was restarting at that
+  // moment) or when the page's process dies, and does not try again by itself.
+  win.webContents.on("did-fail-load", (_e, code, _desc, url, main) => {
+    if (!main || code === -3) return; // -3: aborted by a newer navigation
+    failed = url;
+    setTimeout(retryFailed, 1000);
+  });
+  win.webContents.on("render-process-gone", (_e, d) => {
+    if (d.reason === "clean-exit") return;
+    failed = win?.webContents.getURL() || `${server.url ?? ""}/`;
+    setTimeout(retryFailed, 1000);
+  });
+  win.webContents.on("did-finish-load", () => (failed = null));
   win.webContents.on("will-navigate", (e, url) => {
     if (url === "studio://retry") return e.preventDefault(), void server.retry();
     if (own(url) || url.startsWith("data:")) return;
@@ -129,12 +147,23 @@ function go() {
   if (win.webContents.getURL() !== target) void win.loadURL(target);
 }
 
+// The page that failed to load, or whose process died, to load again once the server answers.
+let failed: string | null = null;
+function retryFailed() {
+  if (!win || !failed || server.state !== "ready" || !server.url) return;
+  const url = failed.startsWith(server.url) ? failed : `${server.url}/`;
+  failed = null;
+  void win.loadURL(url);
+}
+
 // Show whatever the server's state calls for: the editor, a starting page or the failure.
 function render() {
   if (!win) return;
   if (server.state === "ready" && server.url) {
+    if (failed) return retryFailed();
     const current = win.webContents.getURL();
-    // Same server: the editor reconnects and reloads by itself after a restart. A new address
+    // Same server: the editor reloads by itself once its event stream reconnects after a restart
+    // (app/main.tsx). A new address
     // (the port was taken) or a status page: load the editor, keeping the page it was on.
     if (!current.startsWith(server.url)) {
       const hash = current.startsWith("http") ? new URL(current).hash : "";

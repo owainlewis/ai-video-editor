@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openBrowser } from "@remotion/renderer";
+import { GRID } from "../engine/resolve.ts";
 import type { EditPlan } from "../engine/schema.ts";
 import { useLogo } from "./project.ts";
 import { ffmpeg, type Log, probeSize } from "./tools.ts";
@@ -20,15 +21,27 @@ const NAMES: Record<string, string> = {
 
 // Owain's own prompt (2026-11-13), with the title and the logos for this reel, made at 9:16 with the
 // text and logos inside the middle 3:4 the profile grid shows (a 3:4 cover needed empty space added).
-export const coverPrompt = (title: string, logos: string[]) => `This is an Instagram reel cover. Add text at the top that says, in plain white Helvetica using Title Case:
+// With no logos the logo paragraph goes; with a `backdrop` the attached diagram sits behind him in
+// place of the plain background.
+export const coverPrompt = (title: string, logos: string[], backdrop = false) => `This is an Instagram reel cover. Add text at the top that says, in plain white Helvetica using Title Case:
 
 > ${title}
-
+${
+  logos.length
+    ? `
 Add these logos in the background, copied exactly from the attached logo images: ${logos.join(" and ")}. Do not add any other logo, brand or product. Be careful not to place anything on my head. Each logo should have a box or border around it. Avoid any tech cliches. Angle them so that they are visually interesting and fit the scene. They can sit slightly behind me if needed.
+`
+    : `
+Do not add any logo, brand or product.
+`
+}
+${
+  backdrop
+    ? `Put the attached diagram (backdrop.png) in the background behind me, copied exactly: the same boxes, lines and labels, nothing added or redrawn. Make it large, spanning the width of the frame behind my head and shoulders, slightly dimmed and softly out of focus so it reads as a backdrop and I stand out in front of it. Keep its dark background continuous with the rest of the image. Nothing on my head, and keep the title clear of it.`
+    : "Keep the background plain."
+} Go for high-quality and classy, not cheap, tacky AI slop. Professional and tasteful.
 
-Keep the background plain. Go for high-quality and classy, not cheap, tacky AI slop. Professional and tasteful.
-
-This is a tall 9:16 image. Extend the plain background to fill the frame. Keep the text and the logos within the middle three quarters of the height: nothing important in the top eighth or the bottom eighth, which Instagram's grid crops off. Leave clear empty space above the title: the top of the first line should sit about a fifth of the way down the image, not near the top edge.
+This is a tall 9:16 image. Extend the plain background to fill the frame. Keep the text and the logos within the middle three quarters of the height: nothing important in the top eighth or the bottom eighth, which Instagram's grid crops off. Leave clear empty space above the title: the top of the first line should sit about a fifth of the way down the image, not near the top edge, because Instagram draws an icon in the top-right corner.
 `;
 
 // Each logo drawn by Chrome on a dark 1024 px tile, the official file at its own colours. Many of
@@ -70,7 +83,12 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
     tiles.push({ id, src });
   }
   await logoTiles(tiles, out);
-  writeFileSync(join(out, "prompt.txt"), coverPrompt(cover.title, names));
+  if (cover.backdrop) {
+    const from = join(dir, cover.backdrop);
+    if (!existsSync(from)) throw new Error(`the cover's backdrop ${cover.backdrop} is not in the project`);
+    copyFileSync(from, join(out, "backdrop.png"));
+  }
+  writeFileSync(join(out, "prompt.txt"), coverPrompt(cover.title, names, !!cover.backdrop));
   return out;
 }
 
@@ -90,18 +108,57 @@ function topColour(file: string): string {
   return `0x${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
+// The frame's lightness (0 to 255), one byte a pixel, row by row, after `filter`.
+function grey(src: string, filter: string): Buffer {
+  const out = spawnSync("ffmpeg", ["-v", "error", "-i", src, "-vf", `${filter},format=gray`, "-frames:v", "1", "-f", "rawvideo", "-"], { maxBuffer: 64 << 20 });
+  return out.stdout ?? Buffer.alloc(0);
+}
+
+// How far to move the picture down so its title starts GRID.titleTop down the grid's 3:4, clear of
+// the reel icon Instagram draws in the tile's top-right corner (Owain, 2026-11-14). The title is the
+// first run of rows, from the top, with white type in it on the cover's dark ground. Moving it down
+// trims the same height off the bottom of the shirt. At most a tenth of the frame; past that the
+// cover should be made again.
+export function titleShift(pixels: Buffer, W: number, H: number, log?: Log): number {
+  const bandTop = (H - (W * 4) / 3) / 2;
+  const want = Math.round(bandTop + ((W * 4) / 3) * GRID.titleTop);
+  const bright = (y: number) => {
+    let n = 0;
+    for (let x = 0, i = y * W; x < W; x++, i++) if (pixels[i] > 200) n++;
+    return n;
+  };
+  // A light cover has no dark ground to find type on.
+  if (bright(0) > W * 0.5) return 0;
+  const ink = (y: number) => {
+    const n = bright(y);
+    return n >= 8 && n < W * 0.7;
+  };
+  let top = -1;
+  for (let y = 0; y + 2 < Math.min(H, want + 1); y++) if (ink(y) && ink(y + 1) && ink(y + 2)) { top = y; break; }
+  if (top < 0) return 0;
+  const shift = want - top;
+  const most = Math.round(H / 10);
+  if (shift > most) log?.(`The cover's title starts ${top}px down; moved down ${most}px, the most allowed, it still sits under Instagram's reel icon. Make the cover again with more space above the title.`);
+  return Math.min(shift, most);
+}
+
 export function uploadCover(src: string, out: string, log?: Log): void {
   const { width: W, height: H } = UPLOAD;
   const [w, h] = probeSize(src);
+  const ground = topColour(src);
+  let fit: string;
   // Made at 9:16 already (Higgsfield's 9:16 is 1520x2688, a hair wider): filled to the frame, the
   // few pixels over trimmed from the sides.
-  if (Math.abs(w / h / (W / H) - 1) < 0.02) {
-    ffmpeg(["-i", src, "-vf", `scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H}`, "-q:v", "2", out], log);
-    return;
+  if (Math.abs(w / h / (W / H) - 1) < 0.02) fit = `scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H}`;
+  else {
+    // At full width, or full height for anything taller than 9:16 (then centred across).
+    const wide = w / h > W / H;
+    const fw = wide ? W : Math.round((H * w) / h / 2) * 2;
+    const fh = wide ? Math.round((W * h) / w / 2) * 2 : H;
+    fit = `scale=${fw}:${fh}:flags=lanczos,pad=${W}:${H}:${(W - fw) / 2}:${H - fh}:color=${ground}`;
   }
-  // At full width, or full height for anything taller than 9:16 (then centred across).
-  const wide = w / h > W / H;
-  const fw = wide ? W : Math.round((H * w) / h / 2) * 2;
-  const fh = wide ? Math.round((W * h) / w / 2) * 2 : H;
-  ffmpeg(["-i", src, "-vf", `scale=${fw}:${fh}:flags=lanczos,pad=${W}:${H}:${(W - fw) / 2}:${H - fh}:color=${topColour(src)}`, "-q:v", "2", out], log);
+  const shift = titleShift(grey(src, fit), W, H, log);
+  if (shift) log?.(`Moved the cover down ${shift}px so its title clears Instagram's reel icon`);
+  const down = shift ? `,pad=${W}:${H + shift}:0:${shift}:color=${ground},crop=${W}:${H}:0:0` : "";
+  ffmpeg(["-i", src, "-vf", fit + down, "-q:v", "2", out], log);
 }

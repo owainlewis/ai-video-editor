@@ -11,7 +11,7 @@ import { type Page, placePhrases } from "../engine/page.ts";
 import { BAND } from "../effects/theme.ts";
 import { cards, slotIssues } from "../styles/blueprint/style.ts";
 import { stripAnchors } from "../engine/insert.ts";
-import { BROLL, useClip } from "./broll.ts";
+import { useClip } from "./broll.ts";
 import { cameraOnTimeline, clipLevels, clipPath, clips, timeline } from "./bin.ts";
 import { clippedWords, joins, loudJoins, mapTimes, placed } from "../engine/cut.ts";
 import { resolveParts } from "../engine/parts.ts";
@@ -167,6 +167,12 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
         const px = k * 16 * (page?.scale ?? 2);
         if (px < 26) issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} ends too wide; 16px page text shows at ${Math.round(px)}px. Tighten "to".` });
       }
+      // Owain, 2026-11-25: "I don't love the janky zoom ins on the browsers." A reel's page holds one
+      // framing for the whole shot; a new framing is a new shot, on a hard cut. With no "to" the image
+      // still pushes in a little, so that counts as a move too.
+      const from = rectOf(visual.from);
+      if (!youtube && !s.keep && (!to || !from || from.some((n, i) => Math.abs(n - to[i]) > 1e-3)))
+        issues.push({ level: "warn", message: `"${s.anchor}": ${v.src} zooms or pans during the shot; give "from" and "to" the same framing, and cut to a new shot for a new framing` });
     }
     if (v?.kind === "video" && existsSync(join(dir, v.src))) {
       const moves = join(dir, v.src.replace(/\.\w+$/, ".json"));
@@ -252,7 +258,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   // and must not swap the flattened cut out from under a running export.
   const name = exportCut ? "export" : "resolved";
   writeJson(join(dir, `build/edit.${name}.json`), resolved);
-  writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
+  writeJson(join(dir, exportCut ? "build/audio.export.json" : "build/audio.json"), { duration: meta.duration, canvas: plan.canvas, music: plan.music, voiceGain: plan.voiceGain, mixed: plan.mixed, sfx: resolved.sfx, ...(exportCut ? { voice: exportCut.voice } : {}) });
   return { resolved, issues };
 }
 
@@ -260,7 +266,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
 export const handCover = (dir: string): string | undefined =>
   ["cover.png", "cover.jpg", "cover.jpeg", "cover.webp"].map((f) => join(dir, f)).find((f) => existsSync(f));
 
-const LIBRARY_LOGOS = join(BROLL, "..", "logos");
+const LIBRARY_LOGOS = join(ROOT, "library", "logos");
 // A library logo as a data URL, so any visual can draw it without knowing the project's folder.
 // The official SVG when there is one (crisp at any size), else the PNG.
 export function useLogo(name: string): string | undefined {

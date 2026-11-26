@@ -63,51 +63,56 @@ function reel(slug: string, o: { title?: string; caption?: string; canvas?: stri
 const files = () => (existsSync(folder) ? readdirSync(folder, { recursive: true }).map(String).filter((f) => f.includes("/")).sort() : []);
 
 describe("approving a reel", () => {
+  it("refuses a reel with no cover image", async () => {
+    reel("a", { cta: true });
+    await expect(approve(projects, "a", { cover, now: day("2026-11-23T09:00:00") })).rejects.toThrow(/no cover yet/);
+    expect(files()).toEqual([]);
+  });
   it("copies the version without the call to action beside the reel, and needs a current one", async () => {
     reel("a", { cta: true });
-    const r = await approve(projects, "a", { cover, now: day("2026-11-14T09:00:00") });
+    const r = await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-14T09:00:00") });
     expect(files()).toEqual(["2026-11-14 Two types of agent/image.jpg", "2026-11-14 Two types of agent/reel-no-cta.mp4", "2026-11-14 Two types of agent/reel.mp4"]);
     expect(readFileSync(r.noCta!, "utf8")).toBe("no-cta video of a");
     reel("b", { cta: true, noCta: null });
-    await expect(approve(projects, "b", { cover })).rejects.toThrow(/no version without the call to action/);
+    await expect(approve(projects, "b", { plainCover: true, cover })).rejects.toThrow(/no version without the call to action/);
     reel("c", { cta: true, noCta: T + 1_000 });
-    await expect(approve(projects, "c", { cover })).rejects.toThrow(/no version without the call to action/);
+    await expect(approve(projects, "c", { plainCover: true, cover })).rejects.toThrow(/no version without the call to action/);
   });
 
   it("refuses with no export", async () => {
     reel("a", { video: null, check: null });
-    await expect(approve(projects, "a", { cover })).rejects.toThrow(/no export yet/);
+    await expect(approve(projects, "a", { plainCover: true, cover })).rejects.toThrow(/no export yet/);
     expect(files()).toEqual([]);
   });
 
   it("refuses an export older than the plan or the cut", async () => {
     reel("a", { video: T - 1000 });
-    await expect(approve(projects, "a", { cover })).rejects.toThrow(/plan changed after the last export/);
+    await expect(approve(projects, "a", { plainCover: true, cover })).rejects.toThrow(/plan changed after the last export/);
     reel("b", { cut: T + 120_000 });
-    await expect(approve(projects, "b", { cover })).rejects.toThrow(/plan changed after the last export/);
+    await expect(approve(projects, "b", { plainCover: true, cover })).rejects.toThrow(/plan changed after the last export/);
     expect(files()).toEqual([]);
   });
 
   it("refuses a failed export check, a missing one, or one from an older export", async () => {
     reel("a", { errors: 2 });
-    await expect(approve(projects, "a", { cover })).rejects.toThrow(/found 2 errors/);
+    await expect(approve(projects, "a", { plainCover: true, cover })).rejects.toThrow(/found 2 errors/);
     reel("b", { check: null });
-    await expect(approve(projects, "b", { cover })).rejects.toThrow(/no export check/);
+    await expect(approve(projects, "b", { plainCover: true, cover })).rejects.toThrow(/no export check/);
     reel("c", { check: T + 30_000 });
-    await expect(approve(projects, "c", { cover })).rejects.toThrow(/no export check/);
+    await expect(approve(projects, "c", { plainCover: true, cover })).rejects.toThrow(/no export check/);
     expect(files()).toEqual([]);
   });
 
   it("refuses a YouTube video", async () => {
     reel("a", { canvas: "youtube" });
-    await expect(approve(projects, "a", { cover })).rejects.toThrow(/only reels/);
+    await expect(approve(projects, "a", { plainCover: true, cover })).rejects.toThrow(/only reels/);
   });
 
   it("copies the export and its cover into STUDIO_APPROVED, made if missing, and records it", async () => {
     const dir = reel("a", { title: "Google EGM: better code / with AI?" });
     expect(approvedFolder()).toBe(folder);
     expect(approval(dir).state).toBe("exported");
-    const r = await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
+    const r = await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-13T12:00:00") });
     expect(files()).toEqual(["2026-11-13 Google EGM better code with AI/image.jpg", "2026-11-13 Google EGM better code with AI/reel.mp4"]);
     expect(readFileSync(r.video, "utf8")).toBe("video of a");
     expect(readFileSync(r.cover, "utf8")).toBe("cover of a");
@@ -119,15 +124,15 @@ describe("approving a reel", () => {
     reel("a", { caption: "Comment AGENT and I'll send the link.  " });
     reel("b", { title: "Other" });
     const now = day("2026-11-13T12:00:00");
-    const a = await approve(projects, "a", { cover, now });
-    await approve(projects, "b", { cover, now });
+    const a = await approve(projects, "a", { plainCover: true, cover, now });
+    await approve(projects, "b", { plainCover: true, cover, now });
     expect(readFileSync(join(a.folder!, "caption.txt"), "utf8")).toBe("Comment AGENT and I'll send the link.\n");
     expect(files()).toEqual(["2026-11-13 Other/image.jpg", "2026-11-13 Other/reel.mp4", "2026-11-13 Two types of agent/caption.txt", "2026-11-13 Two types of agent/image.jpg", "2026-11-13 Two types of agent/reel.mp4"]);
   });
 
   it("is out of date once the plan changes after approving", async () => {
     const dir = reel("a");
-    await approve(projects, "a", { cover, now: new Date(T + 120_000) });
+    await approve(projects, "a", { plainCover: true, cover, now: new Date(T + 120_000) });
     expect(approval(dir).state).toBe("approved");
     at(join(dir, "edit.json"), T + 180_000);
     expect(approval(dir)).toMatchObject({ state: "stale", ready: false });
@@ -135,9 +140,9 @@ describe("approving a reel", () => {
 
   it("replaces only its own earlier folder when approved again", async () => {
     const dir = reel("a");
-    await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
+    await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-13T12:00:00") });
     // Approved again the same day: the same folder, its files replaced in place.
-    await approve(projects, "a", { cover, now: day("2026-11-13T13:00:00") });
+    await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-13T13:00:00") });
     expect(files()).toEqual(["2026-11-13 Two types of agent/image.jpg", "2026-11-13 Two types of agent/reel.mp4"]);
     // A new export, approved the next day: the new files in, the old ones to the Trash.
     writeFileSync(join(dir, "renders/final.mp4"), "video of a, take 2");
@@ -145,7 +150,7 @@ describe("approving a reel", () => {
     at(join(dir, "checks/export-check.json"), Date.parse("2026-11-14T09:00:05"));
     expect(approval(dir).state).toBe("stale");
     expect(approval(dir).ready).toBe(true);
-    const r = await approve(projects, "a", { cover, now: day("2026-11-14T10:00:00") });
+    const r = await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-14T10:00:00") });
     expect(files()).toEqual(["2026-11-14 Two types of agent/image.jpg", "2026-11-14 Two types of agent/reel.mp4"]);
     expect(readFileSync(r.video, "utf8")).toBe("video of a, take 2");
     expect(readdirSync(trash)).toEqual(["2026-11-13 Two types of agent"]);
@@ -157,8 +162,8 @@ describe("approving a reel", () => {
     mkdirSync(join(folder, "2026-11-13 Two types of agent"), { recursive: true });
     writeFileSync(join(folder, "2026-11-13 Two types of agent/reel.mp4"), "Owain's own file");
     const now = day("2026-11-13T12:00:00");
-    const a = await approve(projects, "a", { cover, now });
-    const b = await approve(projects, "b", { cover, now });
+    const a = await approve(projects, "a", { plainCover: true, cover, now });
+    const b = await approve(projects, "b", { plainCover: true, cover, now });
     expect(a.video).toBe(join(folder, "2026-11-13 Two types of agent (2)/reel.mp4"));
     expect(b.video).toBe(join(folder, "2026-11-13 Two types of agent (3)/reel.mp4"));
     expect(readFileSync(join(folder, "2026-11-13 Two types of agent/reel.mp4"), "utf8")).toBe("Owain's own file");
@@ -167,7 +172,7 @@ describe("approving a reel", () => {
 
   it("unapproves to the Trash and drops the record", async () => {
     const dir = reel("a");
-    const r = await approve(projects, "a", { cover, now: day("2026-11-13T12:00:00") });
+    const r = await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-13T12:00:00") });
     unapprove(projects, "a");
     expect(files()).toEqual([]);
     expect(readdirSync(trash)).toEqual([r.folder!.split("/").pop()]);
@@ -181,9 +186,9 @@ describe("approving a reel", () => {
     reel("a");
     reel("b");
     reel("c");
-    await approve(projects, "a", { cover, now: day("2026-11-09T08:00:00") }); // Monday
-    await approve(projects, "b", { cover, now: day("2026-11-12T08:00:00") });
-    await approve(projects, "c", { cover, now: day("2026-11-08T22:00:00") }); // the Sunday before
+    await approve(projects, "a", { plainCover: true, cover, now: day("2026-11-09T08:00:00") }); // Monday
+    await approve(projects, "b", { plainCover: true, cover, now: day("2026-11-12T08:00:00") });
+    await approve(projects, "c", { plainCover: true, cover, now: day("2026-11-08T22:00:00") }); // the Sunday before
     expect(listApproved(projects).map((x) => x.slug)).toEqual(["b", "a", "c"]);
     expect(weekCount(projects, day("2026-11-15T23:59:00"))).toEqual({ count: 2, target: 7 });
     expect(weekCount(projects, day("2026-11-16T00:00:00")).count).toBe(0);

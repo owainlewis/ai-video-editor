@@ -13,6 +13,7 @@ import { Preflight } from "./Preflight";
 import { ApprovalBadge, useApproval } from "./Approval";
 import { useProject } from "./project";
 import { KeysButton, RedoIcon, ThemeSwitch, UndoIcon } from "./ui";
+import { PanelToggles, panelStyle, Splitters, usePanels } from "./layout";
 
 const KEYS: [string, string][] = [
   ["Space", "Play or pause"],
@@ -24,6 +25,7 @@ const KEYS: [string, string][] = [
   ["M", "Write a review note at the playhead"],
   ["⌘Z or ⇧⌘Z", "Undo or redo"],
   ["⌘↩", "Send the note to Claude"],
+  ["⌘1 ⌘2 ⌘3", "Show or hide the library, the timeline, or Claude and the inspector"],
   ["Esc", "Close the open graphic"],
 ];
 import { component } from "./Gallery";
@@ -86,6 +88,27 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const [mixed, setMixed] = useState(true);
   const mix = mixed && p?.mix ? p.mix.file : undefined;
   const player = useRef<PlayerRef>(null);
+  // The panels' sizes and which are showing (app/layout.tsx), kept apart for reels and YouTube.
+  const layout = usePanels(p?.resolved?.canvas === "youtube" ? "youtube" : "reel");
+  const { panels } = layout;
+  // A graphic opened from the timeline or the library needs the inspector on screen.
+  useEffect(() => {
+    if (picked !== null && !panels.showRight) layout.set({ showRight: true });
+  }, [picked]);
+  // ⌘1, ⌘2 and ⌘3 show and hide the library, the timeline and the right-hand panel, even while typing.
+  const toggleRef = useRef(layout.toggle);
+  toggleRef.current = layout.toggle;
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const which = ({ "1": "showLeft", "2": "showBottom", "3": "showRight" } as const)[e.key as "1" | "2" | "3"];
+      if (!which) return;
+      e.preventDefault();
+      toggleRef.current(which);
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
   // Each clip's loudness, read once, so trims snap to the real pauses between words.
   const [levels, setLevels] = useState<Record<string, Levels>>({});
   const ready = (p?.bin ?? []).filter((c) => c.ready).map((c) => c.id).join(",");
@@ -278,6 +301,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       kind={r.canvas === "youtube" ? "YouTube" : "Reel"}
       badge={approval && <ApprovalBadge a={approval} />}
       keys={KEYS}
+      tools={<PanelToggles panels={panels} toggle={layout.toggle} />}
       actions={
         <>
           <button className="icon" onClick={() => api.post(slug, "undo")} disabled={(p.versions?.length ?? 0) < 2} title="Undo: go back to the previous version of the plan and cut (⌘Z)" aria-label="Undo">
@@ -314,7 +338,11 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         </>
       }
     >
-      <div className={`editor ${r.canvas === "youtube" ? "wide" : ""}`}>
+      <div
+        className={`editor ${r.canvas === "youtube" ? "wide" : ""} ${panels.showLeft ? "" : "no-left"} ${panels.showRight ? "" : "no-right"} ${panels.showBottom ? "" : "no-bottom"}`}
+        style={panelStyle(panels)}
+      >
+        <Splitters panels={panels} set={layout.set} reset={layout.reset} />
         <Library slug={slug} r={r} picked={picked} onPick={(t) => setPicked(t)} cut={cut} onCut={saveCut} onSelect={setSelection} bin={p.bin ?? []} canvas={r.canvas} theme={r.theme} assets={p.assets ?? []} words={p.words} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
           <div className="screen">
@@ -334,10 +362,10 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             acknowledgeRemotionLicense
           />
           </div>
-          <div className="stage-tools">
+          <div className="stage-foot">
+            {beats.length > 0 ? <LiveBeatBar beats={beats} shots={r.shots} onStep={step} /> : <span className="spacer" />}
             <SoundPick slug={slug} p={p} on={mixed} set={setMixed} />
           </div>
-          {beats.length > 0 && <LiveBeatBar beats={beats} shots={r.shots} onStep={step} />}
           {noting !== null && (
             <NoteBox
               at={noting}
@@ -420,7 +448,7 @@ export const NoteBox: React.FC<{ at: number; onSave: (text: string) => void; onC
   );
 };
 
-export const Shell: React.FC<{ title: string; kind?: string; badge?: React.ReactNode; keys?: [string, string][]; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, kind, badge, keys, actions, children }) => (
+export const Shell: React.FC<{ title: string; kind?: string; badge?: React.ReactNode; keys?: [string, string][]; tools?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }> = ({ title, kind, badge, keys, tools, actions, children }) => (
   <div className="app">
     <header className="bar">
       <a className="brand" href="#/" title="All projects">Studio</a>
@@ -435,6 +463,7 @@ export const Shell: React.FC<{ title: string; kind?: string; badge?: React.React
       </span>
       <span className="spacer" />
       {actions}
+      {tools}
       {keys && <KeysButton keys={keys} />}
       <ThemeSwitch />
     </header>

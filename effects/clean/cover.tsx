@@ -7,7 +7,7 @@
 // of his head, never on it. Above the band, the card itself, blurred, so the top edge melts into it.
 import React from "react";
 import { Img, staticFile } from "remotion";
-import { COVER } from "../../engine/resolve";
+import { COVER, GRID } from "../../engine/resolve";
 import type { Resolved } from "../../engine/schema";
 import { H, SANS, W } from "./kit";
 
@@ -56,7 +56,8 @@ const Tile: React.FC<{ src: string; name?: string; x: number; y: number; turn: n
 
 export const Cover: React.FC<{ cover: NonNullable<Resolved["cover"]> }> = ({ cover }) => {
   const logos = cover.logos ?? [];
-  const top = logos.length ? BAND.top + 64 : BAND.top + BAND.height * SHIRT;
+  // With logos the title starts below the grid's reel icon (GRID).
+  const top = logos.length ? BAND.top + BAND.height * GRID.titleTop : BAND.top + BAND.height * SHIRT;
   return (
     <div data-qc="cover" style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#0B0C0D" }}>
       <Img src={staticFile(cover.image)} style={{ position: "absolute", inset: -120, width: W + 240, height: H + 240, objectFit: "cover", filter: "blur(60px) brightness(0.8)" }} />

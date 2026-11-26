@@ -110,8 +110,11 @@ async function prepare(dir: string, file: string, log: Log, fixed?: [number, num
 export function transcribe(dir: string, log?: Log): Word[] {
   const tmp = join(dir, "build/whisper");
   mkdirSync(tmp, { recursive: true });
+  // On long recordings Whisper's default conditioning loops one phrase for minutes and drops
+  // whole sections (the 1h51m course take, 2026-11-15); without it the transcript comes out clean.
+  const long = probeDuration(join(dir, "source/voice.wav")) > 20 * 60 ? ["--condition-on-previous-text", "False", "--hallucination-silence-threshold", "2"] : [];
   run("uvx", ["--from", "mlx-whisper", "mlx_whisper", join(dir, "source/voice.wav"), "--model", "mlx-community/whisper-large-v3-turbo",
-    "--language", "en", "--word-timestamps", "True", "--output-format", "json", "--output-dir", tmp, "--initial-prompt", VOCAB], { log });
+    "--language", "en", "--word-timestamps", "True", "--output-format", "json", "--output-dir", tmp, "--initial-prompt", VOCAB, ...long], { log });
   // Python's json writes NaN for some scores, which JSON.parse rejects; nothing here reads them.
   const data = JSON.parse(readFileSync(join(tmp, "voice.json"), "utf8").replace(/\bNaN\b/g, "null")) as { segments: { words?: { word: string; start: number; end: number }[] }[] };
   const raw: Word[] = data.segments.flatMap((s) => s.words ?? []).filter((w) => w.word.trim())

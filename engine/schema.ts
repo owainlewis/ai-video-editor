@@ -558,6 +558,9 @@ export const Edit = z.object({
       title: z.string().min(1),
       image: z.string().default("owain"),
       logos: z.array(z.union([z.string(), z.object({ logo: z.string(), name: z.string().optional() })])).max(2).default([]),
+      // A real picture to set behind him on the Higgsfield cover (2026-11-23: "This would have been great
+      // with a diagram or graph behind"): a diagram or graph from the reel's own sources, in the project.
+      backdrop: z.string().optional(),
     })
     .optional(),
   // Where the speaker's face is in the source footage, as fractions of its frame:
@@ -577,6 +580,10 @@ export const Edit = z.object({
   grade: z.object({ brightness: z.number().default(1), contrast: z.number().default(1), saturate: z.number().default(1) }).default({ brightness: 1, contrast: 1, saturate: 1 }),
   // Gain for the speaker's own audio track, in dB.
   voiceGain: z.number().default(0),
+  // The footage's sound is already Owain's finished mix (his music and levels, YouTube exports;
+  // Owain, 2026-11-10). The graphics' sounds are laid on top at his level: no loudness pass, and a
+  // limiter only at 0 dBFS, where an effect lands on a peak. Otherwise the mix is pushed to -14 LUFS.
+  mixed: z.boolean().default(false),
   // The video's named parts (intro, part 1, part 2), in order. Each starts on a spoken phrase and
   // runs to the start of the next; the first starts the video. They change nothing on screen: they
   // are how a video is edited and test-rendered a part at a time (engine/parts.ts).

@@ -5,6 +5,7 @@
 // assets/screen.json: the zooms (drawn by Remotion, so the page stays sharp), the clicks (for sound)
 // and warnings about the take, which `check` reports.
 // The pages are real and so are the words marked on them: a mark on text that is not there is an error.
+import { cookieParams, loadSession, storageScript } from "./session.ts";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,8 +35,13 @@ const Action = z.object({
   x: z.number().optional(),
   y: z.number().optional(),
 });
-const Scene = z.object({ from: z.string(), to: z.string(), url: z.string(), on: z.string().optional(), top: z.number().default(96), do: z.array(Action) });
-const Script = z.object({ scenes: z.array(Scene).min(1) });
+// `dark`: load the page in its dark theme, as a viewer whose system is set to dark sees it (the
+// site's own theme switch follows prefers-color-scheme on most sites). `lead`: seconds the page plays
+// before filming starts, so a live diagram is already in motion on its first frame. `el`: a CSS
+// selector (a figure's id) whose top edge lands at `top`, so a whole diagram is framed, never its caption.
+const Scene = z.object({ from: z.string(), to: z.string(), url: z.string(), on: z.string().optional(), top: z.number().default(96), dark: z.boolean().default(false), el: z.string().optional(), lead: z.number().min(0).max(20).default(0), do: z.array(Action) });
+// `session`: a saved sign-in (.sessions/<name>.json, from `studio signin`) for pages behind a login.
+const Script = z.object({ session: z.string().optional(), scenes: z.array(Scene).min(1) });
 type Act = z.infer<typeof Action>;
 
 // Runs inside the page. The cursor and marks are drawn over it; everything under them is the real page.
@@ -43,6 +49,7 @@ const HELPERS = String.raw`(() => {
   document.documentElement.style.scrollBehavior = 'auto';
   const ease = (t) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
   const cur = document.createElement('div');
+  cur.id = '__rec_cur';
   cur.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;width:30px;height:30px';
   cur.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24"><path d="M5 3l14 9-6.5 1.2L9 20z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
   document.documentElement.appendChild(cur);
@@ -168,6 +175,11 @@ export async function record(projects: string, slug: string, log?: Log) {
   const warnings: string[] = [];
   const clips: { start: number; end: number; frames: { file: string; t: number }[] }[] = [];
   await browser.open();
+  if (script.session) {
+    const saved = loadSession(script.session);
+    await browser.send("Network.setCookies", { cookies: cookieParams(saved) });
+    await browser.send("Page.addScriptToEvaluateOnNewDocument", { source: storageScript(saved) });
+  }
   try {
     let n = 0;
     let cursor = 0; // Scenes run in order, so a phrase said earlier in the cut is not this scene's.
@@ -178,16 +190,25 @@ export async function record(projects: string, slug: string, log?: Log) {
       const end = toT - CUT_LEAD;
       cursor = toI;
       log?.(`scene ${k + 1}/${script.scenes.length}: ${scene.url} (${start.toFixed(2)} to ${end.toFixed(2)})`);
+      await browser.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scene.dark ? "dark" : "light" }] });
       const nav = await browser.send("Page.navigate", { url: scene.url });
       if (nav.errorText) throw new Error(`record.json: ${scene.url} did not load (${nav.errorText})`);
       await sleep(3500);
       await browser.js(HELPERS);
-      if (scene.on) {
+      // A scene where nothing is pointed at or clicked shows no cursor: an idle arrow over a diagram is noise.
+      if (!scene.do.some((a) => a.act === "move" || a.act === "click" || a.act === "type")) await browser.js("document.getElementById('__rec_cur').style.display = 'none'");
+      if (scene.el) {
+        const t = await browser.js<number | null>(`(() => { const e = document.querySelector(${JSON.stringify(scene.el)}); return e ? e.getBoundingClientRect().top : null; })()`);
+        if (t === null) throw new Error(`record.json: no ${scene.el} on ${scene.url}`);
+        await browser.js(`scrollTo(0, scrollY + ${t - scene.top})`);
+        await sleep(400);
+      } else if (scene.on) {
         const p = await browser.js(`__rec.rect(${JSON.stringify(scene.on)})`);
         if (!p) throw new Error(`record.json: "${scene.on}" is not on ${scene.url}`);
         await browser.js(`scrollTo(0, scrollY + ${p.t - scene.top})`);
         await sleep(400);
       }
+      if (scene.lead) await sleep(scene.lead * 1000);
       const frames: { file: string; t: number }[] = [];
       const write = (data: string, t: number) => {
         const file = join(work, `${String(n++).padStart(6, "0")}.jpg`);

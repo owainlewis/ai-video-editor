@@ -24,7 +24,7 @@ import { changeParts, dropBroll, editShot, moveShotEnd, moveShotStart, placeCard
 import { decide, loadSuggestions, SUGGEST } from "./suggest.ts";
 import { listAssets, saveAsset } from "./assets.ts";
 import { clearVariants, loadVariants, resolveVariants, saveVariants, VARIANTS } from "./variants.ts";
-import { BROLL, loadLibrary } from "../media/broll.ts";
+import { brollFolder, clipsFolder, loadLibrary } from "../media/broll.ts";
 import { cameraOnTimeline, clipDir, clipLevels, clips, timeline } from "../media/bin.ts";
 import { effectList } from "../effects/preview.ts";
 import { readCardLibrary, saveInLibrary } from "../media/cardlibrary.ts";
@@ -107,6 +107,8 @@ export async function startServer(port = 4747) {
     }, 150));
   };
   let libraryBusy = false;
+  // The library folder (STUDIO_BROLL) as it was when the server started.
+  const BROLL = brollFolder();
   mkdirSync(BROLL, { recursive: true });
   watch(BROLL, (_e, file) => String(file) === "index.json" && broadcast({ type: "library" }));
   watch(projects, { recursive: true }, (_e, file) => {
@@ -488,7 +490,7 @@ export async function startServer(port = 4747) {
   server.on("request", (req, res) => {
     if (req.url?.startsWith("/api/"))
       return void api(req, res).catch((e) => send(res, typeof e.code === "number" ? e.code : 500, { error: String(e.message ?? e) }));
-    if (serveFile(join(BROLL, ".clips"), req, res, "/library")) return;
+    if (serveFile(clipsFolder(), req, res, "/library")) return;
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });

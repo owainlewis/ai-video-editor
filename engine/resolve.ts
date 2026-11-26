@@ -503,6 +503,12 @@ export const resolveHook = (hook: EditPlan["hook"], words: Word[], shots: Resolv
 // The cover's title: two lines of big type in the 3:4 band Instagram's grid shows (effects/clean/cover.tsx).
 export const COVER = { size: 96, width: 1000, words: 7, lines: 2 };
 
+// Instagram's profile grid shows the middle 3:4 of a 9:16 cover and draws the reel icon in the tile's
+// top-right corner, over its top 8% or so. The cover's title starts at least this far down the 3:4
+// (a share of its height), so it never runs under the icon (Owain, 2026-11-14: the Grok Bot title
+// started 3% down and its first line ran under it).
+export const GRID = { titleTop: 0.12 };
+
 export const lintCover = (cover: { title: string } | undefined): Issue[] => {
   if (!cover) return [{ level: "warn", message: `no cover: every reel has a cover image, uploaded apart from the video (Owain, 2026-11-13). Add "cover": { "title": "..." }, the title in Owain's words, then make the image with \`cover <slug> --prompt\`` }];
   const issues: Issue[] = [];

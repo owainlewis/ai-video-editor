@@ -58,6 +58,13 @@ Handled in `Editor`, on `window`:
 | Left, Right | Step to the previous or next beat. With no beats (YouTube): a frame, or a second with Shift |
 | M | Write a review note at the playhead |
 | ? | Open or close the keys sheet (`KeysButton`, on `window`, in the editor and the review) |
+| Cmd/Ctrl+1, 2, 3 | Show or hide the library, the timeline, or the right-hand panel (Claude and the inspector), even while typing |
+
+### Panels
+
+`layout.tsx`: `usePanels(kind)` keeps each panel's size and whether it shows, per reel or YouTube, in `localStorage` (`studio-panels-<kind>`). `panelStyle` puts the sizes on `.editor` as `--left`, `--right` and `--bottom`; `Splitters` are the edges a panel is dragged by (double-click for its usual size); `PanelToggles` are the three buttons in the header. Opening a graphic shows the right-hand panel.
+
+In the Mac app (`mac-app` on `<html>`, set in `index.html`) the header is the window's title bar: it drags the window and leaves room for the traffic lights.
 | J, K, L | Shuttle back, stop, shuttle forward (up to 4x) |
 
 Handled elsewhere:

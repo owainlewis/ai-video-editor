@@ -2,6 +2,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -76,6 +77,9 @@ export function envValue(name: string): string | undefined {
   const line = readFileSync(file, "utf8").match(new RegExp(`^${name}=(.*)$`, "m"));
   return line?.[1]?.trim().replace(/^(["'])(.*)\1$/, "$2") || undefined;
 }
+
+// A folder setting as a full path: "~" is the home folder, a relative path is from the repo.
+export const expandHome = (p: string) => resolve(ROOT, p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
 
 export const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8"));
 
