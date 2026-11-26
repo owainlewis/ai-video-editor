@@ -39,6 +39,38 @@ export function isExternalUrl(url: string): boolean {
   }
 }
 
+export function safeHash(url: string): string {
+  try {
+    return new URL(url).hash;
+  } catch {
+    return "";
+  }
+}
+
+// Decide what URL (if any) the window should load when the server becomes ready.
+export function readyLoadTarget(opts: {
+  serverUrl: string;
+  currentUrl: string;
+  wanted: string | null;
+  failedUrl: string | null;
+}): { target: string | null; clearWanted: boolean } {
+  const { serverUrl: base, currentUrl, wanted, failedUrl } = opts;
+  if (failedUrl) {
+    const hash = failedUrl.startsWith("http") ? safeHash(failedUrl) : "";
+    const target = wanted ? `${base}/${wanted}` : isOwnUrl(failedUrl, base) ? failedUrl : `${base}/${hash}`;
+    return { target, clearWanted: true };
+  }
+  if (!isOwnUrl(currentUrl, base)) {
+    const hash = currentUrl.startsWith("http") ? safeHash(currentUrl) : "";
+    return { target: `${base}/${wanted ?? hash}`, clearWanted: true };
+  }
+  if (wanted) {
+    const target = `${base}/${wanted}`;
+    return { target: currentUrl !== target ? target : null, clearWanted: true };
+  }
+  return { target: null, clearWanted: false };
+}
+
 // Only clear a pending load-failure retry when Chromium actually loaded a healthy page from our server.
 export function shouldClearFailed(url: string, base: string | null, httpStatus: number | null): boolean {
   if (!isOwnUrl(url, base)) return false;
@@ -175,6 +207,17 @@ export class RetryScheduler {
     }
     this.count = 0;
     return this.failed;
+  }
+
+  // Reset attempt counter and timer before restarting the server while preserving failedUrl
+  // so render() reloads the editor once the server returns to "ready".
+  resetForRestart(url: string) {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.count = 0;
+    this.failed = url;
   }
 
   clear() {

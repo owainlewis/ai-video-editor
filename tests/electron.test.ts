@@ -11,6 +11,7 @@ import {
   type Listed,
   needsRestart,
   notices,
+  readyLoadTarget,
   refreshState,
   RetryScheduler,
   routeFor,
@@ -28,12 +29,17 @@ class FakeChild extends EventEmitter {
   signalCode: NodeJS.Signals | null = null;
   kills: Array<NodeJS.Signals | number | undefined> = [];
   autoExitOnKill = true;
+  killDelayMs = 0;
 
   kill(signal?: NodeJS.Signals | number) {
     this.kills.push(signal);
     if (this.autoExitOnKill && this.exitCode === null && this.signalCode === null) {
       const sig = typeof signal === "string" ? signal : "SIGTERM";
-      queueMicrotask(() => this.die(null, sig));
+      if (this.killDelayMs > 0) {
+        setTimeout(() => this.die(null, sig), this.killDelayMs);
+      } else {
+        queueMicrotask(() => this.die(null, sig));
+      }
     }
     return true;
   }
@@ -511,5 +517,222 @@ describe("the desktop app", () => {
     await srv.stop();
     expect(Date.now() - start).toBeLessThan(500);
     expect(watcher.closed).toBe(true);
+  });
+
+  it("serializes ensureAlive() with restart() waiting in idle() without spawning duplicate servers or hanging", async () => {
+    let projectsAlive = false;
+    const spawned: FakeChild[] = [];
+    let activeChildren = 0;
+    let maxConcurrentChildren = 0;
+
+    const srv = new StudioServer("/tmp/repo", {
+      idlePollMs: 5000,
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.endsWith("/api/busy")) return jsonResponse({ notes: ["reel-1"] });
+        if (url.endsWith("/api/projects")) {
+          if (projectsAlive) return jsonResponse([]);
+          throw new Error("ECONNREFUSED");
+        }
+        throw new Error("unexpected");
+      },
+      watch: () => new FakeWatcher() as unknown as FSWatcher,
+      spawn: (() => {
+        const c = new FakeChild();
+        c.killDelayMs = 20;
+        spawned.push(c);
+        activeChildren++;
+        maxConcurrentChildren = Math.max(maxConcurrentChildren, activeChildren);
+        c.once("exit", () => activeChildren--);
+        setTimeout(() => {
+          if (c.exitCode === null && c.signalCode === null) {
+            projectsAlive = true;
+            c.stdout.write("Studio is running at http://localhost:4747\n");
+          }
+        }, 15);
+        return c as unknown as ChildProcess;
+      }) as typeof import("node:child_process").spawn,
+    });
+
+    await srv.start();
+    expect(srv.state).toBe("ready");
+    expect(spawned).toHaveLength(1);
+
+    // Start a restart that blocks in idle() waiting for Claude notes.
+    const restarting = srv.restart("server/index.ts changed");
+    await new Promise((r) => setTimeout(r, 15));
+    expect(srv.state).toBe("ready");
+
+    // Server stops answering /api/projects while restart() is in idle().
+    projectsAlive = false;
+    const alive = await srv.ensureAlive();
+    await restarting;
+
+    expect(alive).toBe(false);
+    expect(srv.state).toBe("ready");
+    expect(spawned).toHaveLength(2);
+    expect(maxConcurrentChildren).toBe(1);
+    expect(activeChildren).toBe(1);
+    // Ensure this.checking was released and subsequent health checks succeed.
+    expect(await srv.ensureAlive()).toBe(true);
+
+    await srv.stop();
+    expect(activeChildren).toBe(0);
+  });
+
+  it("does not spawn an orphaned server when the child crashes while restart() is waiting in idle()", async () => {
+    const spawned: FakeChild[] = [];
+    let activeChildren = 0;
+    let maxConcurrentChildren = 0;
+
+    const srv = new StudioServer("/tmp/repo", {
+      crashBackoffMs: 25,
+      idlePollMs: 5000,
+      fetch: async (input) => {
+        const url = String(input);
+        if (url.endsWith("/api/busy")) return jsonResponse({ notes: ["reel-1"] });
+        throw new Error("ECONNREFUSED");
+      },
+      watch: () => new FakeWatcher() as unknown as FSWatcher,
+      spawn: (() => {
+        const c = new FakeChild();
+        spawned.push(c);
+        activeChildren++;
+        maxConcurrentChildren = Math.max(maxConcurrentChildren, activeChildren);
+        c.once("exit", () => activeChildren--);
+        setTimeout(() => {
+          if (c.exitCode === null && c.signalCode === null) {
+            c.stdout.write("Studio is running at http://localhost:4747\n");
+          }
+        }, 10);
+        return c as unknown as ChildProcess;
+      }) as typeof import("node:child_process").spawn,
+    });
+
+    await srv.start();
+    expect(spawned).toHaveLength(1);
+
+    // Begin restart that blocks in idle().
+    const restarting = srv.restart("server/index.ts changed");
+    await new Promise((r) => setTimeout(r, 15));
+
+    // Managed child crashes unexpectedly during idle().
+    spawned[0].die(1, null);
+    await restarting;
+
+    // Wait well past crashBackoffMs to prove no crashTimer fires and leaks a second server.
+    await new Promise((r) => setTimeout(r, 80));
+    expect(srv.state).toBe("ready");
+    expect(spawned).toHaveLength(2);
+    expect(maxConcurrentChildren).toBe(1);
+    expect(activeChildren).toBe(1);
+
+    await srv.stop();
+    expect(activeChildren).toBe(0);
+  });
+
+  it("restarts a stopped managed server on retry() and still aborts if stop() interrupts kill()", async () => {
+    const spawned: FakeChild[] = [];
+    const watchers: FakeWatcher[] = [];
+    const srv = new StudioServer("/tmp/repo", {
+      fetch: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      watch: () => {
+        const w = new FakeWatcher();
+        watchers.push(w);
+        return w as unknown as FSWatcher;
+      },
+      spawn: (() => {
+        const c = new FakeChild();
+        spawned.push(c);
+        queueMicrotask(() => c.stdout.write("Studio is running at http://localhost:4747\n"));
+        return c as unknown as ChildProcess;
+      }) as typeof import("node:child_process").spawn,
+    });
+
+    await srv.start();
+    expect(srv.mode).toBe("own");
+    expect(srv.state).toBe("ready");
+    expect(spawned).toHaveLength(1);
+
+    await srv.stop();
+    expect(srv.state).toBe("stopped");
+    expect(srv.mode).toBe("own");
+    expect(watchers[0].closed).toBe(true);
+
+    // retry() from state === "stopped" && mode === "own" must spawn and recover.
+    await srv.retry();
+    expect(srv.state).toBe("ready");
+    expect(srv.url).toBe("http://localhost:4747");
+    expect(spawned).toHaveLength(2);
+    expect(watchers).toHaveLength(2);
+
+    // Calling stop() while retry() is awaiting an async kill() must not spawn a new server.
+    spawned[1].killDelayMs = 25;
+    const retrying = srv.retry();
+    await new Promise((r) => setTimeout(r, 5));
+    await srv.stop();
+    await retrying;
+    expect(srv.state).toBe("stopped");
+    expect(spawned).toHaveLength(2);
+  });
+
+  it("preserves failedUrl across an exhausted-retry restart so readyLoadTarget reloads the editor", async () => {
+    vi.useFakeTimers();
+    try {
+      const r = new RetryScheduler({
+        maxRetries: 2,
+        baseDelayMs: 100,
+        maxDelayMs: 500,
+        onRetry: () => {},
+        onExhausted: (url) => {
+          r.resetForRestart(url);
+        },
+      });
+
+      const badUrl = "http://localhost:4747/#/p/reel-1";
+      expect(r.schedule(badUrl)).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(r.schedule(badUrl)).toBe(true);
+      await vi.advanceTimersByTimeAsync(200);
+      // 3rd failure exhausts retries and triggers resetForRestart(url).
+      expect(r.schedule(badUrl)).toBe(false);
+      expect(r.attempts).toBe(0);
+      expect(r.failedUrl).toBe(badUrl);
+
+      // Even if the window is still on server.url's origin (e.g. HTTP 500 or unmounted #root),
+      // render() reloads the editor once the server returns to "ready".
+      expect(
+        readyLoadTarget({
+          serverUrl: "http://localhost:4747",
+          currentUrl: badUrl,
+          wanted: null,
+          failedUrl: r.retryNow(),
+        }),
+      ).toEqual({ target: badUrl, clearWanted: true });
+
+      // If the restarted server came up on a different port, keep the hash route.
+      expect(
+        readyLoadTarget({
+          serverUrl: "http://localhost:4748",
+          currentUrl: badUrl,
+          wanted: null,
+          failedUrl: r.retryNow(),
+        }),
+      ).toEqual({ target: "http://localhost:4748/#/p/reel-1", clearWanted: true });
+
+      // Normal code-change restart with no load failure leaves the live editor alone.
+      expect(
+        readyLoadTarget({
+          serverUrl: "http://localhost:4747",
+          currentUrl: badUrl,
+          wanted: null,
+          failedUrl: null,
+        }),
+      ).toEqual({ target: null, clearWanted: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -44,6 +44,7 @@ export class StudioServer extends EventEmitter {
   private restartPhase: "idle" | "waiting" | "spawning" = "idle";
   private pendingRestartReason: string | null = null;
   private checking: Promise<boolean> | null = null;
+  private readyGen = 0;
   private readonly port: number;
   private readonly spawnImpl: typeof spawn;
   private readonly watchImpl: typeof watch;
@@ -89,23 +90,38 @@ export class StudioServer extends EventEmitter {
   async ensureAlive(): Promise<boolean> {
     if (this.checking) return this.checking;
     const run = async (): Promise<boolean> => {
-      if (this.stopping || this.state !== "ready" || !this.url) return false;
-      const ok = await answers(this.url, this.fetchImpl);
-      if (ok) return true;
-      if (this.stopping || this.state !== "ready") return false;
-      const wasAttached = this.mode === "attached";
-      await this.runTransition(async () => {
-        if (this.isStopped() || this.state !== "ready") return;
-        this.clearCrashTimer();
-        this.note(wasAttached ? "The external Studio server stopped answering; starting Studio's server." : "The Studio server stopped answering; restarting.");
-        this.mode = "own";
-        this.watchCode();
-        this.set("starting", null);
-        await this.kill();
-        if (this.isStopped()) return;
-        await this.spawn();
-      });
-      return false;
+      for (;;) {
+        if (this.isStopped() || this.state !== "ready" || !this.url) return false;
+        const gen = this.readyGen;
+        const ok = await answers(this.url, this.fetchImpl);
+        if (ok) return true;
+        if (this.isStopped() || this.state !== "ready") return false;
+        if (this.readyGen !== gen) continue;
+        if (this.activeTransition) {
+          if (this.restartPhase === "waiting") {
+            this.note("The Studio server stopped answering; restarting.");
+            this.set("starting", null);
+            this.idleAbort?.abort();
+            await this.activeTransition;
+            return false;
+          }
+          await this.activeTransition;
+          continue;
+        }
+        const wasAttached = this.mode === "attached";
+        await this.runTransition(async () => {
+          if (this.isStopped() || this.state !== "ready") return;
+          this.clearCrashTimer();
+          this.note(wasAttached ? "The external Studio server stopped answering; starting Studio's server." : "The Studio server stopped answering; restarting.");
+          this.mode = "own";
+          this.watchCode();
+          this.set("starting", null);
+          await this.kill();
+          if (this.isStopped()) return;
+          await this.spawn();
+        });
+        return false;
+      }
     };
     this.checking = run().finally(() => {
       this.checking = null;
@@ -131,12 +147,13 @@ export class StudioServer extends EventEmitter {
         this.clearCrashTimer();
         this.restartPhase = "waiting";
         await this.idle();
+        this.restartPhase = "spawning";
+        this.clearCrashTimer();
         if (this.isStopped()) break;
         this.note(`${currentReason}.`);
         this.set("restarting", this.url);
         await this.kill();
         if (this.isStopped()) break;
-        this.restartPhase = "spawning";
         await this.spawn();
         if (this.isStopped()) break;
         nextReason = this.pendingRestartReason;
@@ -160,15 +177,17 @@ export class StudioServer extends EventEmitter {
     if (this.child) await this.kill();
   }
 
-  // Start (or start again) after a failure.
+  // Start (or start again) after a failure or stop.
   async retry() {
-    if (this.activeTransition) await this.activeTransition;
+    while (this.activeTransition) await this.activeTransition;
     this.stopping = false;
     this.crashes = [];
     this.clearCrashTimer();
     if (this.mode === "attached" || this.mode === null) return this.start(this.env);
+    this.set("starting", null);
     this.watchCode();
     await this.runTransition(async () => {
+      if (this.isStopped()) return;
       await this.kill();
       if (this.isStopped()) return;
       await this.spawn();
@@ -206,6 +225,7 @@ export class StudioServer extends EventEmitter {
   }
 
   private spawn(): Promise<void> {
+    this.clearCrashTimer();
     if (this.stopping) return Promise.resolve();
     if (this.state !== "starting" || this.url !== null) this.set("starting", this.url);
     return new Promise((done) => {
@@ -251,6 +271,11 @@ export class StudioServer extends EventEmitter {
         this.child = null;
         this.note(`The server stopped (${signal ?? `exit ${code}`}).`);
         if (this.stopping || this.state === "stopped" || this.state === "restarting" || this.killing === child) return finish();
+        if (this.restartPhase === "waiting") {
+          this.set("starting", null);
+          this.idleAbort?.abort();
+          return finish();
+        }
         // It died on its own: start it again with backoff, unless it keeps dying.
         const now = Date.now();
         this.crashes = [...this.crashes.filter((t) => now - t < 60_000), now];
@@ -260,7 +285,7 @@ export class StudioServer extends EventEmitter {
           this.clearCrashTimer();
           this.crashTimer = setTimeout(() => {
             this.crashTimer = null;
-            if (this.stopping || this.state === "stopped") return;
+            if (this.isStopped() || this.activeTransition || this.child) return;
             void this.runTransition(() => this.spawn());
           }, delay);
         } else {
@@ -352,6 +377,7 @@ export class StudioServer extends EventEmitter {
   }
 
   private set(state: State, url: string | null) {
+    if (state === "ready") this.readyGen++;
     this.state = state;
     this.url = url;
     this.emit("state", state, url);

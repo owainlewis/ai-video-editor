@@ -12,9 +12,11 @@ import {
   isExternalUrl,
   isOwnUrl,
   type Listed,
+  readyLoadTarget,
   refreshState,
   RetryScheduler,
   routeFor,
+  safeHash,
   shouldClearFailed,
   summary,
 } from "./logic.ts";
@@ -46,13 +48,6 @@ const own = (url: string) => isOwnUrl(url, server.url);
 const openExternal = (url: string) => {
   if (isExternalUrl(url)) void shell.openExternal(url).catch(() => {});
 };
-const safeHash = (url: string) => {
-  try {
-    return new URL(url).hash;
-  } catch {
-    return "";
-  }
-};
 
 function loadUrl(url: string) {
   if (!win || win.isDestroyed()) return;
@@ -76,11 +71,13 @@ const recovery = new RetryScheduler({
     if (!win || win.isDestroyed() || server.state !== "ready" || !server.url) return;
     loadUrl(own(url) ? url : `${server.url}/`);
   },
-  onExhausted: () => {
+  onExhausted: (url) => {
     if (!win || win.isDestroyed()) return;
     if (server.mode === "own" && !bootRestarted) {
       bootRestarted = true;
-      recovery.clear();
+      recovery.resetForRestart(url || `${server.url ?? ""}/`);
+      clearBootCheck();
+      loadUrl(page("Starting Studio…", "", false));
       void server.restart("The editor failed to load; restarting");
       return;
     }
@@ -331,21 +328,17 @@ function render() {
   if (!win || win.isDestroyed()) return;
   const current = win.webContents.getURL();
   if (server.state === "ready" && server.url) {
-    const failedUrl = recovery.retryNow();
-    if (failedUrl) {
-      const target = wanted ? `${server.url}/${wanted}` : own(failedUrl) ? failedUrl : `${server.url}/`;
-      wanted = null;
-      loadUrl(target);
-      return;
-    }
-    // Same server: the editor reloads by itself once its event stream reconnects after a restart
-    // (app/main.tsx). A new address (the port was taken) or a status page: load the editor,
-    // keeping the page it was on.
-    if (!own(current)) {
-      const hash = current.startsWith("http") ? safeHash(current) : "";
-      loadUrl(`${server.url}/${wanted ?? hash}`);
-      wanted = null;
-    } else go();
+    // Same server without a load failure: the editor reloads by itself once its event stream
+    // reconnects after a restart (app/main.tsx). Otherwise (after a load failure, a new address,
+    // or a status page), load the editor keeping the page it was on.
+    const { target, clearWanted } = readyLoadTarget({
+      serverUrl: server.url,
+      currentUrl: current,
+      wanted,
+      failedUrl: recovery.retryNow(),
+    });
+    if (clearWanted) wanted = null;
+    if (target) loadUrl(target);
     return;
   }
   if (server.state === "failed") {
