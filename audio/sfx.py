@@ -11,7 +11,11 @@ PENTATONIC = [0, 2, 4, 7, 9]
 
 
 def whoosh(seconds: float = 0.5, peak: float = 0.16) -> np.ndarray:
+    if seconds <= 0:
+        return np.zeros((0, 2))
     t = t_axis(seconds)
+    eps = min(1e-3, seconds * 0.1)
+    peak = min(max(peak, eps), seconds - eps)
     noise = np.random.default_rng(5).standard_normal(len(t))
     # Sweep a band through the noise by crossfading fixed bands.
     centers = np.geomspace(250, 5000, 7)
@@ -33,7 +37,7 @@ def pop(step: int = 0, base_hz: float = 660) -> np.ndarray:
     f = base_hz * 2 ** (semis / 12) * (1 + 0.5 * np.exp(-t * 70))
     tone = np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.2 * np.sin(4 * np.pi * np.cumsum(f) / SR)
     env = np.exp(-t * 30) * np.minimum(1, t / 0.002)
-    click = highpass(np.random.default_rng(step).standard_normal(len(t)), 3000) * np.exp(-t * 600) * 0.3
+    click = highpass(np.random.default_rng(abs(int(step))).standard_normal(len(t)), 3000) * np.exp(-t * 600) * 0.3
     return reverb(stereo((tone * env + click) * 0.8), 0.25, 1.0)
 
 
@@ -64,7 +68,7 @@ def riser(seconds: float) -> np.ndarray:
 
 
 def key(seed: float) -> np.ndarray:
-    rng = np.random.default_rng(int(seed * 1e6))
+    rng = np.random.default_rng(abs(int(seed * 1e6)))
     t = t_axis(0.05)
     center = 2200 + 2500 * seed
     click = bandpass(rng.standard_normal(len(t)), center / 1.4, center * 1.4) * np.exp(-t * 320)

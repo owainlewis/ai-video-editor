@@ -8,6 +8,8 @@ import numpy as np
 from scipy.signal import butter, fftconvolve, sosfilt
 
 SR = 48000
+_MIN_HZ = 1.0
+_MAX_HZ = SR / 2 - 100
 
 
 def t_axis(seconds: float) -> np.ndarray:
@@ -19,15 +21,25 @@ def midi_hz(note: float) -> float:
 
 
 def lowpass(x: np.ndarray, hz: float, order: int = 2) -> np.ndarray:
-    return sosfilt(butter(order, min(hz, SR / 2 - 100), "low", fs=SR, output="sos"), x, axis=0)
+    if x.size == 0:
+        return x.copy()
+    hz = min(max(hz, _MIN_HZ), _MAX_HZ)
+    return sosfilt(butter(order, hz, "low", fs=SR, output="sos"), x, axis=0)
 
 
 def highpass(x: np.ndarray, hz: float, order: int = 2) -> np.ndarray:
+    if x.size == 0:
+        return x.copy()
+    hz = min(max(hz, _MIN_HZ), _MAX_HZ)
     return sosfilt(butter(order, hz, "high", fs=SR, output="sos"), x, axis=0)
 
 
 def bandpass(x: np.ndarray, lo: float, hi: float, order: int = 2) -> np.ndarray:
-    return sosfilt(butter(order, [lo, min(hi, SR / 2 - 100)], "band", fs=SR, output="sos"), x, axis=0)
+    if x.size == 0:
+        return x.copy()
+    lo = min(max(lo, _MIN_HZ), _MAX_HZ - _MIN_HZ)
+    hi = min(max(hi, lo + _MIN_HZ), _MAX_HZ)
+    return sosfilt(butter(order, [lo, hi], "band", fs=SR, output="sos"), x, axis=0)
 
 
 def stereo(x: np.ndarray, pan: float = 0.0) -> np.ndarray:
@@ -72,18 +84,24 @@ def fade(x: np.ndarray, fade_in: float = 0.0, fade_out: float = 0.0) -> np.ndarr
     x = x.copy()
     if fade_in > 0:
         n = min(int(fade_in * SR), len(x))
-        ramp = np.linspace(0, 1, n) ** 2
-        x[:n] *= ramp if x.ndim == 1 else ramp[:, None]
+        if n > 0:
+            ramp = np.linspace(0, 1, n) ** 2
+            x[:n] *= ramp if x.ndim == 1 else ramp[:, None]
     if fade_out > 0:
         n = min(int(fade_out * SR), len(x))
-        ramp = np.linspace(1, 0, n) ** 2
-        x[-n:] *= ramp if x.ndim == 1 else ramp[:, None]
+        if n > 0:
+            ramp = np.linspace(1, 0, n) ** 2
+            x[-n:] *= ramp if x.ndim == 1 else ramp[:, None]
     return x
 
 
 def rms_db(x: np.ndarray) -> float:
-    return 20 * np.log10(np.sqrt(np.mean(x**2)) + 1e-12)
+    if x.size == 0:
+        return float(20 * np.log10(1e-12))
+    return float(20 * np.log10(np.sqrt(np.mean(x**2)) + 1e-12))
 
 
 def to_rms(x: np.ndarray, db: float) -> np.ndarray:
+    if x.size == 0:
+        return x.copy()
     return x * 10 ** ((db - rms_db(x)) / 20)
