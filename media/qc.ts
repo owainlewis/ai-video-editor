@@ -89,6 +89,10 @@ const bgFor = (r: Resolved, s: ResolvedShot) =>
       : tokens.color.light.bg
     : undefined;
 
+// Two-level ffmpeg filtergraph escaping: option value (`\`, `'`, `:`), then filtergraph (`\`, `'`, `,`, `;`, `[`, `]`).
+export const escapeFilterValue = (s: string) =>
+  s.replace(/([\\':])/g, "\\$1").replace(/([\\',;[\]])/g, "\\$1");
+
 async function qcServer(projects: string) {
   const server = createHttp();
   const vite = await createVite({
@@ -103,8 +107,26 @@ async function qcServer(projects: string) {
     if (serveFile(projects, req, res)) return;
     vite.middlewares(req, res);
   });
-  const port: number = await new Promise((ok) => server.listen(0, "127.0.0.1", () => ok((server.address() as { port: number }).port)));
-  return { url: `http://127.0.0.1:${port}`, close: () => (server.close(), vite.close()) };
+  let port: number;
+  try {
+    port = await new Promise((ok, no) => {
+      server.once("error", no);
+      server.listen(0, "127.0.0.1", () => ok((server.address() as { port: number }).port));
+    });
+  } catch (e) {
+    await vite.close().catch(() => {});
+    throw e;
+  }
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: async () => {
+      await new Promise<void>((ok) => {
+        server.close(() => ok());
+        server.closeAllConnections?.();
+      });
+      await vite.close();
+    },
+  };
 }
 
 export type QcResult = { issues: Issue[]; sheets: string[]; overview: string | null };
@@ -157,13 +179,28 @@ type Page = Awaited<ReturnType<Awaited<ReturnType<typeof openBrowser>>["newPage"
 
 // The QC page in a headless browser at the composition's size, ready for a project (`slug`) or for
 // plans handed to it one at a time (the library check).
-async function qcPage(srv: { url: string }, size: { width: number; height: number }, query: string, log?: Log) {
+export async function qcPage(srv: { url: string }, size: { width: number; height: number }, query: string, log?: Log, timeoutMs = 60000) {
   const browser = await openBrowser("chrome", { forceDeviceScaleFactor: 1, logLevel: "error" });
-  const page = await browser.newPage({ context: () => null, logLevel: "error", indent: false, pageIndex: 0, onBrowserLog: (l: { type: string; text: string }) => l.type === "error" && !/vite|websocket/i.test(l.text) && log?.(`page: ${l.text}`), onLog: () => {} } as never);
-  await page.setViewport({ ...size, deviceScaleFactor: 1 });
-  await page.goto({ url: `${srv.url}/qc.html?${query}`, timeout: 120000 } as never);
-  for (let k = 0; k < 600 && !(await page.evaluate(() => window.qcReady)); k++) await new Promise((ok) => setTimeout(ok, 100));
-  return { browser, page };
+  try {
+    const page = await browser.newPage({ context: () => null, logLevel: "error", indent: false, pageIndex: 0, onBrowserLog: (l: { type: string; text: string }) => l.type === "error" && !/vite|websocket/i.test(l.text) && log?.(`page: ${l.text}`), onLog: () => {} } as never);
+    await page.setViewport({ ...size, deviceScaleFactor: 1 });
+    await page.goto({ url: `${srv.url}/qc.html?${query}`, timeout: 120000 } as never);
+    const deadline = Date.now() + timeoutMs;
+    let ready = false;
+    while (true) {
+      if (await page.evaluate(() => window.qcReady)) {
+        ready = true;
+        break;
+      }
+      if (Date.now() >= deadline) break;
+      await new Promise((ok) => setTimeout(ok, Math.min(100, Math.max(10, deadline - Date.now()))));
+    }
+    if (!ready) throw new Error(`QC page did not become ready within ${Math.round(timeoutMs / 1000)}s (${query})`);
+    return { browser, page };
+  } catch (e) {
+    await browser.close({ silent: true } as never).catch(() => {});
+    throw e;
+  }
 }
 
 const shoot = async (page: Page, r: Resolved, t: number, file: string) => {
@@ -219,7 +256,7 @@ async function checkGraphic(page: Page, r: Resolved, s: ResolvedShot, where: str
 // hook's own checks (engine/qc.ts, qcHook). On a card or panel it is read against that colour; on
 // footage, against the brightest part of the picture under it, shot with the hook hidden.
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-async function checkHook(page: Page, r: Resolved, frames: string, name: string, issues: Issue[], where = "the hook") {
+export async function checkHook(page: Page, r: Resolved, frames: string, name: string, issues: Issue[], where = "the hook") {
   const comp = compositionFor(r.canvas);
   const files: string[] = [];
   for (const s of r.shots.filter((s) => s.start < r.hook!.until)) {
@@ -236,15 +273,24 @@ async function checkHook(page: Page, r: Resolved, frames: string, name: string, 
     if (!bg && ink.length) {
       const [l, t0] = [Math.max(0, Math.min(...ink.map((b) => b[0]))), Math.max(0, Math.min(...ink.map((b) => b[1])))];
       const [w, h] = [Math.min(comp.width, Math.max(...ink.map((b) => b[0] + b[2]))) - l, Math.min(comp.height, Math.max(...ink.map((b) => b[1] + b[3]))) - t0];
-      await page.evaluate(() => document.querySelectorAll<HTMLElement>('[data-qc="hook"]').forEach((e) => (e.style.visibility = "hidden")));
-      const bare = join(frames, `${name}-bare.jpg`);
-      await shoot(page, r, t, bare);
-      await page.evaluate(() => document.querySelectorAll<HTMLElement>('[data-qc="hook"]').forEach((e) => (e.style.visibility = "")));
-      // The picture under the hook in a grid of cells; the brightest cell is where white reads worst.
-      const px = [...execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", bare, "-vf", `crop=${Math.round(w)}:${Math.round(h)}:${Math.round(l)}:${Math.round(t0)},scale=8:2`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])];
-      const cells = Array.from({ length: px.length / 3 }, (_, k) => px.slice(k * 3, k * 3 + 3));
-      bg = cells.reduce((a, b) => (a[0] + a[1] + a[2] >= b[0] + b[1] + b[2] ? a : b), [0, 0, 0]);
-      rmSync(bare);
+      const [cw, ch] = [Math.round(w), Math.round(h)];
+      if (cw > 0 && ch > 0) {
+        const bare = join(frames, `${name}-bare.jpg`);
+        try {
+          await page.evaluate(() => document.querySelectorAll<HTMLElement>('[data-qc="hook"]').forEach((e) => (e.style.visibility = "hidden")));
+          try {
+            await shoot(page, r, t, bare);
+          } finally {
+            await page.evaluate(() => document.querySelectorAll<HTMLElement>('[data-qc="hook"]').forEach((e) => (e.style.visibility = ""))).catch(() => {});
+          }
+          // The picture under the hook in a grid of cells; the brightest cell is where white reads worst.
+          const px = [...execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", bare, "-vf", `crop=${cw}:${ch}:${Math.round(l)}:${Math.round(t0)},scale=8:2`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])];
+          const cells = Array.from({ length: px.length / 3 }, (_, k) => px.slice(k * 3, k * 3 + 3));
+          bg = cells.reduce((a, b) => (a[0] + a[1] + a[2] >= b[0] + b[1] + b[2] ? a : b), [0, 0, 0]);
+        } finally {
+          rmSync(bare, { force: true });
+        }
+      }
     }
     issues.push(...qcHook(m, [comp.width, comp.height], `${where} at ${t.toFixed(1)}s (${s.layout})`, bg));
   }
@@ -275,118 +321,137 @@ export async function runQc(projects: string, slug: string, log?: Log, onStage?:
   // The last run's files stay beside the new ones until every unchanged graphic has taken its own back.
   const prev = join(dir, "checks/qc.prev");
   rmSync(prev, { recursive: true, force: true });
-  if (existsSync(out)) renameSync(out, prev);
-  mkdirSync(join(out, "frames"), { recursive: true });
-  const stamp = codeStamp();
-  const old: QcCache = existsSync(join(prev, "cache.json")) ? readJson(join(prev, "cache.json")) : { stamp, items: {} };
-  const keptFor = (id: string, hash: string) => {
-    const k = old.items[id];
-    return old.stamp === stamp && k?.hash === hash && existsSync(join(prev, k.sheet)) ? k : undefined;
-  };
-
-  // `at`: only the graphics on screen at these seconds (a quick look at one or two).
-  const wanted = (s: ResolvedShot) => (!at || at.some((t) => t >= s.start && t < s.end)) && (!range || (s.start < range.end && s.end > range.start));
-  const graphics = r.shots.map((s, i) => ({ s, i })).filter(({ s }) => isGraphic(s)).map((g) => {
-    const id = g.s.id ?? String(g.i + 1);
-    const hash = qcHash(r, g.i);
-    const kept = keptFor(id, hash);
-    return { ...g, id, hash, kept, check: wanted(g.s) && !(cached && kept) };
-  });
-  const todo = graphics.filter((g) => g.check).length;
-  // The hook is measured on every run: a few frames, and the graphics under it move with it.
-  const hook = !!r.hook && (!at || at.some((t) => t < r.hook!.until)) && (!range || range.start < r.hook.until);
-  // The drawn card is only a stand-in for a reel with no cover.png from Higgsfield; with one, that
-  // image is the cover and approval lays it out (uploadCover), so the stand-in is not checked.
-  const cover = !!r.cover && !handCover(join(projects, slug)) && !at && (!range || range.start === 0);
-  const hookIssues: Issue[] = [];
-  const sheets: string[] = [];
-  const settledShots: string[] = [];
-  const items: QcItem[] = [];
-  const cache: QcCache = { stamp, items: {} };
-  // The browser only opens when something has to be measured.
-  const srv = todo || hook || cover ? await qcServer(projects) : null;
-  const opened = srv ? await qcPage(srv, comp, `slug=${encodeURIComponent(slug)}`, log) : null;
+  const hadPrev = existsSync(out);
+  if (hadPrev) renameSync(out, prev);
+  let completed = false;
   try {
-    let n = 0;
-    for (const { s, i, id, hash, kept, check } of graphics) {
-      const where = shotLabel(s, i);
-      const name = String(i + 1).padStart(3, "0");
-      // One strip per graphic: before, first frame, reveals, settled, after.
-      const sheet = `${name}-${s.visual!.kind}.jpg`;
-      const frame = (k: number) => join(out, "frames", `${name}-${k}.jpg`);
-      if (check) {
-        onStage?.(`Checking graphic ${++n}/${todo}`);
-        const found: Issue[] = [];
-        const { files, settled, settledAt } = await checkGraphic(opened!.page, r, s, where, join(out, "frames"), name, found);
-        ffmpeg([...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, join(out, sheet)], log);
-        cache.items[id] = { hash, name, frames: files.length, settled: settledAt, sheet, issues: found.map((x) => ({ level: x.level, rest: x.message.startsWith(where) ? x.message.slice(where.length) : `: ${x.message}` })) };
-        issues.push(...found);
-        if (settled) settledShots.push(settled);
-        sheets.push(join(out, sheet));
-        items.push({ id, hash, index: i, start: s.start, kind: s.visual!.kind, sheet, issues: found, cached: false });
-      } else if (kept) {
-        // Unchanged since it was measured: its files come across under this run's names, and its
-        // issues are named for where the shot is now.
-        for (let k = 0; k < kept.frames; k++) if (existsSync(join(prev, "frames", `${kept.name}-${k}.jpg`))) copyFileSync(join(prev, "frames", `${kept.name}-${k}.jpg`), frame(k));
-        if (existsSync(join(prev, "frames", `${kept.name}-measure.json`))) copyFileSync(join(prev, "frames", `${kept.name}-measure.json`), join(out, "frames", `${name}-measure.json`));
-        copyFileSync(join(prev, kept.sheet), join(out, sheet));
-        cache.items[id] = { ...kept, name, sheet };
-        const found = kept.issues.map((x) => ({ level: x.level, message: `${where}${x.rest}` }));
-        items.push({ id, hash, index: i, start: s.start, kind: s.visual!.kind, sheet, issues: found, cached: true });
-        if (!wanted(s)) continue;
-        issues.push(...found);
-        if (kept.settled >= 0 && existsSync(frame(kept.settled))) settledShots.push(frame(kept.settled));
-        sheets.push(join(out, sheet));
+    mkdirSync(join(out, "frames"), { recursive: true });
+    const stamp = codeStamp();
+    const old: QcCache = existsSync(join(prev, "cache.json")) ? readJson(join(prev, "cache.json")) : { stamp, items: {} };
+    const keptFor = (id: string, hash: string) => {
+      const k = old.items[id];
+      return old.stamp === stamp && k?.hash === hash && existsSync(join(prev, k.sheet)) ? k : undefined;
+    };
+
+    // `at`: only the graphics on screen at these seconds (a quick look at one or two).
+    const wanted = (s: ResolvedShot) => (!at || at.some((t) => t >= s.start && t < s.end)) && (!range || (s.start < range.end && s.end > range.start));
+    const graphics = r.shots.map((s, i) => ({ s, i })).filter(({ s }) => isGraphic(s)).map((g) => {
+      const id = g.s.id ?? String(g.i + 1);
+      const hash = qcHash(r, g.i);
+      const kept = keptFor(id, hash);
+      return { ...g, id, hash, kept, check: wanted(g.s) && !(cached && kept) };
+    });
+    const todo = graphics.filter((g) => g.check).length;
+    // The hook is measured on every run: a few frames, and the graphics under it move with it.
+    const hook = !!r.hook && (!at || at.some((t) => t < r.hook!.until)) && (!range || range.start < r.hook.until);
+    // The drawn card is only a stand-in for a reel with no cover.png from Higgsfield; with one, that
+    // image is the cover and approval lays it out (uploadCover), so the stand-in is not checked.
+    const cover = !!r.cover && !handCover(join(projects, slug)) && !at && (!range || range.start === 0);
+    const hookIssues: Issue[] = [];
+    const sheets: string[] = [];
+    const settledShots: string[] = [];
+    const items: QcItem[] = [];
+    const cache: QcCache = { stamp, items: {} };
+    // The browser only opens when something has to be measured.
+    let srv: Awaited<ReturnType<typeof qcServer>> | null = null;
+    let opened: Awaited<ReturnType<typeof qcPage>> | null = null;
+    try {
+      if (todo || hook || cover) {
+        srv = await qcServer(projects);
+        opened = await qcPage(srv, comp, `slug=${encodeURIComponent(slug)}`, log);
+      }
+      let n = 0;
+      for (const { s, i, id, hash, kept, check } of graphics) {
+        const where = shotLabel(s, i);
+        const name = String(i + 1).padStart(3, "0");
+        // One strip per graphic: before, first frame, reveals, settled, after.
+        const sheet = `${name}-${s.visual!.kind}.jpg`;
+        const frame = (k: number) => join(out, "frames", `${name}-${k}.jpg`);
+        if (check) {
+          onStage?.(`Checking graphic ${++n}/${todo}`);
+          const found: Issue[] = [];
+          const { files, settled, settledAt } = await checkGraphic(opened!.page, r, s, where, join(out, "frames"), name, found);
+          ffmpeg([...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, join(out, sheet)], log);
+          cache.items[id] = { hash, name, frames: files.length, settled: settledAt, sheet, issues: found.map((x) => ({ level: x.level, rest: x.message.startsWith(where) ? x.message.slice(where.length) : `: ${x.message}` })) };
+          issues.push(...found);
+          if (settled) settledShots.push(settled);
+          sheets.push(join(out, sheet));
+          items.push({ id, hash, index: i, start: s.start, kind: s.visual!.kind, sheet, issues: found, cached: false });
+        } else if (kept) {
+          // Unchanged since it was measured: its files come across under this run's names, and its
+          // issues are named for where the shot is now.
+          for (let k = 0; k < kept.frames; k++) if (existsSync(join(prev, "frames", `${kept.name}-${k}.jpg`))) copyFileSync(join(prev, "frames", `${kept.name}-${k}.jpg`), frame(k));
+          if (existsSync(join(prev, "frames", `${kept.name}-measure.json`))) copyFileSync(join(prev, "frames", `${kept.name}-measure.json`), join(out, "frames", `${name}-measure.json`));
+          copyFileSync(join(prev, kept.sheet), join(out, sheet));
+          cache.items[id] = { ...kept, name, sheet };
+          const found = kept.issues.map((x) => ({ level: x.level, message: `${where}${x.rest}` }));
+          items.push({ id, hash, index: i, start: s.start, kind: s.visual!.kind, sheet, issues: found, cached: true });
+          if (!wanted(s)) continue;
+          issues.push(...found);
+          if (kept.settled >= 0 && existsSync(frame(kept.settled))) settledShots.push(frame(kept.settled));
+          sheets.push(join(out, sheet));
+        }
+      }
+      if (cover) {
+        onStage?.("Checking the cover");
+        const file = join(out, "000-cover.jpg");
+        // The cover card is its own image, not a frame of the reel: show it alone, then the reel again.
+        const load = (plan: Resolved) => opened!.page.evaluate((p: Resolved) => window.qcLoad!(p), plan as never);
+        const reel = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
+        await load({ ...reel, asCover: true });
+        await shoot(opened!.page, r, 0, file);
+        const m = (await opened!.page.evaluate(() => window.qcMeasure!())) as Measure;
+        hookIssues.push(...qcCover(m, [comp.width, comp.height], BAND));
+        await load(reel);
+        sheets.unshift(file);
+        settledShots.unshift(file);
+      }
+      if (hook) {
+        onStage?.("Checking the hook");
+        const files = await checkHook(opened!.page, r, join(out, "frames"), "000-hook", hookIssues);
+        if (files.length > 0) {
+          if (files.length === 1) ffmpeg(["-i", files[0], "-vf", "scale=480:-1", join(out, "000-hook.jpg")], log);
+          else ffmpeg([...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, join(out, "000-hook.jpg")], log);
+          sheets.unshift(join(out, "000-hook.jpg"));
+          settledShots.unshift(files[0]);
+        }
+      }
+    } finally {
+      await opened?.browser.close({ silent: true } as never).catch(() => {});
+      await srv?.close().catch(() => {});
+    }
+    // A recorded screen has to keep moving: measured on the footage, zooms counted as movement.
+    const other: Issue[] = [...hookIssues];
+    for (const [i, s] of r.shots.entries()) {
+      const v = s.visual;
+      if (v?.kind !== "video" || !v.sync || !wanted(s)) continue;
+      // A recording the wrong shape for the panel gets its edges cropped.
+      if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 864) > 0.02) other.push({ level: "warn", message: `${shotLabel(s, i)}: the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 864), so its edges are cropped` });
+      const stats = join(out, `motion-${i + 1}.txt`);
+      try {
+        ffmpeg(["-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${escapeFilterValue(stats)}`, "-f", "null", "-"], log);
+        const diffs = [...readFileSync(stats, "utf8").matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
+        const still = longestStill(diffs, 30, (t) => (v.zooms ?? []).some((z) => s.start + t >= z.t && s.start + t < z.t + z.ms / 1000));
+        if (still.secs > STILL_LIMIT) other.push({ level: "error", message: `${shotLabel(s, i)}: the screen holds still for ${still.secs.toFixed(1)}s from ${(s.start + still.at).toFixed(1)}s; something should move at least every ${STILL_LIMIT}s` });
+      } finally {
+        rmSync(stats, { force: true });
       }
     }
-    if (cover) {
-      onStage?.("Checking the cover");
-      const file = join(out, "000-cover.jpg");
-      // The cover card is its own image, not a frame of the reel: show it alone, then the reel again.
-      const load = (plan: Resolved) => opened!.page.evaluate((p: Resolved) => window.qcLoad!(p), plan as never);
-      const reel = { ...r, video: r.video && r.preview?.video ? r.preview.video : r.video, audio: null };
-      await load({ ...reel, asCover: true });
-      await shoot(opened!.page, r, 0, file);
-      const m = (await opened!.page.evaluate(() => window.qcMeasure!())) as Measure;
-      hookIssues.push(...qcCover(m, [comp.width, comp.height], BAND));
-      await load(reel);
-      sheets.unshift(file);
-      settledShots.unshift(file);
-    }
-    if (hook) {
-      onStage?.("Checking the hook");
-      const files = await checkHook(opened!.page, r, join(out, "frames"), "000-hook", hookIssues);
-      if (files.length === 1) ffmpeg(["-i", files[0], "-vf", "scale=480:-1", join(out, "000-hook.jpg")], log);
-      else ffmpeg([...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, k) => `[${k}]scale=480:-1[v${k}]`).join(";")};${files.map((_, k) => `[v${k}]`).join("")}hstack=inputs=${files.length}`, join(out, "000-hook.jpg")], log);
-      sheets.unshift(join(out, "000-hook.jpg"));
-      settledShots.unshift(files[0]);
-    }
+    issues.push(...other);
+    // Every graphic settled, on one page: the quick look before an export.
+    let overview: string | null = null;
+    if (settledShots.length) overviewSheet(settledShots, (overview = join(out, "overview.jpg")), log);
+    writeJson(join(out, "cache.json"), cache);
+    writeJson(join(out, "report.json"), { at: new Date().toISOString(), issues, sheets, overview, items, other, partial: items.length < graphics.length, stamp } satisfies QcReport);
+    completed = true;
+    rmSync(prev, { recursive: true, force: true });
+    return { issues, sheets, overview };
   } finally {
-    await opened?.browser.close({ silent: true } as never).catch(() => {});
-    srv?.close();
+    if (!completed) {
+      rmSync(out, { recursive: true, force: true });
+      if (hadPrev && existsSync(prev)) renameSync(prev, out);
+    }
   }
-  // A recorded screen has to keep moving: measured on the footage, zooms counted as movement.
-  const other: Issue[] = [...hookIssues];
-  for (const [i, s] of r.shots.entries()) {
-    const v = s.visual;
-    if (v?.kind !== "video" || !v.sync || !wanted(s)) continue;
-    // A recording the wrong shape for the panel gets its edges cropped.
-    if (v.size && s.layout === "split" && Math.abs(v.size[0] / v.size[1] - 1080 / 864) > 0.02) other.push({ level: "warn", message: `${shotLabel(s, i)}: the recording is ${v.size[0]} x ${v.size[1]}, not the panel's shape (1080 x 864), so its edges are cropped` });
-    const stats = join(out, `motion-${i + 1}.txt`);
-    ffmpeg(["-ss", String(s.start), "-t", String(s.end - s.start), "-i", join(dir, v.src), "-an", "-vf", `fps=30,scale=360:-2,format=gray,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=${stats}`, "-f", "null", "-"], log);
-    const diffs = [...readFileSync(stats, "utf8").matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
-    rmSync(stats);
-    const still = longestStill(diffs, 30, (t) => (v.zooms ?? []).some((z) => s.start + t >= z.t && s.start + t < z.t + z.ms / 1000));
-    if (still.secs > STILL_LIMIT) other.push({ level: "error", message: `${shotLabel(s, i)}: the screen holds still for ${still.secs.toFixed(1)}s from ${(s.start + still.at).toFixed(1)}s; something should move at least every ${STILL_LIMIT}s` });
-  }
-  issues.push(...other);
-  // Every graphic settled, on one page: the quick look before an export.
-  let overview: string | null = null;
-  if (settledShots.length) overviewSheet(settledShots, (overview = join(out, "overview.jpg")), log);
-  writeJson(join(out, "cache.json"), cache);
-  writeJson(join(out, "report.json"), { at: new Date().toISOString(), issues, sheets, overview, items, other, partial: items.length < graphics.length, stamp } satisfies QcReport);
-  rmSync(prev, { recursive: true, force: true });
-  return { issues, sheets, overview };
 }
 
 // `studio qc --library`: the same checks on every card in the style, from its sample and with every
@@ -450,7 +515,7 @@ export async function runLibraryQc(opts: { canvas?: Canvas; card?: string }, log
       }
     }
   } finally {
-    srv.close();
+    await srv.close().catch(() => {});
   }
   writeJson(join(LIBRARY_QC, "report.json"), { at: new Date().toISOString(), issues, sheets });
   return { issues, sheets, overview: null };

@@ -10,14 +10,14 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ensureBrowser } from "@remotion/renderer";
 import { z } from "zod";
 import { droppedFrames, type PageLine, zoomSlivers } from "../engine/qc.ts";
 import { CUT_LEAD, findPhrase, type ScreenZoom } from "../engine/resolve.ts";
 import type { Word } from "../engine/schema.ts";
 import { timeline } from "./bin.ts";
-import { ffmpeg, type Log, readJson, ROOT, writeJson } from "./tools.ts";
+import { ffmpeg, freePort, type Log, readJson, writeJson } from "./tools.ts";
 
-const CHROME = join(ROOT, "node_modules/.remotion/chrome-headless-shell/mac-arm64/chrome-headless-shell-mac-arm64/chrome-headless-shell");
 // The panel's shape on a split (1080 x 864, above the caption band), at a size that makes the page's
 // type large.
 const VIEW = { width: 800, height: 640 };
@@ -58,7 +58,7 @@ const HELPERS = String.raw`(() => {
   document.documentElement.appendChild(style);
   let pos = [innerWidth * .62, innerHeight * .7];
   cur.style.transform = 'translate(' + pos[0] + 'px,' + pos[1] + 'px)';
-  const tween = (ms, f) => new Promise((done) => { const s = performance.now(); const step = (n) => { const t = Math.min(1, (n - s) / ms); f(ease(t)); t < 1 ? requestAnimationFrame(step) : done(true); }; requestAnimationFrame(step); });
+  const tween = (ms, f) => !(ms > 0) ? (f(1), Promise.resolve(true)) : new Promise((done) => { const s = performance.now(); const step = (n) => { const t = Math.min(1, (n - s) / ms); f(ease(t)); t < 1 ? requestAnimationFrame(step) : done(true); }; requestAnimationFrame(step); });
   const find = (text) => {
     const re = new RegExp(text.trim().split(/\s+/).map((w) => w.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&')).join('\\s+'));
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -107,30 +107,91 @@ const HELPERS = String.raw`(() => {
 
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, Math.max(0, ms)));
 
-class Browser {
-  private ws!: WebSocket;
+async function resolveChrome(): Promise<string> {
+  const status = await ensureBrowser({ logLevel: "error" });
+  if (status.type === "local-puppeteer-browser" || status.type === "user-defined-path") return status.path;
+  throw new Error(`could not resolve Chrome via @remotion/renderer (${status.type})`);
+}
+
+// Look up an action phrase strictly within the scene's word range [fromI, toI].
+export function findActionPhrase(words: Word[], phrase: string, fromI: number, toI: number): [number, number] {
+  const i = findPhrase(words, phrase, fromI);
+  if (i < 0 || i > toI) throw new Error(`record.json: "${phrase}" is not said in this scene`);
+  return [i, words[i].start];
+}
+
+export class Browser {
+  private ws?: WebSocket;
   private id = 0;
   private waiting = new Map<number, [(v: any) => void, (e: Error) => void]>();
-  private proc!: ChildProcess;
+  private proc?: ChildProcess;
+  private procExited = false;
+  private exited?: Promise<void>;
   onFrame?: (data: string, session: number) => void;
   constructor(private profile: string) {}
+  private rejectAll(err: Error) {
+    for (const [, [, no]] of this.waiting) no(err);
+    this.waiting.clear();
+  }
   async open() {
-    this.proc = spawn(CHROME, ["--remote-debugging-port=9377", `--user-data-dir=${this.profile}`, "--no-sandbox", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
+    const chrome = await resolveChrome();
+    const port = await freePort();
+    let procErr: Error | undefined;
+    let resolveExit!: () => void;
+    this.procExited = false;
+    this.exited = new Promise<void>((ok) => {
+      resolveExit = ok;
+    });
+    this.proc = spawn(chrome, [`--remote-debugging-port=${port}`, `--user-data-dir=${this.profile}`, "--no-sandbox", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
+    this.proc.on("error", (err) => {
+      procErr = err;
+      this.procExited = true;
+      resolveExit();
+      this.rejectAll(new Error(`browser process error: ${err.message}`));
+    });
+    this.proc.on("exit", (code, signal) => {
+      this.procExited = true;
+      resolveExit();
+      this.rejectAll(new Error(`browser exited (${signal ?? code ?? "unknown"})`));
+    });
     let page: { type: string; webSocketDebuggerUrl: string } | undefined;
-    for (let i = 0; i < 50 && !page; i++) {
+    for (let i = 0; i < 50 && !page && !this.procExited; i++) {
       await sleep(200);
-      page = await fetch("http://127.0.0.1:9377/json").then((r) => r.json()).then((l: any[]) => l.find((t) => t.type === "page")).catch(() => undefined);
+      if (this.procExited) break;
+      page = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(2000) })
+        .then((r) => (r.ok ? r.json() : undefined))
+        .then((l: any[] | undefined) => l?.find((t) => t.type === "page"))
+        .catch(() => undefined);
     }
+    if (procErr) throw new Error(`the browser failed to start: ${procErr.message}`);
     if (!page) throw new Error("the browser did not start");
-    this.ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((ok) => (this.ws.onopen = ok));
-    this.ws.onmessage = (e) => {
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    this.ws = ws;
+    await new Promise<void>((ok, no) => {
+      let settled = false;
+      const done = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (err) no(err);
+        else ok();
+      };
+      const timer = setTimeout(() => done(new Error("timed out connecting to browser WebSocket")), 10000);
+      ws.onopen = () => done();
+      ws.onerror = () => done(new Error("browser WebSocket failed to connect"));
+      ws.onclose = () => done(new Error("browser WebSocket closed before opening"));
+    });
+    ws.onclose = () => this.rejectAll(new Error("browser WebSocket closed"));
+    ws.onerror = () => this.rejectAll(new Error("browser WebSocket error"));
+    ws.onmessage = (e) => {
       const m = JSON.parse(e.data as string);
       if (m.id) {
-        const [ok, no] = this.waiting.get(m.id)!;
-        this.waiting.delete(m.id);
-        if (m.error) no(new Error(m.error.message));
-        else ok(m.result);
+        const pending = this.waiting.get(m.id);
+        if (pending) {
+          this.waiting.delete(m.id);
+          if (m.error) pending[1](new Error(m.error.message));
+          else pending[0](m.result);
+        }
       }
       if (m.method === "Page.screencastFrame") this.onFrame?.(m.params.data, m.params.sessionId);
     };
@@ -142,10 +203,18 @@ class Browser {
     await this.send("Browser.grantPermissions", { permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
   }
   send(method: string, params: object = {}) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error("browser WebSocket is not open"));
+    }
     return new Promise<any>((ok, no) => {
       const id = ++this.id;
       this.waiting.set(id, [ok, no]);
-      this.ws.send(JSON.stringify({ id, method, params }));
+      try {
+        this.ws!.send(JSON.stringify({ id, method, params }));
+      } catch (err) {
+        this.waiting.delete(id);
+        no(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
   async js<T = any>(expression: string): Promise<T> {
@@ -153,9 +222,34 @@ class Browser {
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
     return r.result.value;
   }
-  close() {
-    this.ws.close();
-    this.proc.kill();
+  async close() {
+    this.rejectAll(new Error("browser closed"));
+    if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = undefined;
+    }
+    if (this.proc) {
+      const proc = this.proc;
+      this.proc = undefined;
+      if (!this.procExited) {
+        try {
+          proc.kill("SIGTERM");
+        } catch {}
+        if (this.exited) await Promise.race([this.exited, sleep(2000)]);
+        if (!this.procExited) {
+          try {
+            proc.kill("SIGKILL");
+          } catch {}
+          if (this.exited) await Promise.race([this.exited, sleep(500)]);
+        }
+      }
+    }
   }
 }
 
@@ -174,13 +268,13 @@ export async function record(projects: string, slug: string, log?: Log) {
   const ticks: number[] = [];
   const warnings: string[] = [];
   const clips: { start: number; end: number; frames: { file: string; t: number }[] }[] = [];
-  await browser.open();
-  if (script.session) {
-    const saved = loadSession(script.session);
-    await browser.send("Network.setCookies", { cookies: cookieParams(saved) });
-    await browser.send("Page.addScriptToEvaluateOnNewDocument", { source: storageScript(saved) });
-  }
   try {
+    await browser.open();
+    if (script.session) {
+      const saved = loadSession(script.session);
+      await browser.send("Network.setCookies", { cookies: cookieParams(saved) });
+      await browser.send("Page.addScriptToEvaluateOnNewDocument", { source: storageScript(saved) });
+    }
     let n = 0;
     let cursor = 0; // Scenes run in order, so a phrase said earlier in the cut is not this scene's.
     for (const [k, scene] of script.scenes.entries()) {
@@ -220,7 +314,7 @@ export async function record(projects: string, slug: string, log?: Log) {
       write(first.data, 0);
       browser.onFrame = (data, sessionId) => {
         write(data, (Date.now() - clock) / 1000);
-        browser.send("Page.screencastFrameAck", { sessionId });
+        browser.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
       };
       await browser.send("Page.startScreencast", { format: "jpeg", quality: 92, everyNthFrame: 1 });
 
@@ -256,8 +350,8 @@ export async function record(projects: string, slug: string, log?: Log) {
         } else if (a.act === "clear") {
           await browser.js("__rec.clear()");
         } else if (a.act === "zoom") {
-          const p = await place(on);
-          const zoom = { t, x: a.x ?? p.x / VIEW.width, y: a.y ?? p.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 600 };
+          const p = a.x !== undefined && a.y !== undefined ? undefined : await place(on);
+          const zoom = { t, x: a.x ?? p!.x / VIEW.width, y: a.y ?? p!.y / VIEW.height, s: a.s ?? 1.5, ms: a.ms ?? 600 };
           zooms.push(zoom);
           const [cut] = zoomSlivers(await browser.js<PageLine[]>("__rec.lines()"), zoom, VIEW);
           if (cut) warnings.push(`the zoom at ${t.toFixed(2)}s leaves a sliver of "${cut.text}" at the edge of the frame; move its centre or zoom in less`);
@@ -273,7 +367,7 @@ export async function record(projects: string, slug: string, log?: Log) {
         }
       };
       const running: Promise<void>[] = [];
-      const acts = scene.do.map((a) => ({ a, t: when(a.at, fromI)[1] + a.after })).sort((x, y) => x.t - y.t);
+      const acts = scene.do.map((a) => ({ a, t: findActionPhrase(words as Word[], a.at, fromI, toI)[1] + a.after })).sort((x, y) => x.t - y.t);
       for (const { a, t } of acts) {
         await sleep(clock + (t - start) * 1000 - Date.now());
         const act = perform(a, t);
@@ -313,7 +407,7 @@ export async function record(projects: string, slug: string, log?: Log) {
     warnings.forEach((w) => log?.(`warn: ${w}`));
     return out;
   } finally {
-    browser.close();
+    await browser.close();
     rmSync(work, { recursive: true, force: true });
   }
 }

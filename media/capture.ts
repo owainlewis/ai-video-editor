@@ -3,7 +3,7 @@
 // their boxes (engine/page.ts), so a plan names the words to mark instead of typing rects.
 //   studio capture <slug> <url> [--name n] [--from "heading"] [--to "next heading"] [--dark] [--scale 3]
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { openBrowser } from "@remotion/renderer";
 import type { Box, Page } from "../engine/page.ts";
 import { cookieParams, loadSession, storageScript } from "./session.ts";
@@ -32,9 +32,19 @@ export type CaptureOptions = {
 type Cdp = { send(method: string, params?: object): Promise<{ value?: unknown } & Record<string, unknown>> };
 type Rect = { x: number; y: number; width: number; height: number };
 type MeasuredField = { label: string; kind: "text" | "check"; r: Rect; family: string; size: number; weight: number; color: string; bg: string; pad: number; secret: boolean };
-type Measured = { clip: Rect; scrollX: number; scrollY: number; innerHeight: number; title: string; icon: string; runs: { text: string; r: Rect; block: number }[]; blocks: { tag: string; r: Rect }[]; fields: MeasuredField[]; missing?: string };
-
-const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+type Measured = {
+  clip: Rect;
+  scrollX: number;
+  scrollY: number;
+  innerHeight: number;
+  title: string;
+  icon: string;
+  runs: { text: string; r: Rect; block: number }[];
+  blocks: { tag: string; r: Rect }[];
+  fields: MeasuredField[];
+  missing?: string;
+  empty?: boolean;
+};
 
 export const pageName = (url: string) => {
   const u = new URL(url);
@@ -42,10 +52,47 @@ export const pageName = (url: string) => {
   return last.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "page";
 };
 
+// Sanitize a caller-supplied capture name so it stays a single safe filename inside assets/pages/.
+export function sanitizePageName(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "." || trimmed === ".." || /[/\\\0]|\.\./.test(trimmed)) {
+    throw new Error(`invalid capture name "${raw}": must be a single file name with no path separators or ".."`);
+  }
+  const clean = trimmed.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  if (!clean) throw new Error(`invalid capture name "${raw}"`);
+  return clean;
+}
+
+function safeOutPath(dir: string, filename: string): string {
+  const base = resolve(dir);
+  const target = resolve(base, filename);
+  if (!target.startsWith(base + sep)) {
+    throw new Error(`capture output path escapes ${dir}: "${filename}"`);
+  }
+  return target;
+}
+
+// Clamp a focused field's ring rectangle to the captured clip and normalize its box into [0, 1].
+export function clampFocusBox(f: Rect, clip: { width: number; height: number }, ring = 5): { rect: Rect; box: Box } | null {
+  if (clip.width <= 0 || clip.height <= 0) return null;
+  const x0 = Math.max(0, Math.min(clip.width, f.x - ring));
+  const y0 = Math.max(0, Math.min(clip.height, f.y - ring));
+  const x1 = Math.max(x0, Math.min(clip.width, f.x + f.width + ring));
+  const y1 = Math.max(y0, Math.min(clip.height, f.y + f.height + ring));
+  const rect = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const r4 = (v: number) => Math.round(v * 10000) / 10000;
+  const x = Math.max(0, Math.min(1, r4(rect.x / clip.width)));
+  const y = Math.max(0, Math.min(1, r4(rect.y / clip.height)));
+  const w = Math.max(0, Math.min(r4(1 - x), r4(rect.width / clip.width)));
+  const h = Math.max(0, Math.min(r4(1 - y), r4(rect.height / clip.height)));
+  return { rect, box: [x, y, w, h] };
+}
+
 export async function capture(projects: string, slug: string, url: string, opts: CaptureOptions = {}, log?: Log): Promise<{ png: string; json: string; page: Page }> {
   const scale = opts.scale ?? 3;
   const width = opts.width ?? 900;
-  const name = opts.name ?? pageName(url);
+  const name = opts.name !== undefined ? sanitizePageName(opts.name) : pageName(url);
   const out = join(projects, slug, "assets/pages");
   mkdirSync(out, { recursive: true });
 
@@ -77,10 +124,20 @@ export async function capture(projects: string, slug: string, url: string, opts:
       await settle(page);
     }
 
+    const runMeasure = async (): Promise<Measured> => {
+      const res = (await page.evaluate(measure, opts.from ?? null, opts.to ?? null, opts.height ?? 1400)) as Measured;
+      if (res.missing) throw new Error(`no element on ${url} starts with "${res.missing}"`);
+      if (res.empty || res.clip.height <= 0 || res.clip.width <= 0) {
+        throw new Error(`capture section on ${url} has non-positive size (${Math.round(res.clip.width)}x${Math.round(res.clip.height)}); check --from and --to`);
+      }
+      return res;
+    };
+
     let m: Measured | undefined;
+    let grew = false;
     for (let pass = 0; pass < 3; pass++) {
-      m = (await page.evaluate(measure, opts.from ?? null, opts.to ?? null, opts.height ?? 1400)) as Measured;
-      if (m.missing) throw new Error(`no element on ${url} starts with "${m.missing}"`);
+      grew = false;
+      m = await runMeasure();
       // An inner panel only paints what fits in the window, so the window grows to hold the section.
       const bottom = m.clip.y + m.clip.height;
       if (bottom <= m.innerHeight) break;
@@ -88,14 +145,16 @@ export async function capture(projects: string, slug: string, url: string, opts:
       log?.(`the section runs past the window; growing it to ${viewport.height}px`);
       await page.setViewport({ ...viewport, deviceScaleFactor: scale });
       await settle(page);
+      grew = true;
     }
+    if (grew) m = await runMeasure();
     const { clip } = m!;
     if (clip.height * scale > 16000) log?.(`warning: the capture is ${Math.round(clip.height * scale)}px tall; give --to to end it sooner`);
 
     // The screenshot's clip is in page coordinates: the viewport's plus how far the window scrolled.
     const shot = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX, y: clip.y + m!.scrollY, width: clip.width, height: clip.height, scale: 1 }, captureBeyondViewport: false });
     const data = ((shot.value ?? shot) as { data: string }).data;
-    const png = join(out, `${name}.png`);
+    const png = safeOutPath(out, `${name}.png`);
     writeFileSync(png, Buffer.from(data, "base64"));
 
     const norm = (r: Rect): Box => [r.x / clip.width, r.y / clip.height, r.width / clip.width, r.height / clip.height].map((v) => Math.round(v * 10000) / 10000) as Box;
@@ -113,7 +172,7 @@ export async function capture(projects: string, slug: string, url: string, opts:
       await new Promise((ok) => setTimeout(ok, 120));
       const part = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX + f.r.x, y: clip.y + m!.scrollY + f.r.y, width: f.r.width, height: f.r.height, scale: 1 }, captureBeyondViewport: false });
       const file = `${name}-check-${i}.png`;
-      writeFileSync(join(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
+      writeFileSync(safeOutPath(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
       checked.set(i, `assets/pages/${file}`);
       await page.evaluate((n: number) => {
         const el = document.querySelector<HTMLInputElement>(`[data-studio-field="${n}"]`);
@@ -128,16 +187,19 @@ export async function capture(projects: string, slug: string, url: string, opts:
       if (f.kind !== "text") continue;
       const ok = await page.evaluate((n: number) => {
         const el = document.querySelector<HTMLElement>(`[data-studio-field="${n}"]`);
-        el?.focus();
+        el?.focus({ preventScroll: true });
         return !!el && document.activeElement === el;
       }, i);
       if (!ok) continue;
       await new Promise((done) => setTimeout(done, 150));
-      const r = { x: Math.max(0, f.r.x - RING), y: Math.max(0, f.r.y - RING), width: f.r.width + RING * 2, height: f.r.height + RING * 2 };
-      const part = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX + r.x, y: clip.y + m!.scrollY + r.y, width: r.width, height: r.height, scale: 1 }, captureBeyondViewport: false });
-      const file = `${name}-focus-${i}.png`;
-      writeFileSync(join(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
-      focused.set(i, { src: `assets/pages/${file}`, box: norm(r) });
+      const clamped = clampFocusBox(f.r, clip, RING);
+      if (clamped) {
+        const { rect: r, box } = clamped;
+        const part = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: clip.x + m!.scrollX + r.x, y: clip.y + m!.scrollY + r.y, width: r.width, height: r.height, scale: 1 }, captureBeyondViewport: false });
+        const file = `${name}-focus-${i}.png`;
+        writeFileSync(safeOutPath(out, file), Buffer.from(((part.value ?? part) as { data: string }).data, "base64"));
+        focused.set(i, { src: `assets/pages/${file}`, box });
+      }
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     }
     const r4 = (v: number) => Math.round(v * 10000) / 10000;
@@ -160,7 +222,7 @@ export async function capture(projects: string, slug: string, url: string, opts:
         ...(focused.has(i) && { focused: focused.get(i) }),
       })),
     };
-    const json = join(out, `${name}.json`);
+    const json = safeOutPath(out, `${name}.json`);
     writeJson(json, result);
     log?.(`${Math.round(clip.width * scale)}x${Math.round(clip.height * scale)} px, ${result.runs.length} words, ${result.fields?.length ?? 0} form fields`);
     return { png, json, page: result };
@@ -171,9 +233,11 @@ export async function capture(projects: string, slug: string, url: string, opts:
 
 // Wait for the page to finish: fonts loaded, images in, and nothing changing for most of a second.
 // Clicks the smallest visible button, link or tab whose text is `text`. Runs in the page.
-function clickText(text: string): boolean {
+export function clickText(text: string): boolean {
   const want = text.trim().toLowerCase();
-  const all = [...document.querySelectorAll<HTMLElement>("button, a, [role=tab], [role=button]")].filter((e) => e.offsetParent && (e.innerText ?? "").trim().toLowerCase() === want);
+  const all = [...document.querySelectorAll<HTMLElement>("button, a, [role=tab], [role=button]")].filter(
+    (e) => e.checkVisibility({ visibilityProperty: true, opacityProperty: true } as CheckVisibilityOptions) && (e.innerText ?? "").trim().toLowerCase() === want,
+  );
   const el = all.sort((a, b) => a.innerText.length - b.innerText.length)[0];
   el?.click();
   return !!el;
@@ -244,6 +308,9 @@ function measure(from: string | null, to: string | null, tall: number) {
   } else {
     const bottom = end ? end.getBoundingClientRect().top - 16 : Math.min(tall, document.documentElement.scrollHeight);
     clip = { x: 0, y: 0, width: innerWidth, height: bottom };
+  }
+  if (clip.height <= 0 || clip.width <= 0) {
+    return { clip, scrollX, scrollY, innerHeight, title: document.title.trim(), icon: "", runs: [], blocks: [], fields: [], empty: true };
   }
 
   // Every word: its letters (punctuation at either end left out), its box and its block.
@@ -323,7 +390,7 @@ async function saveIcon(href: string, out: string, name: string, log?: Log): Pro
     const type = res.headers.get("content-type") ?? "";
     const ext = /svg/.test(type) ? "svg" : /png/.test(type) ? "png" : /icon|ico/.test(type) ? "ico" : /jpe?g/.test(type) ? "jpg" : /webp/.test(type) ? "webp" : undefined;
     if (!ext) return undefined;
-    writeFileSync(join(out, `${name}-icon.${ext}`), Buffer.from(await res.arrayBuffer()));
+    writeFileSync(safeOutPath(out, `${name}-icon.${ext}`), Buffer.from(await res.arrayBuffer()));
     return `assets/pages/${name}-icon.${ext}`;
   } catch {
     log?.(`no favicon at ${href}`);
