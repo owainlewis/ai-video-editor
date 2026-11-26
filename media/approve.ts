@@ -1,12 +1,13 @@
 // Approving a finished reel: its final export and its cover are copied, together in one folder per
 // reel, to the approved folder (STUDIO_APPROVED; on Owain's Mac, My Drive/Content/Reels/Approved in Google Drive), where Owain picks them up for his content system (2026-11-13). The rules on
 // when a reel can be approved are in engine/approve.ts; this file reads the project and moves files.
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
 import { type ApprovalFacts, type ApprovalRecord, type ApprovalState, approvalState, day, exportReady, fileTitle, thisWeek, WEEKLY_TARGET } from "../engine/approve.ts";
 import type { Issue } from "../engine/resolve.ts";
 import { uploadCover } from "./coverkit.ts";
+import { isExportLocked } from "./lock.ts";
 import { NO_CTA } from "./nocta.ts";
 import { handCover } from "./project.ts";
 import { coverStill } from "./render.ts";
@@ -23,8 +24,13 @@ const home = expandHome;
 export const approvedFolder = () => home(envValue("STUDIO_APPROVED") ?? "~/Reels/Approved");
 // The approved folder as the editor and the CLI show it: Google Drive's synced folder as
 // "Google Drive/...", the home folder as "~".
-export const folderLabel = (folder = approvedFolder()) =>
-  folder.replace(/^.*\/Library\/CloudStorage\/GoogleDrive-[^/]+\/My Drive(?=\/|$)/, "Google Drive").replace(homedir(), "~");
+export const folderLabel = (folder = approvedFolder()) => {
+  const drive = folder.replace(/^.*\/Library\/CloudStorage\/GoogleDrive-[^/]+\/My Drive(?=\/|$)/, "Google Drive");
+  if (drive !== folder) return drive;
+  const h = homedir().replace(/\/+$/, "");
+  if (h && (folder === h || folder.startsWith(`${h}/`))) return `~${folder.slice(h.length)}`;
+  return folder;
+};
 // Where unapproved files go: the macOS Trash. STUDIO_TRASH points it elsewhere, for tests.
 export const trashFolder = () => home(envValue("STUDIO_TRASH") ?? "~/.Trash");
 
@@ -47,16 +53,7 @@ export const recordFile = (dir: string) => join(dir, "approved.json");
 export const loadRecord = (dir: string): ApprovalRecord | null => (existsSync(recordFile(dir)) ? readJson<ApprovalRecord>(recordFile(dir)) : null);
 
 // Whether an export holds build/export.lock now (cli.ts render).
-function exporting(dir: string): boolean {
-  const lock = join(dir, "build/export.lock");
-  if (!existsSync(lock)) return false;
-  try {
-    process.kill(parseInt(readFileSync(lock, "utf8"), 10), 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+const exporting = (dir: string): boolean => isExportLocked(dir);
 
 // The file times and the last export check, as the rules read them.
 export function approvalFacts(dir: string): ApprovalFacts {
@@ -185,8 +182,9 @@ export function unapprove(projects: string, slug: string, opts: Pick<Options, "t
 // Move a file or a folder to the Trash. A name already there gets the time added, as Finder does.
 export function moveToTrash(file: string, trash = trashFolder()): string {
   mkdirSync(trash, { recursive: true });
-  const ext = extname(file);
-  const name = basename(file, ext);
+  const isDir = lstatSync(file).isDirectory();
+  const ext = isDir ? "" : extname(file);
+  const name = isDir ? basename(file) : basename(file, ext);
   let dest = join(trash, basename(file));
   if (existsSync(dest)) {
     const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, ".");

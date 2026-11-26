@@ -20,4 +20,16 @@ describe("resolveCta", () => {
     expect(resolveCta("comment Bot below", words, 30).issues[0]).toMatchObject({ level: "error" });
     expect(resolveCta("If you want this", words, 30).issues[0].message).toMatch(/starts the reel/);
   });
+
+  it("does not push the no-CTA end past the CTA start when Whisper word timestamps overlap", () => {
+    const overlapping: Word[] = [
+      { text: "done", start: 4.4, end: 5.2 },
+      { text: "comment", start: 5.0, end: 5.4 },
+      { text: "now", start: 5.4, end: 5.7 },
+    ];
+    const { cta, issues } = resolveCta("comment now", overlapping, 30);
+    expect(issues).toEqual([]);
+    expect(cta!.end).toBeLessThanOrEqual(5.0);
+    expect(cta!.end).toBeCloseTo(5.0, 4);
+  });
 });

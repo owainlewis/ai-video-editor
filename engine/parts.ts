@@ -2,7 +2,7 @@
 // its own. A part starts on a spoken phrase, as a shot does, and runs to the start of the next, so
 // parts cover the video with no gaps and follow their words through any re-cut. Also the frame
 // arithmetic for rendering one stretch on its own. Pure, so it is easy to test.
-import { CUT_LEAD, findPhrase, type Issue, snap } from "./resolve.ts";
+import { CUT_LEAD, findAnchor, type Issue, snap } from "./resolve.ts";
 import type { EditPlan, ResolvedPart, Word } from "./schema.ts";
 
 export type Range = { start: number; end: number };
@@ -18,29 +18,27 @@ export const partSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+
 export function resolveParts(parts: EditPlan["parts"], words: Word[], duration: number, fps = 30, cut = false) {
   const issues: Issue[] = [];
   const seen = new Set<string>();
-  const found: { name: string; i: number }[] = [];
+  const used = new Set<number>();
+  const found: { name: string; anchor: string; i: number }[] = [];
   let cursor = 0;
   for (const p of parts) {
     const key = partSlug(p.name);
     if (!key) issues.push({ level: "error", message: `part "${p.name}" needs a name with letters or numbers` });
     else if (seen.has(key)) issues.push({ level: "error", message: `two parts are called "${p.name}"` });
     seen.add(key);
-    let i = findPhrase(words, p.at, cursor);
-    if (i < 0 && cut) {
-      const used = new Set(found.map((f) => f.i));
-      for (let from = 0; (i = findPhrase(words, p.at, from)) >= 0 && used.has(i); from = i + 1);
-    }
+    const i = findAnchor(words, p.at, cursor, used, cut);
     if (i < 0) {
       issues.push(cut ? { level: "warn", message: `"${p.at}" is no longer said in the cut, so part "${p.name}" is left out` } : { level: "error", message: `part "${p.name}": "${p.at}" is not said after the part before it` });
       continue;
     }
+    used.add(i);
     cursor = i + 1;
-    found.push({ name: p.name, i });
+    found.push({ name: p.name, anchor: p.at, i });
   }
   if (cut) found.sort((x, y) => x.i - y.i);
   // The same start as a shot on the same words, so a part and its chapter card land on one frame.
   const starts = found.map((f, k) => (k === 0 ? 0 : snap(Math.max(0, words[f.i].start - CUT_LEAD), fps)));
-  const out: ResolvedPart[] = found.map((f, k) => ({ name: f.name, anchor: parts.find((p) => p.name === f.name)!.at, start: starts[k], end: starts[k + 1] ?? duration }));
+  const out: ResolvedPart[] = found.map((f, k) => ({ name: f.name, anchor: f.anchor, start: starts[k], end: starts[k + 1] ?? duration }));
   for (const p of out) if (p.end <= p.start) issues.push({ level: "error", message: `part "${p.name}" has no length; it starts where the next one does` });
   return { parts: out, issues };
 }
@@ -60,9 +58,12 @@ export function pickPreview(parts: ResolvedPart[], duration: number, ask: { part
     return { range: { start: p.start, end: p.end }, file: fileOf(key) };
   }
   if (ask.from === undefined && ask.to === undefined) return undefined;
-  const start = ask.from === undefined ? 0 : Number(ask.from);
-  const end = Math.min(duration, ask.to === undefined ? duration : Number(ask.to));
-  if (Number.isNaN(start) || Number.isNaN(end) || start < 0 || end <= start) throw new Error(`--from and --to need seconds on the timeline, from before to, inside ${duration.toFixed(2)}s`);
+  const parse = (v: string | undefined, fallback: number) => (v === undefined ? fallback : v.trim() ? Number(v) : NaN);
+  const start = parse(ask.from, 0);
+  const rawEnd = parse(ask.to, duration);
+  const end = Math.min(duration, rawEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(rawEnd) || !Number.isFinite(end) || start < 0 || end <= start)
+    throw new Error(`--from and --to need seconds on the timeline, from before to, inside ${duration.toFixed(2)}s`);
   return { range: { start, end }, file: fileOf(`${start}-${end}`) };
 }
 

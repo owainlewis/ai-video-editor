@@ -20,7 +20,8 @@ export function resolveCta(at: string | undefined, words: Word[], fps: number): 
   for (let j = findPhrase(words, at); j >= 0; j = findPhrase(words, at, j + 1)) i = j;
   if (i < 0) return { issues: [{ level: "error", message: `"cta": "${at}" is not said` }] };
   if (i === 0) return { issues: [{ level: "error", message: `"cta": "${at}" starts the reel, so nothing is left without it` }] };
-  return { cta: { at, end: snap((words[i - 1].end + words[i].start) / 2, fps) }, issues: [] };
+  const gap = Math.max(0, words[i].start - words[i - 1].end);
+  return { cta: { at, end: snap(words[i].start - gap / 2, fps) }, issues: [] };
 }
 
 // The no-CTA version's length on the timeline.

@@ -37,6 +37,30 @@ describe("parts in the plan", () => {
     const { parts } = resolveParts([{ name: "a", at: "five" }, { name: "b", at: "two" }], words, 8, 30, true);
     expect(parts.map((p) => p.name)).toEqual(["b", "a"]);
   });
+  it("over a cut, never assigns two parts to the same word index after fallback rewinds cursor", () => {
+    const repeated = said("intro focus mid focus end");
+    const { parts, issues } = resolveParts(
+      [{ name: "first", at: "focus" }, { name: "intro", at: "intro" }, { name: "second", at: "focus" }],
+      repeated,
+      6,
+      30,
+      true,
+    );
+    expect(issues).toEqual([]);
+    expect(parts.map((p) => p.name)).toEqual(["intro", "first", "second"]);
+    expect(parts[1].start).toBeLessThan(parts[2].start);
+
+    const single = said("intro focus end");
+    const dup = resolveParts(
+      [{ name: "first", at: "focus" }, { name: "intro", at: "intro" }, { name: "second", at: "focus" }],
+      single,
+      4,
+      30,
+      true,
+    );
+    expect(dup.parts.map((p) => p.name)).toEqual(["intro", "first"]);
+    expect(dup.issues.some((i) => i.level === "warn" && /second/.test(i.message))).toBe(true);
+  });
 });
 
 describe("what a render asks for", () => {
@@ -60,6 +84,11 @@ describe("what a render asks for", () => {
     expect(() => pickPreview(parts, 30, { part: "outro" })).toThrow(/no part called "outro"/);
     expect(() => pickPreview(parts, 30, { from: "9", to: "5" })).toThrow();
     expect(() => pickPreview(parts, 30, { part: "intro", from: "5" })).toThrow();
+    expect(() => pickPreview(parts, 30, { from: "" })).toThrow();
+    expect(() => pickPreview(parts, 30, { from: "   ", to: "5" })).toThrow();
+    expect(() => pickPreview(parts, 30, { to: "" })).toThrow();
+    expect(() => pickPreview(parts, 30, { to: "Infinity" })).toThrow();
+    expect(() => pickPreview(parts, 30, { from: "-Infinity", to: "5" })).toThrow();
   });
   it("slugs names for files", () => expect(partSlug(" The  Demo! ")).toBe("the-demo"));
 });

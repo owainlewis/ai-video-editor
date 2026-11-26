@@ -642,6 +642,7 @@ export type ResolvedShot = {
   title?: { lines: [string, string]; at: number };
   chip?: { name: string; at: number };
   inside?: boolean;
+  note?: string;
 };
 export type ResolvedHook = { text: string; until: number };
 export type ResolvedPart = { name: string; anchor: string; start: number; end: number };

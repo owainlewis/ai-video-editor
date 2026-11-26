@@ -1,8 +1,8 @@
 // Small wrappers around ffmpeg, ffprobe and JSON files, shared by ingest, project resolution and render.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -28,7 +28,17 @@ export type Log = (line: string) => void;
 export const run = (bin: string, argv: string[], opts: { cwd?: string; env?: Record<string, string>; log?: Log } = {}) => {
   opts.log?.(`$ ${bin} ${argv.join(" ")}`.slice(0, 200));
   const r = spawnSync(bin, argv, { cwd: opts.cwd ?? ROOT, encoding: "utf8", env: { ...process.env, ...opts.env }, maxBuffer: 1 << 28 });
-  if (r.status !== 0) throw new Error(`${bin} failed:\n${(r.stderr || r.stdout || "").slice(-2000)}`);
+  if (r.error || r.status !== 0) {
+    const parts: string[] = [];
+    if (r.stderr) {
+      parts.push(r.stderr.slice(-2000));
+    } else {
+      if (r.error?.message) parts.push(r.error.message);
+      if (r.signal) parts.push(`signal ${r.signal}`);
+      if (r.stdout) parts.push(r.stdout.slice(-2000));
+    }
+    throw new Error(`${bin} failed:\n${parts.join("\n") || `exit ${r.status}`}`);
+  }
   return r;
 };
 
@@ -45,7 +55,8 @@ export const ffmpegProgress = (argv: string[], duration: number, onProgress: (f:
       if (m && duration > 0) onProgress(Math.min(1, +m[1] / 1e6 / duration));
     });
     p.stderr.on("data", (c: Buffer) => (err = (err + c.toString()).slice(-2000)));
-    p.on("close", (code) => (code === 0 ? ok() : fail(new Error(`ffmpeg failed:\n${err}`))));
+    p.on("error", fail);
+    p.on("close", (code, signal) => (code === 0 ? ok() : fail(new Error(`ffmpeg failed:\n${err || (signal ? `signal ${signal}` : `exit ${code}`)}`))));
   });
 
 // Whether this Mac's hardware H.264 encoder works; it is several times faster than libx264.
@@ -58,8 +69,10 @@ export const probeDuration = (file: string) =>
 
 // Integrated loudness of a file's sound, in LUFS (NaN when it has none).
 export function loudness(file: string): number {
-  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr;
-  return parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(log.slice(log.lastIndexOf("Summary")))?.[1] ?? "NaN");
+  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", "ebur128", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr ?? "";
+  const summaryAt = log.lastIndexOf("Summary");
+  if (summaryAt < 0) return NaN;
+  return parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(log.slice(summaryAt))?.[1] ?? "NaN");
 }
 
 // How long a file's first sound stream runs, in seconds (NaN when it has none).
@@ -98,16 +111,34 @@ export const expandHome = (p: string) => resolve(ROOT, p === "~" ? homedir() : p
 
 export const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8"));
 
+let tempSeq = 0;
+
+// A sibling temporary file path keeping the target's extension (so ffmpeg/Remotion pick the right
+// container) and staying in the same directory for atomic renameSync.
+export const tempSibling = (file: string) => {
+  const ext = extname(file);
+  const base = basename(file, ext);
+  return join(dirname(file), `.${base}.${process.pid}.${++tempSeq}.tmp${ext}`);
+};
+
 export const writeJson = (file: string, data: unknown) => {
+  const text = JSON.stringify(data, null, 2) + "\n";
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+  const tmp = `${file}.${process.pid}.${++tempSeq}.tmp`;
+  try {
+    writeFileSync(tmp, text);
+    renameSync(tmp, file);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
 };
 
 // Where speech ends in a voice track: the start of the silence that runs to the end of the file,
 // counting back-to-back silences as one. The full duration when it ends mid-word.
 export function speechEnd(file: string): number {
   const total = probeDuration(file);
-  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-af", "silencedetect=noise=-38dB:d=0.3", "-f", "null", "-"], { encoding: "utf8" }).stderr;
+  const log = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-af", "silencedetect=noise=-38dB:d=0.3", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr ?? "";
   const starts = [...log.matchAll(/silence_start: ([\d.]+)/g)].map((m) => +m[1]);
   const ends = [...log.matchAll(/silence_end: ([\d.]+)/g)].map((m) => +m[1]);
   let k = starts.length - 1;
@@ -158,9 +189,7 @@ export function mediaProbe(dir: string) {
     },
     save: () => {
       if (!changed) return;
-      const next = `${store}.${process.pid}`;
-      writeJson(next, saved);
-      renameSync(next, store);
+      writeJson(store, saved);
       changed = false;
     },
   };
@@ -169,14 +198,24 @@ export function mediaProbe(dir: string) {
 // Pixel size of a PNG or JPEG, so the renderer can frame captures exactly.
 export const imageSize = (file: string): [number, number] | undefined => {
   const b = readFileSync(file);
-  if (b.readUInt32BE(0) === 0x89504e47) return [b.readUInt32BE(16), b.readUInt32BE(20)];
-  if (b[0] === 0xff && b[1] === 0xd8) {
+  if (b.length >= 24 && b.readUInt32BE(0) === 0x89504e47) return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xd8) {
     let i = 2;
-    while (i < b.length) {
-      const marker = b[i + 1];
-      const len = b.readUInt16BE(i + 2);
-      if (marker >= 0xc0 && marker <= 0xc3) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
-      i += 2 + len;
+    while (i + 1 < b.length) {
+      if (b[i] !== 0xff) break;
+      while (i < b.length && b[i] === 0xff) i++;
+      if (i >= b.length) break;
+      const marker = b[i++];
+      if (marker === 0xd9 || marker === 0xda) break;
+      if (marker === 0x00 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
+      if (i + 2 > b.length) break;
+      const len = b.readUInt16BE(i);
+      if (len < 2 || i + len > b.length) break;
+      if (marker >= 0xc0 && marker <= 0xc3) {
+        if (len < 7 || i + 7 > b.length) break;
+        return [b.readUInt16BE(i + 5), b.readUInt16BE(i + 3)];
+      }
+      i += len;
     }
   }
   return undefined;

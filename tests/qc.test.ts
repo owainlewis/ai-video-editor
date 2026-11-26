@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { contrast, droppedFrames, longestStill, type Measure, qcCover, qcHook, qcLayout, qcPlan, saidTwice, visualText, zoomSlivers } from "../engine/qc.ts";
-import { zoomAt, zoomClashes } from "../engine/resolve.ts";
-import type { Resolved, ResolvedShot } from "../engine/schema.ts";
+import { resolveShots, zoomAt, zoomClashes } from "../engine/resolve.ts";
+import { Edit, type Resolved, type ResolvedShot } from "../engine/schema.ts";
 
 const size: [number, number] = [1920, 1080];
 const text = (t: string, box: [number, number, number, number], extra: Partial<Measure["texts"][0]> = {}) => ({ text: t, box, size: 40, opacity: 1, color: "rgb(247, 243, 236)", block: Math.random(), ...extra });
@@ -83,6 +83,19 @@ describe("qcLayout", () => {
     expect(contrast([247, 243, 236], [27, 27, 26])).toBeGreaterThan(10);
     expect(contrast([40, 40, 40], [27, 27, 26])).toBeLessThan(1.5);
   });
+  it("handles rgba() alpha and 3-digit hex backgrounds in contrast checks", () => {
+    // Low-alpha white on dark background is nearly invisible, not 19:1.
+    const faintRgba = qcLayout(m([text("01", [860, 500, 60, 40], { color: "rgba(255, 255, 255, 0.15)", opacity: 1 })]), size, "s", "#0B0B0B");
+    expect(msgs(faintRgba)).toMatch(/nearly invisible/);
+    // 3-digit hex backgrounds (#fff, #000) parse cleanly without NaN.
+    const whiteOnWhite = qcLayout(m([text("01", [860, 500, 60, 40], { color: "rgb(255, 255, 255)", opacity: 1 })]), size, "s", "#fff");
+    expect(msgs(whiteOnWhite)).toMatch(/nearly invisible/);
+    const blackOnWhite = qcLayout(m([text("01", [860, 500, 60, 40], { color: "rgb(0, 0, 0)", opacity: 1 })]), size, "s", "#fff");
+    expect(blackOnWhite).toEqual([]);
+    // Transparent t.under composites over bg instead of acting like opaque black.
+    const transparentUnder = qcLayout(m([text("01", [860, 500, 60, 40], { color: "rgb(255, 255, 255)", under: "rgba(0, 0, 0, 0)", opacity: 1 })]), size, "s", "#fff");
+    expect(msgs(transparentUnder)).toMatch(/nearly invisible/);
+  });
 });
 
 describe("qcPlan", () => {
@@ -107,6 +120,109 @@ describe("qcPlan", () => {
   });
   it("reads every piece of text a visual shows", () => {
     expect(visualText({ kind: "compare", left: { label: "A", text: "B" }, right: { label: "C", text: "*D*", at: "x" } })).toEqual(["A", "B", "C", "D"]);
+  });
+  it("inspects numeric values in chart, odometer, ring, meter, and waffle visuals", () => {
+    const visuals = [
+      { kind: "chart", type: "bar", points: [{ label: "Old", value: 42 }, { label: "New", value: 88 }], source: "Bench" },
+      { kind: "odometer", steps: [{ value: 120 }, { value: 340 }], label: "Users" },
+      { kind: "ring", value: 65, label: "Adoption", source: "Survey" },
+      { kind: "meter", value: 73, max: 100, label: "Score", source: "Report" },
+      { kind: "waffle", value: 37, label: "Teams", source: "Poll" },
+    ];
+    for (const [v, expected] of [
+      [visuals[0], "42"],
+      [visuals[1], "340"],
+      [visuals[2], "65"],
+      [visuals[3], "73"],
+      [visuals[4], "37"],
+    ] as const) {
+      expect(visualText(v)).toContain(expected);
+      const r = plan([shot({ start: 10, end: 13, layout: "media", visual: v as never }), shot({ start: 13, end: 20 })]);
+      expect(msgs(qcPlan(r, words, []))).toMatch(new RegExp(`shows ${expected}`));
+    }
+    // meter.max should not cause a false unsaid-number warning when value is said.
+    const meterSaid = plan([shot({ start: 10, end: 13, layout: "media", visual: { kind: "meter", value: 90, max: 100, label: "Score", source: "Report" } as never }), shot({ start: 13, end: 20 })]);
+    expect(msgs(qcPlan(meterSaid, words, []))).not.toMatch(/shows 100/);
+  });
+  it("skips non-visible metadata keys so they do not inflate word counts or trigger false number warnings", () => {
+    const meta = visualText({
+      kind: "image",
+      frame: "browser",
+      url: "https://example.com/v2/3000",
+      icon: "logo:github",
+      size: [1920, 1080],
+      title: "Docs",
+    });
+    expect(meta).toEqual(["Docs"]);
+    const appMeta = visualText({
+      kind: "claudeapp",
+      app: "claude-code",
+      mode: "chat",
+      theme: "dark",
+      view: "chat",
+      backdrop: "dots",
+      cwd: "~/project-2",
+      model: "Opus 5.5",
+      effort: "High",
+      id: "node-7",
+      name: "demo-9",
+      quad: "tl",
+      steps: [{ type: "text", text: "Hello" }],
+    });
+    expect(appMeta).toEqual(["Hello"]);
+  });
+  it("uses lastKept consistently across qcPlan checks for keep chains", () => {
+    // Reading time spans the whole keep chain (3s total for 6 words is enough, even though shot 0 is 1s).
+    const reading = plan([
+      shot({ start: 0, end: 1, layout: "media", visual: { kind: "title", text: "one two three four five six" } as never }),
+      shot({ start: 1, end: 4, layout: "media", keep: true, visual: { kind: "title", text: "one two three four five six" } as never }),
+    ]);
+    expect(msgs(qcPlan(reading, [], []))).not.toMatch(/to read/);
+
+    // Lingering checks end of keep chain (lingers 6s after last reveal at 1s).
+    const lingering = plan([
+      shot({ start: 0, end: 2, layout: "media", visual: { kind: "list", items: [{ text: "A" }, { text: "B" }], times: [0.2, 1.0] } as never }),
+      shot({ start: 2, end: 7, layout: "media", keep: true, visual: { kind: "list", items: [{ text: "A" }, { text: "B" }], times: [0.2, 1.0] } as never }),
+    ]);
+    expect(msgs(qcPlan(lingering, [], []))).toMatch(/lingers 6\.0s/);
+
+    // Back-to-back full-frame media cards detected right after a keep chain.
+    const backToBack = plan([
+      shot({ start: 0, end: 2, layout: "media", visual: { kind: "title", text: "One" } as never }),
+      shot({ start: 2, end: 4, layout: "media", keep: true, visual: { kind: "title", text: "One" } as never }),
+      shot({ start: 4, end: 6, layout: "media", visual: { kind: "title", text: "Two" } as never }),
+    ]);
+    expect(msgs(qcPlan(backToBack, [], []))).toMatch(/another full-frame card/);
+
+    // Overlay running over a cut during its keep shot is flagged.
+    const overCut = plan([
+      shot({ start: 0, end: 2, layout: "over", visual: { kind: "title", text: "Hi" } as never }),
+      shot({ start: 2, end: 5, layout: "over", keep: true, visual: { kind: "title", text: "Hi" } as never }),
+    ]);
+    expect(msgs(qcPlan(overCut, [], [], [3.5]))).toMatch(/cut in the footage at 3\.50s/);
+  });
+  it("aligns shot notes via ResolvedShot.note even when cut mode reorders or prepends shots", () => {
+    const cutWords = ["alpha", "beta", "gamma", "delta"].map((t, i) => ({ text: t, start: i * 1, end: i * 1 + 0.6 }));
+    // Plan order: gamma (has note for 75) then beta (no note, shows 75).
+    // In the cut, "alpha" opens (synthetic "start" shot prepended), then "beta", then "gamma".
+    const edit = Edit.parse({
+      title: "t",
+      face: { x: 0.5, y: 0.3, h: 0.2 },
+      shots: [
+        { at: "gamma", layout: "media", note: "from report: 75%", visual: { kind: "title", text: "75 percent" } },
+        { at: "beta", layout: "media", visual: { kind: "title", text: "75 percent" } },
+      ],
+    });
+    const { shots } = resolveShots(edit, cutWords, 5, 30, true);
+    expect(shots.map((s) => [s.anchor, s.note])).toEqual([
+      ["", undefined],
+      ["beta", undefined],
+      ["gamma", "from report: 75%"],
+    ]);
+    const issues = qcPlan({ shots } as unknown as Resolved, cutWords, []);
+    // "beta" has no note -> warns on 75; "gamma" has its own note -> does NOT warn on 75.
+    expect(issues.some((i) => i.message.includes('"beta"') && i.message.includes("shows 75"))).toBe(true);
+    expect(issues.some((i) => i.message.includes('"gamma"') && i.message.includes("shows 75"))).toBe(false);
   });
 });
 
@@ -223,6 +339,7 @@ describe("qcHook", () => {
   it("warns over two lines and errors when it cannot be read", () => {
     expect(msgs(qcHook(m([hook([140, 130, 800, 250])], { words: lines(3) }), reel, "h", ink))).toMatch(/wraps to 3 lines/);
     expect(qcHook(m([hook([140, 130, 800, 160])]), reel, "h", [235, 235, 230])[0].level).toBe("error");
+    expect(qcHook(m([hook([140, 130, 800, 160], { color: "rgba(255, 255, 255, 0.2)" })]), reel, "h", ink)[0].level).toBe("error");
   });
 });
 
