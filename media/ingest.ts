@@ -27,9 +27,14 @@ const alive = (pid: number) => {
 // The project's job status, with a job whose process is gone shown as interrupted.
 export function liveStatus(dir: string): Status | null {
   if (!existsSync(join(dir, "status.json"))) return null;
-  const status = readJson<Status>(join(dir, "status.json"));
-  if (!status.done && status.pid && !alive(status.pid)) return { ...status, stage: "Interrupted", done: true, error: `${status.stage} stopped before it finished. Start it again.` };
-  return status;
+  try {
+    const status = readJson<Status>(join(dir, "status.json"));
+    if (!status || typeof status !== "object") return { stage: "Error", done: true, error: "status.json is unreadable", at: new Date().toISOString() };
+    if (!status.done && status.pid && !alive(status.pid)) return { ...status, stage: "Interrupted", done: true, error: `${status.stage} stopped before it finished. Start it again.` };
+    return status;
+  } catch {
+    return { stage: "Error", done: true, error: "status.json is unreadable", at: new Date().toISOString() };
+  }
 }
 
 export const slugFor = (file: string) =>

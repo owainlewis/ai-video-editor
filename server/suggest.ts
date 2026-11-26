@@ -19,7 +19,14 @@ export type Suggestion = {
 };
 
 const file = (dir: string) => join(dir, "suggestions.json");
-export const loadSuggestions = (dir: string): Suggestion[] => (existsSync(file(dir)) ? readJson<{ items: Suggestion[] }>(file(dir)).items ?? [] : []);
+export const loadSuggestions = (dir: string): Suggestion[] => {
+  if (!existsSync(file(dir))) return [];
+  try {
+    return readJson<{ items?: Suggestion[] }>(file(dir)).items ?? [];
+  } catch {
+    return [];
+  }
+};
 const save = (dir: string, items: Suggestion[]) => writeJson(file(dir), { items });
 
 // Problems with a draft before Owain sees it: a visual the renderer cannot draw, or bad times.

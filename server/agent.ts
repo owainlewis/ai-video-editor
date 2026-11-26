@@ -15,7 +15,15 @@ export type Selection = { start: number; end: number } | undefined;
 type ChatState = { session?: string; messages: ChatMessage[] };
 
 const chatFile = (project: string) => join(project, "chat.json");
-export const loadChat = (project: string): ChatState => (existsSync(chatFile(project)) ? readJson(chatFile(project)) : { messages: [] });
+export const loadChat = (project: string): ChatState => {
+  if (!existsSync(chatFile(project))) return { messages: [] };
+  try {
+    const data = readJson<Partial<ChatState>>(chatFile(project));
+    return { ...(data?.session ? { session: data.session } : {}), messages: Array.isArray(data?.messages) ? data.messages : [] };
+  } catch {
+    return { messages: [] };
+  }
+};
 const saveChat = (project: string, state: ChatState) => writeJson(chatFile(project), state);
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
@@ -47,7 +55,7 @@ export const isRunning = (slug: string) => running.has(slug);
 export const runningNotes = () => [...running.keys()];
 
 // `prompt` replaces the usual note context, for requests the editor makes itself (suggestions).
-export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: () => void = () => {}, prompt?: string) {
+export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: (ok?: boolean) => void = () => {}, prompt?: string) {
   if (running.has(slug)) throw new Error("Claude is still working on the last note");
   const project = join(projects, slug);
   const state = loadChat(project);
@@ -92,18 +100,49 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
   });
   let err = "";
   p.stderr.on("data", (c: Buffer) => (err = (err + c.toString()).slice(-2000)));
-  p.on("close", (code) => {
+  let finished = false;
+  const finish = (ok: boolean, failureMessage?: string) => {
+    if (finished) return;
+    finished = true;
     running.delete(slug);
-    if (code !== 0 && !state.messages.length) add({ role: "claude", text: `Claude Code failed: ${err.trim() || `exit ${code}`}`, at: now() });
-    else if (code !== 0) add({ role: "claude", text: `Stopped (${err.trim().split("\n").pop() || `exit ${code}`}).`, at: now() });
-    saveChat(project, state);
-    onDone();
+    if (!ok) {
+      try {
+        add({ role: "claude", text: failureMessage || "Claude Code failed.", at: now() });
+      } catch {}
+    }
+    try {
+      saveChat(project, state);
+    } catch {}
+    try {
+      onDone(ok);
+    } catch {
+      // Never block returning the UI to idle if post-run hooks fail.
+    }
     emit({ role: "status", text: "idle" });
+  };
+  p.on("error", (e) => {
+    finish(false, `Claude Code failed: ${e.message}`);
+  });
+  p.on("close", (code) => {
+    const ok = code === 0;
+    const msg = !state.messages.length
+      ? `Claude Code failed: ${err.trim() || `exit ${code}`}`
+      : `Stopped (${err.trim().split("\n").pop() || `exit ${code}`}).`;
+    finish(ok, msg);
   });
 }
 
 export function stop(slug: string) {
   running.get(slug)?.kill("SIGINT");
+}
+
+export function stopAll() {
+  for (const p of running.values()) {
+    try {
+      p.kill("SIGINT");
+    } catch {}
+  }
+  running.clear();
 }
 
 // A short line per tool call, so the panel shows what Claude is doing without the noise.

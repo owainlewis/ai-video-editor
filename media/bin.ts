@@ -18,7 +18,14 @@ export const clipPath = (slug: string, id: string) => (id === MAIN ? slug : `${s
 const readClip = (dir: string, id: string): Clip | null => {
   const at = clipDir(dir, id);
   const file = join(at, id === MAIN ? "project.json" : "clip.json");
-  const meta = existsSync(file) ? readJson<{ name?: string; original?: string; duration?: number }>(file) : null;
+  let meta: { name?: string; original?: string; duration?: number } | null = null;
+  if (existsSync(file)) {
+    try {
+      meta = readJson<{ name?: string; original?: string; duration?: number }>(file);
+    } catch {
+      meta = null;
+    }
+  }
   const status = id === MAIN ? null : liveStatus(at);
   if (!meta && !status) return null;
   const original = meta?.original ?? "";
@@ -44,7 +51,13 @@ export function loadCut(dir: string): { cut: CutPlan; explicit: boolean; error?:
   const whole = () => wholeCut(readJson<{ duration: number }>(join(dir, "project.json")).duration);
   const file = join(dir, "cut.json");
   if (!existsSync(file)) return { cut: whole(), explicit: false };
-  const parsed = Cut.safeParse(readJson(file));
+  let raw: unknown;
+  try {
+    raw = readJson(file);
+  } catch (e) {
+    return { cut: whole(), explicit: false, error: `cut.json: ${String((e as Error).message ?? e)}` };
+  }
+  const parsed = Cut.safeParse(raw);
   if (!parsed.success) return { cut: whole(), explicit: false, error: `cut.json ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}` };
   return { cut: parsed.data, explicit: true };
 }

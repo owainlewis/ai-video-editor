@@ -16,7 +16,14 @@ export type Variants = { start: number; note?: string; items: Variant[] };
 export type ResolvedVariant = Variant & { resolved?: ResolvedShot; problems: string[] };
 
 const file = (dir: string) => join(dir, "variants.json");
-export const loadVariants = (dir: string): Variants | null => (existsSync(file(dir)) ? readJson<Variants>(file(dir)) : null);
+export const loadVariants = (dir: string): Variants | null => {
+  if (!existsSync(file(dir))) return null;
+  try {
+    return readJson<Variants>(file(dir));
+  } catch {
+    return null;
+  }
+};
 export const saveVariants = (dir: string, v: Variants) => writeJson(file(dir), v);
 export const clearVariants = (dir: string) => rmSync(file(dir), { force: true });
 
@@ -24,7 +31,13 @@ export const clearVariants = (dir: string) => rmSync(file(dir), { force: true })
 export function resolveVariants(dir: string): { start: number; note?: string; items: ResolvedVariant[] } | null {
   const v = loadVariants(dir);
   if (!v) return null;
-  const parsed = Edit.safeParse(readJson(join(dir, "edit.json")));
+  let rawEdit: unknown;
+  try {
+    rawEdit = readJson(join(dir, "edit.json"));
+  } catch {
+    return { ...v, items: v.items.map((it) => ({ ...it, problems: ["the plan has errors; fix them first"] })) };
+  }
+  const parsed = Edit.safeParse(rawEdit);
   if (!parsed.success) return { ...v, items: v.items.map((it) => ({ ...it, problems: ["the plan has errors; fix them first"] })) };
   const plan = parsed.data;
   const line = timeline(dir);
