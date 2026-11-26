@@ -154,7 +154,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       issues.push({ level: "error", message: `"${s.at}" keeps the previous visual, so it needs the same layout as a previous shot with a visual and no visual of its own` });
     // A kept shot carries the tone of the scene it continues.
     const tone = s.keep && prev ? prev.tone : s.tone;
-    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, src: s, header, ...(s.id ? { id: s.id } : {}), ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...clean(s) });
+    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, src: s, header, ...(s.id ? { id: s.id } : {}), ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.note ? { note: s.note } : {}), ...clean(s) });
   }
   for (let k = 0; k < shots.length - 1; k++) shots[k].end = shots[k + 1].start;
   shotIds(shots).forEach((id, k) => (shots[k].id = id));

@@ -245,7 +245,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   const found = existsSync(cutsFile) ? readJson<{ cuts: number[] }>(cutsFile).cuts : [];
   // Cuts found in the main clip, moved through the cut, plus every join in the cut itself.
   const cuts = [...mapTimes(cut, MAIN, found), ...joins(cut)].sort((a, b) => a - b);
-  issues.push(...qcPlan(resolved, words, plan.shots.map((s) => s.note), cuts));
+  issues.push(...qcPlan(resolved, words, [], cuts));
   if (youtube) issues.push(...saidTwice(words, plan.remove));
   // A card put in from the library starts with its sample words, which this video never says.
   plan.shots.forEach((s) => {
