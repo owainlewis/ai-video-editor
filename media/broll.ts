@@ -26,7 +26,16 @@ export const clipsFolder = () => join(brollFolder(), ".clips");
 const indexFile = () => join(brollFolder(), "index.json");
 const VIDEO = new Set([".mp4", ".mov", ".m4v", ".mkv", ".webm"]);
 
-const ff = (args: string[]) => spawnSync("ffmpeg", ["-hide_banner", "-nostdin", ...args], { encoding: "utf8", maxBuffer: 1 << 26 });
+const ff = (args: string[]): string => {
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-nostdin", ...args], { encoding: "utf8", maxBuffer: 1 << 26 });
+  if (r.error) throw new Error(`ffmpeg failed: ${r.error.message}`);
+  const stderr = r.stderr ?? "";
+  if (r.status !== 0) {
+    const detail = (stderr || r.stdout || "").trim().slice(-2000);
+    throw new Error(`ffmpeg exited with ${r.status ?? r.signal ?? "unknown"}${detail ? `:\n${detail}` : ""}`);
+  }
+  return stderr;
+};
 const probe = (file: string) => {
   const j = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate:format=duration", "-of", "json", file], { encoding: "utf8" }));
   const [num, den] = String(j.streams[0].r_frame_rate).split("/").map(Number);
@@ -35,8 +44,8 @@ const probe = (file: string) => {
 
 // The picture area inside any letterbox or pillarbox. Small dark edges inside the picture are kept.
 const detectCrop = (file: string, w: number, h: number) => {
-  const r = ff(["-i", file, "-t", "6", "-vf", "cropdetect=limit=24:round=2:reset=0", "-an", "-f", "null", "-"]);
-  const all = [...r.stderr.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)].map((m) => m.slice(1).map(Number));
+  const stderr = ff(["-i", file, "-t", "6", "-vf", "cropdetect=limit=24:round=2:reset=0", "-an", "-f", "null", "-"]);
+  const all = [...stderr.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)].map((m) => m.slice(1).map(Number));
   if (!all.length) return { cw: w, ch: h, cx: 0, cy: 0 };
   const [cw, ch, cx, cy] = all[all.length - 1];
   return cw > w * 0.85 ? { cw: w, ch, cx: 0, cy } : { cw, ch, cx, cy };
@@ -44,16 +53,16 @@ const detectCrop = (file: string, w: number, h: number) => {
 
 // Shot boundaries from frame differences; cuts closer than `minGap` are dropped.
 const detectCuts = (file: string, duration: number, minGap = 0.8) => {
-  const r = ff(["-i", file, "-vf", "scale=320:-2,select='gt(scene,0.03)',showinfo", "-an", "-f", "null", "-"]);
-  const times = [...r.stderr.matchAll(/pts_time:([\d.]+)/g)].map((m) => parseFloat(m[1]));
+  const stderr = ff(["-i", file, "-vf", "scale=320:-2,select='gt(scene,0.03)',showinfo", "-an", "-f", "null", "-"]);
+  const times = [...stderr.matchAll(/pts_time:([\d.]+)/g)].map((m) => parseFloat(m[1]));
   const cuts: number[] = [];
   for (const t of times) if (t - (cuts[cuts.length - 1] ?? 0) >= minGap && duration - t >= minGap) cuts.push(t);
   return [0, ...cuts, duration];
 };
 
 const brightnessOf = (file: string) => {
-  const r = ff(["-i", file, "-vf", "fps=2,scale=160:-2,signalstats,metadata=print:key=lavfi.signalstats.YAVG", "-an", "-f", "null", "-"]);
-  const v = [...r.stderr.matchAll(/YAVG=([\d.]+)/g)].map((m) => parseFloat(m[1]));
+  const stderr = ff(["-i", file, "-vf", "fps=2,scale=160:-2,signalstats,metadata=print:key=lavfi.signalstats.YAVG", "-an", "-f", "null", "-"]);
+  const v = [...stderr.matchAll(/YAVG=([\d.]+)/g)].map((m) => parseFloat(m[1]));
   return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
 };
 
@@ -67,7 +76,7 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
   const known = new Set(index.map((c) => c.source));
   for (const f of readdirSync(BROLL).filter((f) => VIDEO.has(extname(f).toLowerCase()))) {
     const file = join(BROLL, f);
-    const stamp = `${f}@${statSync(file).mtimeMs | 0}`;
+    const stamp = `${f}@${Math.trunc(statSync(file).mtimeMs)}`;
     if (known.has(stamp)) continue;
     // A changed or re-copied file replaces its old shots.
     index = index.filter((c) => !c.source.startsWith(`${f}@`));
@@ -78,8 +87,11 @@ export function indexLibrary(log: Log = () => {}): Clip[] {
     const base = basename(f, extname(f)).toLowerCase().replace(/[^a-z0-9]+/g, "-");
     for (let i = 0; i < bounds.length - 1; i++) {
       // Stay a few frames inside each boundary to skip dissolves and flash frames.
-      const start = +(bounds[i] + (i ? 0.12 : 0)).toFixed(3);
-      const end = +(bounds[i + 1] - 0.12).toFixed(3);
+      const trimmedStart = +(bounds[i] + (i ? 0.12 : 0)).toFixed(3);
+      const trimmedEnd = +(bounds[i + 1] - 0.12).toFixed(3);
+      const start = trimmedEnd > trimmedStart ? trimmedStart : +bounds[i].toFixed(3);
+      const end = trimmedEnd > trimmedStart ? trimmedEnd : +bounds[i + 1].toFixed(3);
+      if (!(end > start)) continue;
       const id = `${base}-${i + 1}`;
       const out = join(CLIPS, `${id}.mp4`);
       // Full resolution up to 4K and the source's own frame rate: a 9:16 crop of 4K landscape is
@@ -120,9 +132,12 @@ export function searchLibrary(query: string): Clip[] {
   return loadLibrary().map((c) => ({ c, s: score(c) })).filter((r) => !words.length || r.s > 0).sort((a, b) => b.s - a.s).map((r) => r.c);
 }
 
+const CLIP_ID = /^[\w-]+$/;
+
 // Copy a library shot into a project so the renderer can serve it. A shot the library no longer
 // holds (it moved, or the setting changed) keeps playing from the project's own copy.
 export function useClip(projectDir: string, id: string): string | null {
+  if (!CLIP_ID.test(id)) return null;
   const src = join(clipsFolder(), `${id}.mp4`);
   const rel = `assets/broll/${id}.mp4`;
   const dest = join(projectDir, rel);
