@@ -8,7 +8,18 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { trayBitmap } from "./icon.ts";
-import { type Listed, notices, routeFor, summary } from "./logic.ts";
+import {
+  isExternalUrl,
+  isOwnUrl,
+  type Listed,
+  readyLoadTarget,
+  refreshState,
+  RetryScheduler,
+  routeFor,
+  safeHash,
+  shouldClearFailed,
+  summary,
+} from "./logic.ts";
 import { busy, shellEnv, StudioServer } from "./server.ts";
 
 // The repo to run: STUDIO_REPO, else the checkout this file is in.
@@ -18,10 +29,61 @@ const server = new StudioServer(REPO);
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+let windowReady = false;
+let wantShow = false;
 let projects: Listed[] = [];
 let notes: string[] = [];
 // Where to go once the editor is up, when a link or notification asked before it was.
 let wanted: string | null = null;
+// A studio:// link received before app.isReady() on cold launch.
+let pendingLink: string | null = null;
+// The last main-frame HTTP navigation status, to catch HTTP 500 error pages on did-finish-load.
+let lastNav: { url: string; status: number } | null = null;
+// Timer polling #root after did-finish-load to detect a blank/unmounted editor boot.
+let bootTimer: NodeJS.Timeout | null = null;
+// Prevent restarting a managed server in a loop if the editor itself stays broken.
+let bootRestarted = false;
+
+const own = (url: string) => isOwnUrl(url, server.url);
+const openExternal = (url: string) => {
+  if (isExternalUrl(url)) void shell.openExternal(url).catch(() => {});
+};
+
+function loadUrl(url: string) {
+  if (!win || win.isDestroyed()) return;
+  void win.loadURL(url).catch(() => {
+    // ERR_ABORTED (-3) when superseded by a newer navigation, or load errors handled via did-fail-load.
+  });
+}
+
+function clearBootCheck() {
+  if (bootTimer) {
+    clearTimeout(bootTimer);
+    bootTimer = null;
+  }
+}
+
+const recovery = new RetryScheduler({
+  maxRetries: 5,
+  baseDelayMs: 1000,
+  maxDelayMs: 15_000,
+  onRetry: (url) => {
+    if (!win || win.isDestroyed() || server.state !== "ready" || !server.url) return;
+    loadUrl(own(url) ? url : `${server.url}/`);
+  },
+  onExhausted: (url) => {
+    if (!win || win.isDestroyed()) return;
+    if (server.mode === "own" && !bootRestarted) {
+      bootRestarted = true;
+      recovery.resetForRestart(url || `${server.url ?? ""}/`);
+      clearBootCheck();
+      loadUrl(page("Starting Studio…", "", false));
+      void server.restart("The editor failed to load; restarting");
+      return;
+    }
+    loadUrl(page("Studio could not load", server.log.slice(-40).join("\n"), true));
+  },
+});
 
 app.setName("Studio");
 
@@ -39,7 +101,11 @@ app.on("second-instance", (_e, argv) => {
 const packaged = !process.defaultApp;
 if (packaged) app.setAsDefaultProtocolClient("studio");
 else app.setAsDefaultProtocolClient("studio", process.execPath, [resolve(process.argv[1] ?? ".")]);
-app.on("open-url", (e, link) => (e.preventDefault(), openLink(link)));
+app.on("open-url", (e, link) => {
+  e.preventDefault();
+  if (app.isReady()) openLink(link);
+  else pendingLink = link;
+});
 
 // ---- Settings, kept beside Electron's own files in ~/Library/Application Support/Studio ----
 
@@ -75,6 +141,8 @@ function bounds(): Partial<Electron.Rectangle> {
 }
 
 function createWindow() {
+  windowReady = false;
+  lastNav = null;
   win = new BrowserWindow({
     ...bounds(),
     minWidth: 960,
@@ -88,7 +156,13 @@ function createWindow() {
     trafficLightPosition: { x: 18, y: 19 },
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
-  win.once("ready-to-show", () => win?.show());
+  win.once("ready-to-show", () => {
+    windowReady = true;
+    if (wantShow && win && !win.isDestroyed()) {
+      win.show();
+      win.focus();
+    }
+  });
   const keep = () => win && !win.isMinimized() && !win.isFullScreen() && saveSettings({ bounds: win.getBounds() });
   win.on("resized", keep);
   win.on("moved", keep);
@@ -96,84 +170,190 @@ function createWindow() {
   win.on("close", (e) => {
     if (quitting) return;
     e.preventDefault();
+    wantShow = false;
     win?.hide();
     app.dock?.hide();
   });
-  win.on("closed", () => (win = null));
+  win.on("closed", () => {
+    recovery.dispose();
+    clearBootCheck();
+    lastNav = null;
+    windowReady = false;
+    win = null;
+  });
   // The editor's own pages stay in the window; anything else opens in the browser.
-  const own = (url: string) => !!server.url && url.startsWith(server.url);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (own(url)) return { action: "allow" };
-    void shell.openExternal(url);
+    openExternal(url);
     return { action: "deny" };
   });
+  win.webContents.on("did-start-loading", () => clearBootCheck());
+  win.webContents.on("did-navigate", (_e, url, httpResponseCode) => {
+    lastNav = { url, status: httpResponseCode };
+  });
   // A blank window never stays blank (Owain, 2026-11-24: "Just a white screen", with the server
-  // up). Electron shows plain white when a page fails to load (the server was restarting at that
-  // moment) or when the page's process dies, and does not try again by itself.
+  // up). Electron shows plain white when a page fails to load (the server died or was restarting)
+  // or when the page's process dies, and does not try again by itself.
   win.webContents.on("did-fail-load", (_e, code, _desc, url, main) => {
     if (!main || code === -3) return; // -3: aborted by a newer navigation
-    failed = url;
-    setTimeout(retryFailed, 1000);
+    clearBootCheck();
+    void handleLoadFailure(url);
   });
   win.webContents.on("render-process-gone", (_e, d) => {
     if (d.reason === "clean-exit") return;
-    failed = win?.webContents.getURL() || `${server.url ?? ""}/`;
-    setTimeout(retryFailed, 1000);
+    clearBootCheck();
+    const url = win?.webContents.getURL() || `${server.url ?? ""}/`;
+    void handleLoadFailure(url);
   });
-  win.webContents.on("did-finish-load", () => (failed = null));
+  win.webContents.on("did-finish-load", () => {
+    if (!win || win.isDestroyed()) return;
+    const current = win.webContents.getURL();
+    const status = lastNav && lastNav.url === current ? lastNav.status : null;
+    if (!shouldClearFailed(current, server.url, status)) {
+      // Never cancel retries when Chromium loads chrome-error://, data:, or an HTTP error page.
+      if (own(current) && status !== null && status >= 400) void handleLoadFailure(current);
+      return;
+    }
+    scheduleBootCheck();
+  });
   win.webContents.on("will-navigate", (e, url) => {
-    if (url === "studio://retry") return e.preventDefault(), void server.retry();
+    if (url === "studio://retry") return e.preventDefault(), void retryApp();
     if (own(url) || url.startsWith("data:")) return;
     e.preventDefault();
-    void shell.openExternal(url);
+    openExternal(url);
   });
   render();
 }
 
+// Verify #root actually mounted after did-finish-load so a silent white page triggers recovery.
+function scheduleBootCheck() {
+  clearBootCheck();
+  const delays = [300, 700, 1500, 2500];
+  let step = 0;
+  const check = async () => {
+    bootTimer = null;
+    if (!win || win.isDestroyed() || server.state !== "ready") return;
+    const current = win.webContents.getURL();
+    if (!own(current)) return;
+    let mounted = false;
+    try {
+      mounted = Boolean(
+        await win.webContents.executeJavaScript(
+          "(() => { const r = document.getElementById('root'); return Boolean(r && r.childElementCount > 0); })()",
+        ),
+      );
+    } catch {
+      mounted = false;
+    }
+    if (mounted) {
+      recovery.clear();
+      bootRestarted = false;
+      return;
+    }
+    if (step < delays.length) {
+      bootTimer = setTimeout(() => void check(), delays[step++]);
+    } else {
+      void handleLoadFailure(current);
+    }
+  };
+  bootTimer = setTimeout(() => void check(), delays[step++]);
+}
+
+async function handleLoadFailure(url: string) {
+  recovery.markFailed(url);
+  if (server.state === "ready") {
+    const alive = await server.ensureAlive();
+    if (!alive) return; // ensureAlive transitioned out of ready and started a restart
+    recovery.schedule(url);
+  }
+}
+
+async function checkWindowOnShow() {
+  if (server.state !== "ready") return;
+  const alive = await server.ensureAlive();
+  if (!alive || !win || win.isDestroyed() || server.state !== "ready" || !server.url) return;
+  if (win.webContents.isLoading()) return;
+  const current = win.webContents.getURL();
+  if (!own(current)) {
+    render();
+  } else if (lastNav && lastNav.url === current && lastNav.status >= 400) {
+    void handleLoadFailure(current);
+  } else {
+    scheduleBootCheck();
+  }
+}
+
+async function retryApp() {
+  recovery.clear();
+  bootRestarted = false;
+  if (server.state === "failed" || server.state === "stopped") {
+    await server.retry();
+    return;
+  }
+  if (server.state === "ready") {
+    const alive = await server.ensureAlive();
+    if (!alive) return;
+    if (server.mode === "own") {
+      await server.restart("Retrying from error page");
+    } else if (server.url) {
+      loadUrl(`${server.url}/${wanted ?? ""}`);
+      wanted = null;
+    }
+  }
+}
+
 function show(route?: string) {
   if (route) wanted = route;
+  wantShow = true;
   if (!win) createWindow();
   app.dock?.show();
-  win!.show();
-  win!.focus();
+  if (windowReady && win && !win.isDestroyed()) {
+    win.show();
+    win.focus();
+  }
+  if (server.state === "ready") void checkWindowOnShow();
   go();
 }
 
 // Open the wanted page once the server is up.
 function go() {
-  if (!win || server.state !== "ready" || !server.url || !wanted) return;
+  if (!win || win.isDestroyed() || server.state !== "ready" || !server.url || !wanted) return;
   const target = `${server.url}/${wanted}`;
   wanted = null;
-  if (win.webContents.getURL() !== target) void win.loadURL(target);
-}
-
-// The page that failed to load, or whose process died, to load again once the server answers.
-let failed: string | null = null;
-function retryFailed() {
-  if (!win || !failed || server.state !== "ready" || !server.url) return;
-  const url = failed.startsWith(server.url) ? failed : `${server.url}/`;
-  failed = null;
-  void win.loadURL(url);
+  if (win.webContents.getURL() !== target) loadUrl(target);
 }
 
 // Show whatever the server's state calls for: the editor, a starting page or the failure.
 function render() {
-  if (!win) return;
+  if (!win || win.isDestroyed()) return;
+  const current = win.webContents.getURL();
   if (server.state === "ready" && server.url) {
-    if (failed) return retryFailed();
-    const current = win.webContents.getURL();
-    // Same server: the editor reloads by itself once its event stream reconnects after a restart
-    // (app/main.tsx). A new address
-    // (the port was taken) or a status page: load the editor, keeping the page it was on.
-    if (!current.startsWith(server.url)) {
-      const hash = current.startsWith("http") ? new URL(current).hash : "";
-      void win.loadURL(`${server.url}/${wanted ?? hash ?? ""}`);
-      wanted = null;
-    } else go();
+    // Same server without a load failure: the editor reloads by itself once its event stream
+    // reconnects after a restart (app/main.tsx). Otherwise (after a load failure, a new address,
+    // or a status page), load the editor keeping the page it was on.
+    const { target, clearWanted } = readyLoadTarget({
+      serverUrl: server.url,
+      currentUrl: current,
+      wanted,
+      failedUrl: recovery.retryNow(),
+    });
+    if (clearWanted) wanted = null;
+    if (target) loadUrl(target);
     return;
   }
-  if (server.state === "failed") return void win.loadURL(page("Studio could not start", server.log.slice(-40).join("\n"), true));
-  if (server.state === "starting" && !win.webContents.getURL().startsWith("http")) void win.loadURL(page("Starting Studio…", "", false));
+  if (server.state === "failed") {
+    clearBootCheck();
+    loadUrl(page("Studio could not start", server.log.slice(-40).join("\n"), true));
+    return;
+  }
+  if ((server.state === "starting" || (server.state === "stopped" && !quitting)) && (!server.url || !own(current))) {
+    clearBootCheck();
+    if (!wanted && current.startsWith("http")) {
+      const hash = safeHash(current);
+      if (hash) wanted = hash;
+    }
+    if (!current.startsWith("data:")) loadUrl(page("Starting Studio…", "", false));
+  }
 }
 
 // A plain status page in the editor's colours, for before the server answers or when it fails.
@@ -190,7 +370,7 @@ function page(title: string, log: string, retry: boolean) {
 }
 
 function openLink(link: string) {
-  if (link === "studio://retry") return void server.retry();
+  if (link === "studio://retry") return void retryApp();
   show(routeFor(link) ?? "#/");
 }
 
@@ -247,8 +427,9 @@ async function openApproved() {
   if (!server.url) return;
   try {
     const r = await fetch(`${server.url}/api/approved-folder`);
-    const { path } = (await r.json()) as { path: string };
-    if (existsSync(path)) await shell.openPath(path);
+    if (!r.ok) return;
+    const { path } = (await r.json()) as { path?: string };
+    if (path && existsSync(path)) await shell.openPath(path);
   } catch {}
 }
 
@@ -265,7 +446,8 @@ async function listen() {
   await refresh(false);
   try {
     const r = await fetch(`${base}/api/events`, { signal: ctrl.signal });
-    const reader = r.body!.pipeThrough(new TextDecoderStream()).getReader();
+    if (!r.ok || !r.body) throw new Error("event stream unavailable");
+    const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
     for (;;) {
       const { value, done } = await reader.read();
@@ -280,7 +462,7 @@ async function listen() {
     }
   } catch {}
   // The stream ended: the server restarted or stopped. Listen again once it is back.
-  if (listening === ctrl && !ctrl.signal.aborted) setTimeout(() => void listen(), 2000);
+  if (listening === ctrl && !ctrl.signal.aborted && server.state === "ready") setTimeout(() => void listen(), 2000);
 }
 
 let refreshing: NodeJS.Timeout | null = null;
@@ -299,12 +481,12 @@ function onEvent(ev: { type: string; slug?: string; message?: { role: string; te
 
 async function refresh(tell: boolean) {
   if (!server.url) return;
-  try {
-    const list = (await (await fetch(`${server.url}/api/projects`)).json()) as Listed[];
-    if (tell) for (const n of notices(projects, list)) notify(n);
-    projects = list;
-    notes = await busy(server.url);
-  } catch {}
+  const result = await refreshState(server.url, projects, tell, { busy });
+  if (result.ok) {
+    for (const n of result.alerts) notify(n);
+    projects = result.projects;
+    if (result.notes) notes = result.notes;
+  }
   refreshMenu();
 }
 
@@ -350,6 +532,7 @@ server.on("state", () => {
   render();
   refreshMenu();
   if (server.state === "ready") void listen();
+  else listening?.abort();
 });
 
 app.whenReady().then(async () => {
@@ -359,8 +542,15 @@ app.whenReady().then(async () => {
   applyLogin();
   // Opened at login: stay in the menu bar until asked.
   const hidden = app.getLoginItemSettings().wasOpenedAtLogin || process.argv.includes("--hidden");
-  if (hidden) app.dock?.hide();
-  else show();
+  if (pendingLink) {
+    const link = pendingLink;
+    pendingLink = null;
+    openLink(link);
+  } else if (hidden) {
+    app.dock?.hide();
+  } else {
+    show();
+  }
   await server.start(await shellEnv());
   setInterval(() => void refresh(false), 30_000);
 });
@@ -375,6 +565,8 @@ app.on("before-quit", (e) => {
   if (quitting) return;
   quitting = true;
   e.preventDefault();
+  clearBootCheck();
+  recovery.dispose();
   listening?.abort();
   void server.stop().finally(() => app.exit(0));
 });

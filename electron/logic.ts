@@ -17,6 +17,223 @@ export function needsRestart(file: string): boolean {
 // The server prints this line once it is listening (cli.ts serve).
 export const serverUrl = (line: string) => line.match(/Studio is running at (http:\/\/\S+)/)?.[1] ?? null;
 
+// Whether `url` belongs to the local Studio server's origin.
+export function isOwnUrl(url: string, base: string | null): boolean {
+  if (!base) return false;
+  try {
+    const target = new URL(url);
+    const origin = new URL(base);
+    return (target.protocol === "http:" || target.protocol === "https:") && target.origin === origin.origin;
+  } catch {
+    return false;
+  }
+}
+
+// Only http: and https: URLs may be handed to shell.openExternal.
+export function isExternalUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function safeHash(url: string): string {
+  try {
+    return new URL(url).hash;
+  } catch {
+    return "";
+  }
+}
+
+// Decide what URL (if any) the window should load when the server becomes ready.
+export function readyLoadTarget(opts: {
+  serverUrl: string;
+  currentUrl: string;
+  wanted: string | null;
+  failedUrl: string | null;
+}): { target: string | null; clearWanted: boolean } {
+  const { serverUrl: base, currentUrl, wanted, failedUrl } = opts;
+  if (failedUrl) {
+    const hash = failedUrl.startsWith("http") ? safeHash(failedUrl) : "";
+    const target = wanted ? `${base}/${wanted}` : isOwnUrl(failedUrl, base) ? failedUrl : `${base}/${hash}`;
+    return { target, clearWanted: true };
+  }
+  if (!isOwnUrl(currentUrl, base)) {
+    const hash = currentUrl.startsWith("http") ? safeHash(currentUrl) : "";
+    return { target: `${base}/${wanted ?? hash}`, clearWanted: true };
+  }
+  if (wanted) {
+    const target = `${base}/${wanted}`;
+    return { target: currentUrl !== target ? target : null, clearWanted: true };
+  }
+  return { target: null, clearWanted: false };
+}
+
+// Only clear a pending load-failure retry when Chromium actually loaded a healthy page from our server.
+export function shouldClearFailed(url: string, base: string | null, httpStatus: number | null): boolean {
+  if (!isOwnUrl(url, base)) return false;
+  return httpStatus === null || httpStatus < 400;
+}
+
+// Accumulates stream chunks across newline boundaries before emitting complete non-empty lines.
+export function createLineReader(onLine: (line: string) => void) {
+  let buf = "";
+  return {
+    push(chunk: Buffer | string) {
+      buf += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      const lines = buf.split(/\r?\n/);
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.trim()) onLine(line);
+      }
+    },
+    flush() {
+      if (buf.trim()) onLine(buf);
+      buf = "";
+    },
+  };
+}
+
+// Verify a parsed JSON payload matches Studio's GET /api/projects array shape.
+export function isProjectList(data: unknown): data is Listed[] {
+  return (
+    Array.isArray(data) &&
+    data.every(
+      (p) =>
+        typeof p === "object" &&
+        p !== null &&
+        typeof (p as Record<string, unknown>).slug === "string" &&
+        typeof (p as Record<string, unknown>).title === "string",
+    )
+  );
+}
+
+// Fetch /api/projects and validate HTTP status + Studio JSON array shape.
+export async function fetchProjects(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = 3000,
+): Promise<Listed[] | null> {
+  try {
+    const r = await fetchImpl(`${url}/api/projects`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) return null;
+    const data: unknown = await r.json();
+    return isProjectList(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Refresh cached projects safely: never overwrite `prev` on HTTP errors or malformed responses.
+export async function refreshState(
+  url: string,
+  prev: Listed[],
+  tell: boolean,
+  deps: { fetch?: typeof fetch; busy?: (url: string) => Promise<string[]> } = {},
+): Promise<{ projects: Listed[]; notes: string[] | null; alerts: Notice[]; ok: boolean }> {
+  const list = await fetchProjects(url, deps.fetch);
+  if (!list) return { projects: prev, notes: null, alerts: [], ok: false };
+  const alerts = tell ? notices(prev, list) : [];
+  const notes = deps.busy ? await deps.busy(url) : null;
+  return { projects: list, notes, alerts, ok: true };
+}
+
+export type RetryOptions = {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  onRetry: (url: string, attempt: number) => void;
+  onExhausted: (url: string) => void;
+};
+
+// Coordinates failed-page reload retries with exponential backoff, deduplication, a cap, and cleanup.
+export class RetryScheduler {
+  private failed: string | null = null;
+  private count = 0;
+  private timer: NodeJS.Timeout | null = null;
+  private readonly maxRetries: number;
+  private readonly baseDelayMs: number;
+  private readonly maxDelayMs: number;
+  private readonly onRetry: (url: string, attempt: number) => void;
+  private readonly onExhausted: (url: string) => void;
+
+  constructor(opts: RetryOptions) {
+    this.maxRetries = opts.maxRetries ?? 5;
+    this.baseDelayMs = opts.baseDelayMs ?? 1000;
+    this.maxDelayMs = opts.maxDelayMs ?? 15_000;
+    this.onRetry = opts.onRetry;
+    this.onExhausted = opts.onExhausted;
+  }
+
+  get failedUrl(): string | null {
+    return this.failed;
+  }
+
+  get attempts(): number {
+    return this.count;
+  }
+
+  get isPending(): boolean {
+    return this.timer !== null;
+  }
+
+  markFailed(url: string) {
+    this.failed = url;
+  }
+
+  schedule(url: string): boolean {
+    this.failed = url;
+    if (this.timer !== null) return false;
+    if (this.count >= this.maxRetries) {
+      this.onExhausted(url);
+      return false;
+    }
+    const delay = Math.min(this.baseDelayMs * 2 ** this.count, this.maxDelayMs);
+    this.count++;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!this.failed) return;
+      this.onRetry(this.failed, this.count);
+    }, delay);
+    return true;
+  }
+
+  retryNow(): string | null {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.count = 0;
+    return this.failed;
+  }
+
+  // Reset attempt counter and timer before restarting the server while preserving failedUrl
+  // so render() reloads the editor once the server returns to "ready".
+  resetForRestart(url: string) {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.count = 0;
+    this.failed = url;
+  }
+
+  clear() {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.failed = null;
+    this.count = 0;
+  }
+
+  dispose() {
+    this.clear();
+  }
+}
+
 // studio://p/<slug>, studio://p/<slug>/review and studio://gallery, as the editor's hash routes.
 export function routeFor(link: string): string | null {
   const m = link.match(/^studio:\/\/\/?(.*)$/);

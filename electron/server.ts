@@ -6,9 +6,20 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { type FSWatcher, watch } from "node:fs";
-import { needsRestart, serverUrl } from "./logic.ts";
+import { createLineReader, fetchProjects, needsRestart, serverUrl } from "./logic.ts";
 
 export type State = "starting" | "ready" | "restarting" | "failed" | "stopped";
+
+export type StudioServerOptions = {
+  port?: number;
+  spawn?: typeof spawn;
+  watch?: typeof watch;
+  fetch?: typeof fetch;
+  crashBackoffMs?: number;
+  idlePollMs?: number;
+  killGraceMs?: number;
+  watchDebounceMs?: number;
+};
 
 const PORT = 4747;
 const LOG_LINES = 200;
@@ -21,140 +32,352 @@ export class StudioServer extends EventEmitter {
   mode: "own" | "attached" | null = null;
   log: string[] = [];
   private child: ChildProcess | null = null;
+  private killing: ChildProcess | null = null;
   private env: NodeJS.ProcessEnv = process.env;
   private watcher: FSWatcher | null = null;
   private pending: NodeJS.Timeout | null = null;
+  private crashTimer: NodeJS.Timeout | null = null;
+  private idleAbort: AbortController | null = null;
   private crashes: number[] = [];
+  private stopping = false;
+  private activeTransition: Promise<void> | null = null;
+  private restartPhase: "idle" | "waiting" | "spawning" = "idle";
+  private pendingRestartReason: string | null = null;
+  private checking: Promise<boolean> | null = null;
+  private readyGen = 0;
+  private readonly port: number;
+  private readonly spawnImpl: typeof spawn;
+  private readonly watchImpl: typeof watch;
+  private readonly fetchImpl: typeof fetch;
+  private readonly crashBackoffMs: number;
+  private readonly idlePollMs: number;
+  private readonly killGraceMs: number;
+  private readonly watchDebounceMs: number;
 
-  constructor(repo: string) {
+  constructor(repo: string, opts: StudioServerOptions = {}) {
     super();
     this.repo = repo;
+    this.port = opts.port ?? PORT;
+    this.spawnImpl = opts.spawn ?? spawn;
+    this.watchImpl = opts.watch ?? watch;
+    this.fetchImpl = opts.fetch ?? fetch;
+    this.crashBackoffMs = opts.crashBackoffMs ?? 1000;
+    this.idlePollMs = opts.idlePollMs ?? 2000;
+    this.killGraceMs = opts.killGraceMs ?? 5000;
+    this.watchDebounceMs = opts.watchDebounceMs ?? 600;
   }
 
   async start(env: NodeJS.ProcessEnv = process.env) {
     this.env = env;
-    const running = `http://localhost:${PORT}`;
-    if (await answers(running)) {
+    this.stopping = false;
+    this.clearCrashTimer();
+    const running = `http://localhost:${this.port}`;
+    if (await answers(running, this.fetchImpl)) {
+      if (this.stopping) return;
       this.mode = "attached";
       this.note(`Using the Studio server already running at ${running}.`);
       return this.set("ready", running);
     }
+    if (this.stopping) return;
     this.mode = "own";
     this.watchCode();
-    await this.spawn();
+    await this.runTransition(() => this.spawn());
+  }
+
+  // Verify the server actually responds with valid Studio JSON on /api/projects.
+  // If dead (whether managed or previously attached), transition out of "ready",
+  // take ownership if needed, and restart cleanly.
+  async ensureAlive(): Promise<boolean> {
+    if (this.checking) return this.checking;
+    const run = async (): Promise<boolean> => {
+      for (;;) {
+        if (this.isStopped() || this.state !== "ready" || !this.url) return false;
+        const gen = this.readyGen;
+        const ok = await answers(this.url, this.fetchImpl);
+        if (ok) return true;
+        if (this.isStopped() || this.state !== "ready") return false;
+        if (this.readyGen !== gen) continue;
+        if (this.activeTransition) {
+          if (this.restartPhase === "waiting") {
+            this.note("The Studio server stopped answering; restarting.");
+            this.set("starting", null);
+            this.idleAbort?.abort();
+            await this.activeTransition;
+            return false;
+          }
+          await this.activeTransition;
+          continue;
+        }
+        const wasAttached = this.mode === "attached";
+        await this.runTransition(async () => {
+          if (this.isStopped() || this.state !== "ready") return;
+          this.clearCrashTimer();
+          this.note(wasAttached ? "The external Studio server stopped answering; starting Studio's server." : "The Studio server stopped answering; restarting.");
+          this.mode = "own";
+          this.watchCode();
+          this.set("starting", null);
+          await this.kill();
+          if (this.isStopped()) return;
+          await this.spawn();
+        });
+        return false;
+      }
+    };
+    this.checking = run().finally(() => {
+      this.checking = null;
+    });
+    return this.checking;
   }
 
   // Restart now (from the menu), or after a code change once nothing would be cut off.
+  // Concurrent calls are serialized/coalesced so two servers are never spawned at once.
   async restart(reason = "Restarting") {
-    if (this.mode !== "own") return;
-    await this.idle();
-    this.note(`${reason}.`);
-    this.set("restarting", this.url);
-    await this.kill();
-    await this.spawn();
+    if (this.isStopped() || this.mode !== "own") return;
+    if (this.activeTransition) {
+      if (this.restartPhase !== "waiting") this.pendingRestartReason = reason;
+      return this.activeTransition;
+    }
+    return this.runTransition(async () => {
+      let nextReason: string | null = reason;
+      while (nextReason !== null) {
+        const currentReason = nextReason;
+        nextReason = null;
+        this.pendingRestartReason = null;
+        if (this.isStopped() || this.mode !== "own") break;
+        this.clearCrashTimer();
+        this.restartPhase = "waiting";
+        await this.idle();
+        this.restartPhase = "spawning";
+        this.clearCrashTimer();
+        if (this.isStopped()) break;
+        this.note(`${currentReason}.`);
+        this.set("restarting", this.url);
+        await this.kill();
+        if (this.isStopped()) break;
+        await this.spawn();
+        if (this.isStopped()) break;
+        nextReason = this.pendingRestartReason;
+      }
+    });
   }
 
   async stop() {
+    this.stopping = true;
+    this.pendingRestartReason = null;
     this.watcher?.close();
     this.watcher = null;
-    if (this.pending) clearTimeout(this.pending);
+    if (this.pending) {
+      clearTimeout(this.pending);
+      this.pending = null;
+    }
+    this.clearCrashTimer();
+    this.idleAbort?.abort();
     // Stopped first, so the server's exit is not taken for a crash and started again.
     this.set("stopped", null);
-    if (this.mode === "own") await this.kill();
+    if (this.child) await this.kill();
   }
 
-  // Start (or start again) after a failure.
+  // Start (or start again) after a failure or stop.
   async retry() {
+    while (this.activeTransition) await this.activeTransition;
+    this.stopping = false;
     this.crashes = [];
-    if (this.mode === "attached") return this.start(this.env);
-    await this.kill();
-    await this.spawn();
+    this.clearCrashTimer();
+    if (this.mode === "attached" || this.mode === null) return this.start(this.env);
+    this.set("starting", null);
+    this.watchCode();
+    await this.runTransition(async () => {
+      if (this.isStopped()) return;
+      await this.kill();
+      if (this.isStopped()) return;
+      await this.spawn();
+    });
+  }
+
+  private isStopped(): boolean {
+    return this.stopping || this.state === "stopped";
+  }
+
+  private runTransition(fn: () => Promise<void>): Promise<void> {
+    let p: Promise<void> | null = null;
+    p = (async () => {
+      try {
+        await fn();
+      } finally {
+        this.restartPhase = "idle";
+        if (this.activeTransition === p) this.activeTransition = null;
+      }
+      const queued = this.pendingRestartReason;
+      if (queued !== null && !this.isStopped() && this.mode === "own") {
+        this.pendingRestartReason = null;
+        await this.restart(queued);
+      }
+    })();
+    this.activeTransition = p;
+    return p;
+  }
+
+  private clearCrashTimer() {
+    if (this.crashTimer) {
+      clearTimeout(this.crashTimer);
+      this.crashTimer = null;
+    }
   }
 
   private spawn(): Promise<void> {
-    this.set("starting", this.url);
+    this.clearCrashTimer();
+    if (this.stopping) return Promise.resolve();
+    if (this.state !== "starting" || this.url !== null) this.set("starting", this.url);
     return new Promise((done) => {
-      const child = spawn("node", ["--import", "tsx", "cli.ts", "serve", "--port", String(PORT)], {
+      const child = this.spawnImpl("node", ["--import", "tsx", "cli.ts", "serve", "--port", String(this.port)], {
         cwd: this.repo,
         env: { ...this.env, FORCE_COLOR: "0" },
         stdio: ["ignore", "pipe", "pipe"],
       });
       this.child = child;
       let ready = false;
-      const read = (chunk: Buffer) => {
-        for (const line of chunk.toString().split("\n")) {
-          if (!line.trim()) continue;
-          this.note(line);
-          const url = serverUrl(line);
-          if (url && !ready) {
-            ready = true;
-            this.set("ready", url);
-            done();
-          }
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        done();
+      };
+      const onLine = (line: string) => {
+        this.note(line);
+        const url = serverUrl(line);
+        if (url && !ready && !this.stopping && this.state !== "stopped" && this.child === child) {
+          ready = true;
+          this.set("ready", url);
+          finish();
         }
       };
-      child.stdout?.on("data", read);
-      child.stderr?.on("data", read);
+      const stdoutReader = createLineReader(onLine);
+      const stderrReader = createLineReader(onLine);
+      child.stdout?.on("data", (chunk: Buffer) => stdoutReader.push(chunk));
+      child.stderr?.on("data", (chunk: Buffer) => stderrReader.push(chunk));
       // Node not found, or not runnable: no exit follows, so fail here.
       child.on("error", (e) => {
         if (this.child !== child) return;
         this.child = null;
         const missing = (e as NodeJS.ErrnoException).code === "ENOENT";
         this.note(missing ? "Node was not found on the PATH your terminal uses. Install Node, or check your shell profile sets PATH." : `Could not start the server: ${e.message}`);
-        this.set("failed", null);
-        done();
+        if (!this.stopping && this.state !== "stopped") this.set("failed", null);
+        finish();
       });
       child.on("exit", (code, signal) => {
-        if (this.child !== child) return;
+        stdoutReader.flush();
+        stderrReader.flush();
+        if (this.child !== child) return finish();
         this.child = null;
         this.note(`The server stopped (${signal ?? `exit ${code}`}).`);
-        if (this.state === "stopped" || this.state === "restarting") return done();
-        // It died on its own: start it again, unless it keeps dying.
+        if (this.stopping || this.state === "stopped" || this.state === "restarting" || this.killing === child) return finish();
+        if (this.restartPhase === "waiting") {
+          this.set("starting", null);
+          this.idleAbort?.abort();
+          return finish();
+        }
+        // It died on its own: start it again with backoff, unless it keeps dying.
         const now = Date.now();
         this.crashes = [...this.crashes.filter((t) => now - t < 60_000), now];
-        if (ready && this.crashes.length < 3) void this.spawn();
-        else this.set("failed", null);
-        done();
+        if (ready && this.crashes.length < 3) {
+          const delay = this.crashBackoffMs * 2 ** (this.crashes.length - 1);
+          this.set("starting", null);
+          this.clearCrashTimer();
+          this.crashTimer = setTimeout(() => {
+            this.crashTimer = null;
+            if (this.isStopped() || this.activeTransition || this.child) return;
+            void this.runTransition(() => this.spawn());
+          }, delay);
+        } else {
+          this.set("failed", null);
+        }
+        finish();
       });
     });
   }
 
   private kill(): Promise<void> {
     const child = this.child;
-    if (!child || child.exitCode !== null) return Promise.resolve();
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      if (this.child === child) this.child = null;
+      return Promise.resolve();
+    }
+    this.killing = child;
     return new Promise((done) => {
-      const force = setTimeout(() => child.kill("SIGKILL"), 5000);
-      child.once("exit", () => (clearTimeout(force), done()));
-      child.kill("SIGTERM");
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(force);
+        if (this.killing === child) this.killing = null;
+        if (this.child === child) this.child = null;
+        done();
+      };
+      const force = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+        if (child.exitCode !== null || child.signalCode !== null) finish();
+      }, this.killGraceMs);
+      child.once("exit", finish);
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        finish();
+      }
     });
   }
 
   // Watch the server's code, and restart a moment after the last change.
   private watchCode() {
-    this.watcher = watch(this.repo, { recursive: true }, (_e, file) => {
-      if (!file || !needsRestart(String(file))) return;
-      if (this.pending) clearTimeout(this.pending);
-      this.pending = setTimeout(() => {
-        this.pending = null;
-        void this.restart(`${file} changed; restarting`);
-      }, 600);
-    });
+    if (this.watcher) return;
+    try {
+      this.watcher = this.watchImpl(this.repo, { recursive: true }, (_e, file) => {
+        if (!file || !needsRestart(String(file))) return;
+        if (this.pending) clearTimeout(this.pending);
+        this.pending = setTimeout(() => {
+          this.pending = null;
+          void this.restart(`${file} changed; restarting`);
+        }, this.watchDebounceMs);
+      });
+      this.watcher.on("error", (err) => {
+        this.note(`File watcher error: ${err.message}`);
+      });
+    } catch (err) {
+      this.note(`Could not watch repository: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // Wait until no Claude note is running, saying once what it waits for.
   private async idle() {
     let said = false;
     for (;;) {
-      if (!this.url || this.state !== "ready") return;
-      const notes = await busy(this.url);
+      if (this.stopping || !this.url || this.state !== "ready") return;
+      const notes = await busy(this.url, this.fetchImpl);
+      if (this.stopping || this.state !== "ready") return;
       if (!notes.length) return;
       if (!said) this.note(`Waiting for Claude to finish (${notes.join(", ")}) before restarting.`);
       said = true;
-      await new Promise((r) => setTimeout(r, 2000));
+      await this.sleep(this.idlePollMs);
     }
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const ctrl = new AbortController();
+      this.idleAbort = ctrl;
+      const done = () => {
+        if (this.idleAbort === ctrl) this.idleAbort = null;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      ctrl.signal.addEventListener("abort", done, { once: true });
+    });
+  }
+
   private set(state: State, url: string | null) {
+    if (state === "ready") this.readyGen++;
     this.state = state;
     this.url = url;
     this.emit("state", state, url);
@@ -166,20 +389,15 @@ export class StudioServer extends EventEmitter {
   }
 }
 
-// Whether a Studio server answers at `url`.
-async function answers(url: string): Promise<boolean> {
-  try {
-    const r = await fetch(`${url}/api/projects`, { signal: AbortSignal.timeout(1500) });
-    return r.ok;
-  } catch {
-    return false;
-  }
+// Whether a Studio server answers at `url` with valid /api/projects JSON.
+export async function answers(url: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  return (await fetchProjects(url, fetchImpl, 1500)) !== null;
 }
 
 // The projects Claude is working on now. An older server without /api/busy counts as idle.
-export async function busy(url: string): Promise<string[]> {
+export async function busy(url: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
   try {
-    const r = await fetch(`${url}/api/busy`, { signal: AbortSignal.timeout(3000) });
+    const r = await fetchImpl(`${url}/api/busy`, { signal: AbortSignal.timeout(3000) });
     return r.ok ? (((await r.json()) as { notes?: string[] }).notes ?? []) : [];
   } catch {
     return [];
