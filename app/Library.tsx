@@ -279,11 +279,13 @@ const Script: React.FC<{
     const [start, end] = wordsRange(words, range[0], range[1]);
     onSelect({ start, end, label: `${range[1] - range[0] + 1} words` });
   };
-  const apply = (ranges: [number, number][]) => {
+  const apply = (ranges: [number, number][]): Promise<boolean> => {
     let next = cut;
     for (const [a, b] of [...ranges].sort((x, y) => y[0] - x[0])) next = deleteRange(next, a, b);
     setError("");
-    return onCut(next).then(() => onSelect(null)).catch((e) => setError(String(e.message)));
+    return onCut(next)
+      .then(() => (onSelect(null), true))
+      .catch((e) => (setError(String(e.message)), false));
   };
   const kept = (trims ?? []).filter((t) => t.on);
   const saves = kept.reduce((s, t) => s + t.to - t.from, 0);
@@ -305,7 +307,7 @@ const Script: React.FC<{
       <div className="script-bar">
         {picked ? (
           <>
-            <button className="small primary" onClick={() => apply([wordsRange(words, picked[0], picked[1])]).then(() => setPicked(null))}>Cut {picked[1] - picked[0] + 1} word{picked[0] === picked[1] ? "" : "s"}</button>
+            <button className="small primary" onClick={() => apply([wordsRange(words, picked[0], picked[1])]).then((ok) => ok && setPicked(null))}>Cut {picked[1] - picked[0] + 1} word{picked[0] === picked[1] ? "" : "s"}</button>
             <button className="small quiet" onClick={() => (setPicked(null), onSelect(null), window.getSelection()?.removeAllRanges())}>Cancel</button>
           </>
         ) : trims ? (

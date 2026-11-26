@@ -92,19 +92,34 @@ export const Timeline: React.FC<{
     return Math.max(0, Math.min(length, (clientX - el.getBoundingClientRect().left + el.scrollLeft) / pps));
   };
 
-  // Follows the pointer until it is released.
-  const follow = (move: (m: PointerEvent) => void, up: (m: PointerEvent) => void) => {
-    const end = (m: PointerEvent) => {
+  // Follows the pointer until it is released, cancelled, or the timeline unmounts.
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  const follow = (move: (m: PointerEvent) => void, up: (m: PointerEvent) => void, cancel?: () => void) => {
+    dragCleanup.current?.();
+    const detach = () => {
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (dragCleanup.current === detach) dragCleanup.current = null;
+    };
+    const onUp = (m: PointerEvent) => {
+      detach();
       up(m);
     };
+    const onCancel = () => {
+      detach();
+      cancel?.();
+    };
+    dragCleanup.current = detach;
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", end);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
   };
 
   // Trim a segment's edge. The edge snaps to the nearest word edge in its clip, or to a frame with Alt.
   const trim = (e: React.PointerEvent, id: string, edge: "in" | "out") => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     const seg = cut.segments.find((s) => s.id === id)!;
     const x0 = e.clientX;
@@ -120,6 +135,7 @@ export const Timeline: React.FC<{
         if (next && JSON.stringify(next) !== JSON.stringify(cut)) onCut(next).catch(() => setLive(null));
         else setLive(null);
       },
+      () => setLive(null),
     );
   };
 
@@ -141,6 +157,7 @@ export const Timeline: React.FC<{
 
   // Press on a segment: a click selects it, a drag moves it to another place in the cut.
   const grab = (e: React.PointerEvent, id: string) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     const x0 = e.clientX;
     let slot = -1;
@@ -166,11 +183,13 @@ export const Timeline: React.FC<{
           onCut(next).catch(() => setLive(null));
         }
       },
+      () => setDrag(null),
     );
   };
 
   // Trim a b-roll clip's edge: it lands on the word nearest the pointer.
   const trimShot = (e: React.PointerEvent, from: number, edge: "in" | "out") => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     let t = from;
     follow(
@@ -184,30 +203,29 @@ export const Timeline: React.FC<{
         if (Math.abs(t - from) > 0.02) onShotStart(from, t + 0.05).finally(() => setDrag(null));
         else setDrag(null);
       },
+      () => setDrag(null),
     );
   };
 
   const down = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest(".clip")) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".clip")) return;
     onSegment(null);
     onPick?.(null);
     const start = at(e.clientX);
     let moved = false;
-    const move = (m: PointerEvent) => {
-      const t = at(m.clientX);
-      if (Math.abs(t - start) * pps > 4) moved = true;
-      if (moved) onSelect({ start: Math.min(start, t), end: Math.max(start, t) });
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      if (!moved) {
-        onSelect(null);
-        onSeek(start);
-      }
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    follow(
+      (m) => {
+        const t = at(m.clientX);
+        if (Math.abs(t - start) * pps > 4) moved = true;
+        if (moved) onSelect({ start: Math.min(start, t), end: Math.max(start, t) });
+      },
+      () => {
+        if (!moved) {
+          onSelect(null);
+          onSeek(start);
+        }
+      },
+    );
   };
 
   // A visual and the keep shots after it are one clip.

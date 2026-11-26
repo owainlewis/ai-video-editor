@@ -33,7 +33,8 @@ export const Gallery: React.FC = () => {
   // The library's cards, or the ones taken out of it, to add back.
   const [removed, setRemoved] = useState(q0.get("view") === "removed");
   const [effects, setEffects] = useState<Effect[]>([]);
-  const [removedCount, setRemovedCount] = useState(0);
+  // null while loading so #/gallery?view=removed is not reset before the count arrives.
+  const [removedCount, setRemovedCount] = useState<number | null>(null);
   const [projects, setProjects] = useState<{ slug: string; resolved: Resolved }[]>([]);
   const [open, setOpen] = useState<Item | null>(null);
   const [error, setError] = useState("");
@@ -45,17 +46,23 @@ export const Gallery: React.FC = () => {
   }, [tab, canvas, theme, longest, removed, search]);
 
   // The cards, again whenever the library changes (here, in another window, or by hand).
+  useEffect(() => setRemovedCount(null), [canvas]);
   useEffect(() => {
+    let active = true;
     const load = () => {
-      api.effects(canvas, removed).then(setEffects).catch((e) => setError(String(e.message)));
-      api.effects(canvas, true).then((l) => setRemovedCount(l.length)).catch(() => {});
+      api.effects(canvas, removed).then((l) => active && setEffects(l)).catch((e) => active && setError(String(e.message)));
+      api.effects(canvas, true).then((l) => active && setRemovedCount(l.length)).catch(() => {});
     };
     load();
-    return api.events((e) => e.type === "cards" && load());
+    const stop = api.events((e) => e.type === "cards" && load());
+    return () => {
+      active = false;
+      stop();
+    };
   }, [canvas, removed]);
   // Back to the library once nothing is left to add back.
   useEffect(() => {
-    if (removed && !removedCount) setRemoved(false);
+    if (removed && removedCount === 0) setRemoved(false);
   }, [removed, removedCount]);
 
   // Plans change while Claude works; reload the projects a moment after each save.
@@ -136,11 +143,11 @@ export const Gallery: React.FC = () => {
                 <label className="small" title="Fill every text slot to its limit, to check the layout holds">
                   <input type="checkbox" checked={longest} onChange={(e) => setLongest(e.target.checked)} /> Longest text
                 </label>
-                {(removedCount > 0 || removed) && (
+                {((removedCount ?? 0) > 0 || removed) && (
                   <div className="seg">
                     <button className={!removed ? "on" : ""} onClick={() => setRemoved(false)}>In library</button>
                     <button className={removed ? "on" : ""} onClick={() => setRemoved(true)} title="Cards taken out of the library, to add back">
-                      Removed <span className="muted">{removedCount}</span>
+                      Removed {removedCount !== null && <span className="muted">{removedCount}</span>}
                     </button>
                   </div>
                 )}

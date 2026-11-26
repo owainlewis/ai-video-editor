@@ -3,7 +3,7 @@
 // from the editor, from Claude in the chat panel or from Claude Code in a terminal, it saves a
 // version, re-resolves the plan and tells the open editors to reload.
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, sep } from "node:path";
@@ -84,7 +84,8 @@ export async function startServer(port = 4747) {
   };
   const ready = (slug: string) => existsSync(join(projects, slug, "edit.json")) && existsSync(join(projects, slug, "transcript.json"));
 
-  // Editors listening for changes.
+  // Editors listening for changes. Each server process gets a boot ID so tabs reload only on a real restart.
+  const boot = randomUUID();
   const clients = new Set<ServerResponse>();
   const broadcast = (event: Record<string, unknown>) => {
     for (const c of clients) c.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -137,7 +138,7 @@ export async function startServer(port = 4747) {
 
     if (parts[0] === "events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
-      res.write(": hi\n\n");
+      res.write(`: hi\n\ndata: ${JSON.stringify({ type: "hello", boot })}\n\n`);
       clients.add(res);
       req.on("close", () => clients.delete(res));
       return;

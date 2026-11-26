@@ -419,6 +419,7 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .inspector .fields { display: flex; flex-direction: column; gap: 12px; }
 .inspector input:not([type="checkbox"]), .inspector textarea, .inspector select { width: 100%; }
 .inspector textarea { min-height: 60px; resize: vertical; }
+.inspector textarea.field-text { min-height: 0; field-sizing: content; resize: vertical; }
 .inspector textarea.json { min-height: 280px; font: 12px/1.45 ui-monospace, Menlo, monospace; }
 .inspector .items { display: flex; flex-direction: column; gap: 6px; }
 .inspector .item { display: flex; gap: 6px; align-items: flex-start; }

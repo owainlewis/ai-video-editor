@@ -59,11 +59,20 @@ export const Inspector: React.FC<{
   const [brief, setBrief] = useState("");
   const [trying, setTrying] = useState<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  const mounted = useRef(true);
   // A fresh plan from the server replaces the form, unless a change made here is still waiting to save.
   useEffect(() => {
     if (!timer.current) setShot(fromPlan);
   }, [fromPlan]);
-  useEffect(() => () => onPreview(null), [id]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      window.clearTimeout(timer.current);
+      timer.current = undefined;
+      onPreview(null);
+    };
+  }, [id]);
 
   const save = (next: PlanShot) => {
     setShot(next);
@@ -71,7 +80,10 @@ export const Inspector: React.FC<{
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       timer.current = undefined;
-      api.post(slug, "shot", { id, shot: next }).then(() => setError("")).catch((e) => setError(String(e.message)));
+      api
+        .post(slug, "shot", { id, shot: next })
+        .then(() => mounted.current && setError(""))
+        .catch((e) => mounted.current && setError(String(e.message)));
     }, 700);
   };
   const remove = () => {
@@ -198,13 +210,13 @@ const blank = (v: unknown): unknown => (typeof v === "string" ? "" : Array.isArr
 
 // A form for any visual: text, numbers, switches, lists and groups, read from the value itself, so
 // every kind in the schema is editable without a form of its own.
-const Fields: React.FC<{ value: unknown; onChange: (v: unknown) => void; name?: string }> = ({ value, onChange, name }) => {
+export const Fields: React.FC<{ value: unknown; onChange: (v: unknown) => void; name?: string }> = ({ value, onChange, name }) => {
   const label = name && <span>{LABELS[name] ?? name}</span>;
   if (typeof value === "string")
     return (
       <label className="f">
         {label}
-        {value.length > 48 ? <textarea value={value} onChange={(e) => onChange(e.target.value)} /> : <input value={value} onChange={(e) => onChange(e.target.value)} />}
+        <textarea className="field-text" rows={value.length > 48 || value.includes("\n") ? 3 : 1} value={value} onChange={(e) => onChange(e.target.value)} />
       </label>
     );
   if (typeof value === "number") return <label className="f">{label}<input type="number" value={value} step="any" onChange={(e) => onChange(+e.target.value)} /></label>;
