@@ -730,8 +730,8 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
         if (isRunning(slug)) throw Object.assign(new Error("Claude is still working on the last note"), { code: 409 });
         const sent = startSend(dir, slug, plan(), timeline(dir).words);
         if (!sent) throw Object.assign(new Error("nothing to send: no open notes or changes"), { code: 400 });
-        ask(projects, slug, `Review: ${sent.count} note${sent.count === 1 ? "" : "s"} to work through`, undefined, 0, emit, (ok) => {
-          finishSend(dir, ok);
+        ask(projects, slug, `Review: ${sent.count} note${sent.count === 1 ? "" : "s"} to work through`, undefined, 0, emit, () => {
+          finishSend(dir);
           snapshot(dir, "claude");
           changed();
         }, sent.prompt);

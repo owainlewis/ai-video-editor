@@ -389,6 +389,41 @@ fs.writeFileSync(args[args.length - 1], "jpg");
     expect(after.open).toBe(1);
   });
 
+  it("finishSend keeps previously answered sent notes when a later send fails", () => {
+    const projects = mktemp("studio-rev-");
+    const dir = join(projects, "p");
+    mkdirSync(dir);
+    const w = "one two three four five six".split(" ").map((text, i) => ({ text, start: i * 0.5, end: i * 0.5 + 0.4 }));
+    writeFileSync(join(dir, "project.json"), JSON.stringify({ slug: "p", size: [1080, 1920], duration: 3 }));
+    writeFileSync(join(dir, "transcript.json"), JSON.stringify(w));
+    writeFileSync(
+      join(dir, "edit.json"),
+      JSON.stringify({ title: "t", face: { x: 0.5, y: 0.3, h: 0.2 }, music: false, shots: [{ at: "one two", layout: "full" }] }),
+    );
+    const r = resolveProject(projects, "p").resolved!;
+
+    // First review round: n1 is sent and answered; answered notes stay "sent" until closed.
+    saveNote(dir, w, { t: 0.5, text: "fix timing" });
+    expect(startSend(dir, "p", r, w)?.count).toBe(1);
+    writeFileSync(join(dir, "review-replies.json"), JSON.stringify({ "note:n1": "Fixed timing." }));
+    finishSend(dir);
+    expect(loadReview(dir, r, w).review.notes[0]).toMatchObject({ id: "n1", status: "sent", reply: "Fixed timing." });
+
+    // Second review round: n2 is sent, but Claude fails before writing review-replies.json.
+    saveNote(dir, w, { t: 1.5, text: "shorten intro" });
+    expect(startSend(dir, "p", r, w)?.count).toBe(1);
+    finishSend(dir);
+
+    const after = loadReview(dir, r, w);
+    expect(after.review.notes.find((n) => n.id === "n1")).toMatchObject({ status: "sent", reply: "Fixed timing." });
+    expect(after.review.notes.find((n) => n.id === "n2")).toMatchObject({ status: "open" });
+    expect(after.open).toBe(1);
+    const retry = startSend(dir, "p", r, w)!;
+    expect(retry.count).toBe(1);
+    expect(retry.prompt).toContain("[note:n2]");
+    expect(retry.prompt).not.toContain("[note:n1]");
+  });
+
   it("ask handles missing claude binary without crashing and still emits idle when onDone throws", async () => {
     const projects = mktemp("studio-agent-");
     const dir = join(projects, "p");

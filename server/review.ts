@@ -107,7 +107,7 @@ export function startSend(dir: string, slug: string, r: Resolved, words: Word[])
 // back to waiting (its hash moved), so its answer goes on the note it answers, now in its history.
 // Any note left in "sent" without a reply (e.g. Claude failed before writing review-replies.json)
 // goes back to "open" so it is not stuck.
-export function finishSend(dir: string, ok = true) {
+export function finishSend(dir: string) {
   const hasReplies = existsSync(repliesFile(dir));
   let replies: Record<string, unknown> = {};
   if (hasReplies) {
@@ -135,7 +135,7 @@ export function finishSend(dir: string, ok = true) {
     }
   }
   for (const note of review.notes) {
-    if (note.status === "sent" && (!note.reply || (!ok && !hasReplies))) {
+    if (note.status === "sent" && !note.reply) {
       note.status = "open";
       dirty = true;
     }
