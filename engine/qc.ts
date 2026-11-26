@@ -10,26 +10,33 @@ import { actionBeats, actionOffset } from "./actions.ts";
 
 // ---------- plan checks ----------
 
-const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of", "icon", "shape", "diff", "lang", "marks", "act", "field", "phrase", "nth", "rect", "font", "focused", "checked"]);
+const SKIP = new Set(["color", "mat", "logo", "lift", "file", "kind", "at", "src", "settle", "times", "words", "type", "highlight", "from", "to", "rate", "start", "loop", "hit", "sync", "even", "preview", "bottleneck", "active", "of", "icon", "shape", "diff", "lang", "marks", "act", "field", "phrase", "nth", "rect", "font", "focused", "checked", "frame", "url", "size", "quad", "id", "name", "view", "backdrop", "app", "mode", "theme", "cwd", "model", "effort"]);
 
 // Every piece of text a visual puts on screen.
 export const visualText = (v: unknown): string[] => {
   // An inlined image (a "logo:" mark becomes a data URL) is a picture, not words on screen.
   if (typeof v === "string") return v.startsWith("data:") ? [] : [v.replace(/\*/g, "").replace(/\/\//g, "")];
   if (Array.isArray(v)) return v.flatMap(visualText);
-  if (v && typeof v === "object") return Object.entries(v).flatMap(([k, x]) => (SKIP.has(k) ? [] : visualText(x)));
+  if (v && typeof v === "object")
+    return Object.entries(v).flatMap(([k, x]) => {
+      if (SKIP.has(k)) return [];
+      if (k === "value" && typeof x === "number" && Number.isFinite(x)) return [String(x)];
+      return visualText(x);
+    });
   return [];
 };
 
 const digits = (t: string) => (t.match(/\d[\d,.]*/g) ?? []).map((n) => n.replace(/[,.]/g, "")).filter((n) => n.length);
 
-export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[], cuts: number[] = []): Issue[] => {
+export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[] = [], cuts: number[] = []): Issue[] => {
   const issues: Issue[] = [];
   r.shots.forEach((s, i) => {
     if (!graphic(s)) return;
     const v = s.visual!;
+    const chain = lastKept(r.shots, i);
+    const end = r.shots[chain].end;
     const text = visualText(v).join(" ");
-    const len = s.end - s.start;
+    const len = end - s.start;
     // Reading time: about a second to take in a card, plus a quarter of a second a word. A reel moves
     // faster (something changes every 2 s), so there it is a little under that, with a tenth of a
     // second's grace for rounding.
@@ -42,34 +49,33 @@ export const qcPlan = (r: Resolved, words: Word[], notes: (string | undefined)[]
     // then cut back (Owain, 2026-10-25: "sometimes the graphics linger a bit too long").
     // An agent on a page is done when its last key is typed.
     const acted = v.kind === "image" && v.actions?.length ? actionBeats(v.actions, s.start, (v.times ?? []).slice(actionOffset(v))).map((b) => b.t1) : [];
-    const last = Math.max(s.start, ...(v.times ?? []).filter((t) => t < s.end), ...((v as { words?: number[] }).words ?? []), ...acted.filter((t) => t < s.end));
-    const linger = s.end - last;
+    const last = Math.max(s.start, ...(v.times ?? []).filter((t) => t < end), ...((v as { words?: number[] }).words ?? []).filter((t) => t < end), ...acted.filter((t) => t < end));
+    const linger = end - last;
     const settle = v.kind === "constraint" ? 5 : 3;
     // A recorded screen keeps moving; QC measures that on the footage instead.
     if (s.layout !== "over" && v.kind !== "chapter" && !(v.kind === "video" && v.sync) && linger > settle)
       issues.push({ level: "warn", message: `${label(s, i)}: lingers ${linger.toFixed(1)}s after its last part lands; end it about 2s after` });
     // A part that lands as the graphic leaves is never seen: its word is said too late in the shot.
-    const chain = lastKept(r.shots, i);
-    const end = r.shots[chain].end;
     // A list that carries on in a later graphic names what is to come: a part said there lands there.
     const landsLater = (t: number) => r.shots.some((o, k) => k > chain && o.visual?.kind === v.kind && t >= o.start && t < o.end - 0.4 && (o.visual as { times?: number[] }).times?.includes(t));
     const late = (v.times ?? []).findIndex((t) => t > end - 0.4 && !landsLater(t));
     if (late >= 0)
       issues.push({ level: "error", message: `${label(s, i)}: part ${late + 1} lands at ${v.times![late].toFixed(2)}s, as the graphic ends at ${end.toFixed(2)}s, so it is never seen; end the graphic later` });
     // Two full-frame cards back to back: cut to Owain between them.
-    const next = r.shots[i + 1];
+    const next = r.shots[chain + 1];
     if (s.layout === "media" && next && next.layout === "media" && !next.keep)
       issues.push({ level: "warn", message: `${label(s, i)}: followed straight by another full-frame card; cut back to the picture between them` });
     // An overlay that runs over a cut in the footage sits on two different pictures.
     if (s.layout === "over" || s.layout === "side") {
-      const cut = cuts.find((c) => c > s.start + 0.2 && c < s.end - 0.2);
+      const cut = cuts.find((c) => c > s.start + 0.2 && c < end - 0.2);
       if (cut !== undefined) issues.push({ level: "error", message: `${label(s, i)}: runs over a cut in the footage at ${cut.toFixed(2)}s; end it before the cut` });
     }
     // Numbers on screen must be said nearby, or come from the plan's note or the visual's source.
     if (v.kind !== "chapter" && v.kind !== "journey") {
-      const said = new Set(words.filter((w) => w.start > s.start - 20 && w.start < s.end + 20).flatMap((w) => digits(w.text)));
-      const noted = new Set([...digits(notes[i] ?? ""), ...digits("source" in v ? String((v as { source?: string }).source ?? "") : "")]);
-      const owed = digits(text).filter((d) => !said.has(d) && !noted.has(d) && !(v.kind === "waffle" && d === String((v as { value: number }).value) && said.has(d)));
+      const said = new Set(words.filter((w) => w.start > s.start - 20 && w.start < end + 20).flatMap((w) => digits(w.text)));
+      const noteText = [...r.shots.slice(i, chain + 1).map((x) => x.note ?? ""), notes[i] ?? ""].join(" ");
+      const noted = new Set([...digits(noteText), ...digits("source" in v ? String((v as { source?: string }).source ?? "") : "")]);
+      const owed = digits(text).filter((d) => !said.has(d) && !noted.has(d));
       for (const d of new Set(owed)) issues.push({ level: "warn", message: `${label(s, i)}: shows ${d}, which is not said nearby or given in the note or source` });
     }
     // Count-ups flash numbers that were never said; Owain accepts them, but say so.
@@ -185,12 +191,41 @@ const gap = (a: Box, b: Box) => {
 const overlap = (a: Box, b: Box) => Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]) > 2 && Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]) > 2;
 const short = (t: string) => (t.length > 28 ? `${t.slice(0, 26)}...` : t);
 
-const rgb = (c: string) => (c.match(/[\d.]+/g) ?? ["0", "0", "0"]).slice(0, 3).map(Number);
+const hex = (h: string): [number, number, number, number] => {
+  const raw = h.trim().replace(/^#/, "");
+  if (raw.length === 3 || raw.length === 4) {
+    const [r, g, b] = [0, 1, 2].map((i) => parseInt(raw[i] + raw[i], 16));
+    const a = raw.length === 4 ? parseInt(raw[3] + raw[3], 16) / 255 : 1;
+    return [r, g, b, a];
+  }
+  if (raw.length === 6 || raw.length === 8) {
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16));
+    const a = raw.length === 8 ? parseInt(raw.slice(6, 8), 16) / 255 : 1;
+    return [r, g, b, a];
+  }
+  return [0, 0, 0, 1];
+};
+const rgb = (c: string): [number, number, number, number] => {
+  const trimmed = c.trim();
+  if (trimmed.startsWith("#")) return hex(trimmed);
+  const parts = trimmed.match(/[\d.]+%?/g) ?? [];
+  const parse = (s: string | undefined, fallback: number, pctBase = 255) => {
+    if (!s) return fallback;
+    const v = parseFloat(s);
+    if (!Number.isFinite(v)) return fallback;
+    return s.endsWith("%") ? (v / 100) * pctBase : v;
+  };
+  return [parse(parts[0], 0), parse(parts[1], 0), parse(parts[2], 0), Math.max(0, Math.min(1, parse(parts[3], 1, 1)))];
+};
+const composite = ([r, g, b, a]: [number, number, number, number], base: number[]) => [
+  r * a + base[0] * (1 - a),
+  g * a + base[1] * (1 - a),
+  b * a + base[2] * (1 - a),
+];
 const lum = ([r, g, b]: number[]) => {
   const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 };
-const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 export const contrast = (fg: number[], bg: number[], alpha = 1) => {
   const mix = fg.map((c, i) => c * alpha + bg[i] * (1 - alpha));
   const [a, b] = [lum(mix), lum(bg)].sort((x, y) => y - x);
@@ -213,7 +248,10 @@ export const qcLayout = (m: Measure, size: [number, number], where: string, bg?:
     else if (t.opacity >= 0.6 && t.size < 24) warn(`"${short(t.text)}" is ${t.size.toFixed(0)}px, small at 1080p`);
     // Faded items (a list's earlier rows, a preview) are faint on purpose; check what is meant to be read.
     if (bg && t.opacity >= 0.9) {
-      const ratio = contrast(rgb(t.color), t.under ? rgb(t.under) : hex(bg), Math.min(1, t.opacity));
+      const [fr, fg, fb, fa] = rgb(t.color);
+      const base = rgb(bg).slice(0, 3);
+      const back = t.under ? composite(rgb(t.under), base) : base;
+      const ratio = contrast([fr, fg, fb], back, Math.min(1, t.opacity) * fa);
       // Under 2:1 the words are a smudge, not quiet (list numbers at 1.2:1, 2026-11-02: "muddy").
       if (ratio < 2) err(`"${short(t.text)}" is nearly invisible (${ratio.toFixed(1)}:1); text never takes the faint colour`);
       else if (ratio < 3) warn(`"${short(t.text)}" has low contrast (${ratio.toFixed(1)}:1)`);
@@ -305,7 +343,9 @@ export const qcHook = (m: Measure, size: [number, number], where: string, bg?: n
     if ((m.edges ?? []).some((e) => visible(e.opacity) && e.points.some(on))) err(`the hook "${short(t.text)}" sits on a line in the diagram`);
     if ((m.faces ?? []).some((f) => overlap(t.box, f))) err(`the hook "${short(t.text)}" sits on the face; keep it above the brow`);
     if (bg && t.opacity >= 0.9) {
-      const ratio = contrast(rgb(t.color), t.under ? rgb(t.under) : bg);
+      const [fr, fg, fb, fa] = rgb(t.color);
+      const back = t.under ? composite(rgb(t.under), bg) : bg;
+      const ratio = contrast([fr, fg, fb], back, Math.min(1, t.opacity) * fa);
       if (ratio < 3) err(`the hook "${short(t.text)}" is hard to read (${ratio.toFixed(1)}:1 on what is under it)`);
       else if (ratio < 4.5) warn(`the hook "${short(t.text)}" has low contrast (${ratio.toFixed(1)}:1)`);
     }

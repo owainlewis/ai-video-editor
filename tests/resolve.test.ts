@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Edit } from "../engine/schema.ts";
-import { cameraRanges, chunkWords, findPhrase, lintClean, lintOnCamera, lintWide, resolveShots, syncWords } from "../engine/resolve.ts";
+import { cameraRanges, chunkWords, cleanSfx, findPhrase, lintClean, lintOnCamera, lintWide, resolveShots, syncWords } from "../engine/resolve.ts";
 
 const words = "If you're building software with AI, having a good code review tool is essential."
   .split(" ")
@@ -130,6 +130,10 @@ describe("youtube canvas", () => {
     expect(lintWide(ok.shots, 5).filter((i) => i.level === "error")).toEqual([]);
     const bad = resolveShots(wide([{ at: "If", layout: "split", visual: { kind: "title", text: "x" } }]), words, 5);
     expect(lintWide(bad.shots, 5).some((i) => i.level === "error")).toBe(true);
+    const badCard = resolveShots(wide([{ at: "If", layout: "card" }]), words, 5);
+    expect(lintWide(badCard.shots, 5).some((i) => i.level === "error" && /card is a reel layout/.test(i.message))).toBe(true);
+    const badDiagram = resolveShots(wide([{ at: "If", layout: "diagram", visual: { kind: "custom", name: "x" } }]), words, 5);
+    expect(lintWide(badDiagram.shots, 5).some((i) => i.level === "error" && /diagram is a reel layout/.test(i.message))).toBe(true);
   });
 
   it("warns when a full-frame youtube card waits for its first word", () => {
@@ -205,5 +209,80 @@ describe("shift", () => {
     const plan = Edit.parse({ title: "t", canvas: "youtube", face: { x: 0.5, y: 0.3, h: 0.3 }, shots: [{ at: "one", layout: "full" }, { at: "three", layout: "full", shift: -0.5 }] });
     const { shots } = resolveShots(plan, words, 10, 30);
     expect(shots[1].start).toBeCloseTo(3.467, 2);
+  });
+});
+
+describe("cut-mode anchor collisions and clean lint/sfx edge cases", () => {
+  const repWords = ["intro", "focus", "middle", "focus", "end"].map((text, i) => ({ text, start: i * 1, end: i * 1 + 0.8 }));
+
+  it("never assigns two shots to the same word index after a cut-mode fallback rewinds cursor", () => {
+    const p = plan([
+      { at: "focus", layout: "full", hit: { text: "FIRST" } },
+      { at: "intro", layout: "full" },
+      { at: "focus", layout: "full", hit: { text: "SECOND" } },
+    ]);
+    const { shots, issues } = resolveShots(p, repWords, 6, 30, true);
+    expect(issues).toEqual([]);
+    expect(shots.map((s) => [s.anchor, s.start, s.hit?.text])).toEqual([
+      ["intro", 0, undefined],
+      ["focus", Math.round((1 - 0.05) * 30) / 30, "FIRST"],
+      ["focus", Math.round((3 - 0.05) * 30) / 30, "SECOND"],
+    ]);
+  });
+
+  it("drops a duplicate shot anchor with a warning when only one occurrence remains after rewind", () => {
+    const single = ["intro", "focus", "end"].map((text, i) => ({ text, start: i * 1, end: i * 1 + 0.8 }));
+    const p = plan([
+      { at: "focus", layout: "full", hit: { text: "FIRST" } },
+      { at: "intro", layout: "full" },
+      { at: "focus", layout: "full", hit: { text: "SECOND" } },
+    ]);
+    const { shots, issues } = resolveShots(p, single, 4, 30, true);
+    expect(shots.map((s) => [s.anchor, s.hit?.text])).toEqual([["intro", undefined], ["focus", "FIRST"]]);
+    expect(issues.some((i) => i.level === "warn" && /focus/.test(i.message))).toBe(true);
+  });
+
+  it("skips s.keep shots in lintClean diagram hold checks", () => {
+    const timed = ["a", "b", "c", "d", "e"].map((text, i) => ({ text, start: i * 1, end: i * 1 + 0.5 }));
+    const p = Edit.parse({
+      title: "t",
+      style: "clean",
+      shots: [
+        { at: "a", layout: "diagram", visual: { kind: "custom", name: "x", at: ["b"] } },
+        { at: "c", layout: "diagram", keep: true },
+        { at: "e", layout: "split", visual: { kind: "custom", name: "y" } },
+      ],
+    });
+    const { shots } = resolveShots(p, timed, 5);
+    const holdWarnings = lintClean(shots, 5, false, { text: "a *b*" }, { title: "c" }).filter((i) => /holds still/.test(i.message));
+    // Shot 2 (keep: true) should not produce its own hold warning.
+    expect(holdWarnings.some((i) => /shot 2/.test(i.message))).toBe(false);
+  });
+
+  it("does not emit typing key SFX for code visuals with typed: false or blank lines", () => {
+    const timed = ["a", "b", "c", "d"].map((text, i) => ({ text, start: i * 1, end: i * 1 + 0.5 }));
+    const staticCode = resolveShots(
+      plan([{ at: "a", layout: "split", visual: { kind: "code", file: "a.ts", typed: false, lines: [{ text: "const x = 1;" }, { text: "return x;" }] } }]),
+      timed,
+      4,
+    ).shots;
+    expect(cleanSfx(staticCode).filter((e) => e.kind === "key")).toEqual([]);
+
+    const blankLines = resolveShots(
+      plan([{ at: "a", layout: "split", visual: { kind: "code", file: "a.ts", typed: true, lines: [{ text: "" }, { text: "   " }] } }]),
+      timed,
+      4,
+    ).shots;
+    expect(cleanSfx(blankLines).filter((e) => e.kind === "key")).toEqual([]);
+
+    const typedCode = resolveShots(
+      plan([{ at: "a", layout: "split", visual: { kind: "code", file: "a.ts", typed: true, lines: [{ text: "const x = 1;" }, { text: "" }] } }]),
+      timed,
+      4,
+    ).shots;
+    const keys = cleanSfx(typedCode).filter((e) => e.kind === "key");
+    expect(keys.length).toBeGreaterThan(0);
+    // All keys should belong to line 0 (finishing well before line 1 starts).
+    expect(keys.every((k) => k.t < 0.7)).toBe(true);
   });
 });

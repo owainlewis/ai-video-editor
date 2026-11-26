@@ -35,6 +35,7 @@ export function cutWords(cut: CutPlan, words: Record<string, Word[]>): Word[] {
 
 // The segment playing at timeline time `t` (the last one at the very end), and the clip time there.
 export function atTime(cut: CutPlan, t: number): { seg: Placed; index: number; local: number } | null {
+  if (!Number.isFinite(t)) return null;
   const all = placed(cut);
   if (!all.length) return null;
   const index = Math.max(0, all.findIndex((s) => t < s.end));
@@ -85,6 +86,7 @@ const MIN = 2 / 30;
 
 // Split the segment under timeline time `t` in two. Nothing changes on screen.
 export function splitAt(cut: CutPlan, t: number): CutPlan {
+  if (!Number.isFinite(t)) return cut;
   const hit = atTime(cut, t);
   if (!hit || hit.local - hit.seg.in < MIN || hit.seg.out - hit.local < MIN) return cut;
   const { start: _s, end: _e, ...seg } = hit.seg;
@@ -166,10 +168,10 @@ export function snapEdge(words: Word[], t: number, edge: "in" | "out", levels?: 
   if (!words.length) return t;
   const edges = words.map((w, i) => {
     if (edge === "in") {
-      const gap = i ? w.start - words[i - 1].end : w.start;
+      const gap = Math.max(0, i ? w.start - words[i - 1].end : w.start);
       return Math.max(0, w.start - Math.min(0.06, gap / 2));
     }
-    const gap = words[i + 1] ? words[i + 1].start - w.end : 0.12;
+    const gap = Math.max(0, words[i + 1] ? words[i + 1].start - w.end : 0.12);
     return w.end + Math.min(0.06, gap / 2);
   });
   const near = edges.reduce((best, e) => (Math.abs(e - t) < Math.abs(best - t) ? e : best), edges[0]);
@@ -185,7 +187,7 @@ export function loudJoins(cut: CutPlan, levels: Record<string, Levels>, lengths:
       const t = s[edge];
       if (!l || t < 0.05 || t > (lengths[s.src] ?? Infinity) - 0.05) return [];
       // What plays: the 10 ms just after an in point, or just before an out point.
-      const db = l.db[edge === "in" ? Math.floor(t * l.rate) : Math.ceil(t * l.rate) - 1] ?? -100;
+      const db = l.db[edge === "in" ? Math.floor(t * l.rate + 1e-7) : Math.ceil(t * l.rate - 1e-7) - 1] ?? -100;
       if (db <= l.quiet) return [];
       const pause = quietest(l, t, 0.3);
       return [{ level: "warn" as const, message: `segment ${i + 1} ${edge === "in" ? "starts" : "ends"} on sound (${Math.round(db)} dB, ${s.src} ${t.toFixed(2)}s), so a word may be cut${pause !== null ? `; the nearest pause is at ${pause.toFixed(2)}s` : "; there is no pause near it"}` }];
@@ -193,9 +195,29 @@ export function loudJoins(cut: CutPlan, levels: Record<string, Levels>, lengths:
   );
 }
 
-// Ripple delete timeline time `a` to `b` (an I to O range): split at both ends, drop what is between.
+// Ripple delete timeline time `a` to `b` (an I to O range): trim segments at the range edges,
+// dropping anything wholly inside and splitting a segment that straddles the whole range.
 export function deleteRange(cut: CutPlan, a: number, b: number): CutPlan {
-  const split = splitAt(splitAt(cut, a), b);
-  const keep = new Set(placed(split).filter((s) => s.end <= a + 1e-6 || s.start >= b - 1e-6).map((s) => s.id));
-  return { segments: split.segments.filter((s) => keep.has(s.id)) };
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a >= b) return cut;
+  let nextNum = 1 + Math.max(0, ...cut.segments.map((s) => parseInt(s.id.replace(/\D/g, ""), 10) || 0));
+  const segments: CutSegment[] = [];
+  for (const s of placed(cut)) {
+    const { start, end, ...seg } = s;
+    if (end <= a + 1e-6 || start >= b - 1e-6) {
+      segments.push(seg);
+      continue;
+    }
+    const leftOut = us(seg.in + Math.max(0, a - start));
+    const rightIn = us(seg.in + Math.min(seg.out - seg.in, b - start));
+    const hasLeft = leftOut - seg.in > 1e-6;
+    const hasRight = seg.out - rightIn > 1e-6;
+    if (hasLeft && hasRight) {
+      segments.push({ ...seg, out: leftOut }, { ...seg, id: `s${nextNum++}`, in: rightIn });
+    } else if (hasLeft) {
+      segments.push({ ...seg, out: leftOut });
+    } else if (hasRight) {
+      segments.push({ ...seg, in: rightIn });
+    }
+  }
+  return { segments };
 }

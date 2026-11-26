@@ -59,6 +59,33 @@ describe("editing the cut", () => {
     expect(cutLength(out)).toBeCloseTo(1.5);
     expect(cutWords(out, { main, b }).map((w) => w.text)).toEqual(["one", "two", "three", "four", "gamma"]);
   });
+  it("preserves neighboring segments when deleting near a join or a short range under MIN", () => {
+    const cut = { segments: [{ id: "a", src: "main", in: 0, out: 1.8 }, { id: "b", src: "b", in: 0, out: 0.9 }] };
+    // Start of deletion is 0.01s (< MIN) before the join at 1.8s: segment a must be trimmed, not dropped.
+    const nearEnd = deleteRange(cut, 1.79, 2.38);
+    expect(nearEnd.segments.map((s) => [s.src, s.in, s.out])).toEqual([["main", 0, 1.79], ["b", 0.58, 0.9]]);
+    expect(cutLength(nearEnd)).toBeCloseTo(2.11);
+    // End of deletion is 0.01s (< MIN) past the join at 1.8s: segment b must be trimmed, not dropped.
+    const nearStart = deleteRange(cut, 0.5, 1.81);
+    expect(nearStart.segments.map((s) => [s.src, s.in, s.out])).toEqual([["main", 0, 0.5], ["b", 0.01, 0.9]]);
+    expect(cutLength(nearStart)).toBeCloseTo(1.39);
+    // A short range (< MIN) inside one segment splits and removes only that span.
+    const shortSpan = deleteRange(cut, 0.5, 0.52);
+    expect(shortSpan.segments.map((s) => [s.src, s.in, s.out])).toEqual([["main", 0, 0.5], ["main", 0.52, 1.8], ["b", 0, 0.9]]);
+    expect(new Set(shortSpan.segments.map((s) => s.id)).size).toBe(3);
+    expect(cutLength(shortSpan)).toBeCloseTo(2.68);
+  });
+  it("returns unchanged for empty, reversed, or non-finite ranges and guards atTime/splitAt against NaN", () => {
+    const cut = wholeCut(1.8);
+    expect(deleteRange(cut, 1, 1)).toEqual(cut);
+    expect(deleteRange(cut, 1.2, 0.5)).toEqual(cut);
+    expect(deleteRange(cut, NaN, 1)).toEqual(cut);
+    expect(deleteRange(cut, 0.5, NaN)).toEqual(cut);
+    expect(deleteRange(cut, 0.5, Infinity)).toEqual(cut);
+    expect(atTime(cut, NaN)).toBeNull();
+    expect(atTime(cut, Infinity)).toBeNull();
+    expect(splitAt(cut, NaN)).toBe(cut);
+  });
   it("trim keeps a segment inside its clip and at least two frames long", () => {
     const cut = wholeCut(1.8);
     expect(trimEdge(cut, "s1", "in", -1).segments[0].in).toBe(0);
@@ -77,6 +104,10 @@ describe("editing the cut", () => {
   it("snaps trims to word edges, never into a word", () => {
     expect(snapEdge(main, 0.62, "in")).toBeCloseTo(0.6 - 0.025);
     expect(snapEdge(main, 0.5, "out")).toBeCloseTo(0.55 + 0.025);
+    // Overlapping Whisper word timestamps must not produce negative gaps that push the edge inside a word.
+    const overlap = [{ text: "one", start: 0.0, end: 0.65 }, { text: "two", start: 0.55, end: 1.0 }];
+    expect(snapEdge(overlap, 0.56, "in")).toBe(0.55);
+    expect(snapEdge(overlap, 0.64, "out")).toBe(0.65);
   });
   it("warns about an edge inside a word", () => {
     expect(clippedWords({ segments: [{ id: "a", src: "main", in: 0.4, out: 1.8 }] }, { main })[0].message).toMatch(/inside the word "two"/);
@@ -184,5 +215,20 @@ describe("snapping to the real pause", () => {
   it("warns about a join on sound, not about the clip's own start and end", () => {
     const issues = loudJoins({ segments: [{ id: "a", src: "main", in: 0, out: 0.5 }, { id: "b", src: "main", in: 0.75, out: 2 }] }, { main: levels }, { main: 2 });
     expect(issues.map((i) => i.message)).toEqual([expect.stringMatching(/^segment 1 ends on sound .*pause is at 0\.7\ds/)]);
+  });
+  it("handles IEEE-754 boundary rounding in loudJoins", () => {
+    // 0.29 * 100 === 28.999999999999996 (in should check bin 29, not 28)
+    // 0.56 * 100 === 56.00000000000001 (out should check bin 55, not 56)
+    const boundary = {
+      rate: 100,
+      quiet: -48,
+      db: Array.from({ length: 100 }, (_, i) => (i === 28 || i === 56 ? -20 : -70)),
+    };
+    const issues = loudJoins(
+      { segments: [{ id: "a", src: "main", in: 0.29, out: 0.56 }] },
+      { main: boundary },
+      { main: 1 },
+    );
+    expect(issues).toEqual([]);
   });
 });

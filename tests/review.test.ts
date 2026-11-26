@@ -69,6 +69,32 @@ describe("review items", () => {
     expect(b.hash).not.toBe(a.hash);
     expect(b2.hash).toBe(a2.hash);
   });
+  it("invalidate itemHash when palette or hook changes", () => {
+    const base = setup({ palette: "light", hook: { text: "Give agents *email*." } }).resolved();
+    const darkPalette = setup({ palette: "forest", hook: { text: "Give agents *email*." } }).resolved();
+    const changedHookText = setup({ palette: "light", hook: { text: "Give agents *mail*." } }).resolved();
+    const changedHookUntil = { ...base, hook: { text: base.hook!.text, until: base.hook!.until - 0.5 } };
+    const noHook = setup({ palette: "light" }).resolved();
+    const h = (r: Resolved) => reviewItems(r, words)[0].hash;
+    expect(h(darkPalette)).not.toBe(h(base));
+    expect(h(changedHookText)).not.toBe(h(base));
+    expect(h(changedHookUntil)).not.toBe(h(base));
+    expect(h(noHook)).not.toBe(h(base));
+  });
+  it("formats feedback timestamps near minute boundaries without 0:60.0", () => {
+    const review = {
+      ...emptyReview(),
+      notes: [
+        { id: "n1", t: 59.96, text: "minute boundary", status: "open" as const, at: "" },
+        { id: "n2", t: 119.96, text: "two minutes", status: "open" as const, at: "" },
+      ],
+    };
+    const text = formatFeedback(review, [], []);
+    expect(text).toContain("1:00.0 (59.96s)");
+    expect(text).not.toContain("0:60.0");
+    expect(text).toContain("2:00.0 (119.96s)");
+    expect(text).not.toContain("1:60.0");
+  });
 });
 
 describe("the review file", () => {

@@ -20,6 +20,18 @@ export const findPhrase = (words: Word[], phrase: string, from = 0): number => {
   return -1;
 };
 
+// Index of the next occurrence of `phrase` at or after `cursor` that is not in `used`, or -1.
+// With `cut`, retries from word 0 when nothing is left after `cursor`, still skipping `used`.
+export const findAnchor = (words: Word[], phrase: string, cursor: number, used: Set<number>, cut: boolean): number => {
+  const search = (start: number) => {
+    let i = -1;
+    for (let from = start; (i = findPhrase(words, phrase, from)) >= 0 && used.has(i); from = i + 1);
+    return i;
+  };
+  const i = search(cursor);
+  return i >= 0 || !cut ? i : search(0);
+};
+
 // How the checks name a shot.
 export const shotLabel = (s: ResolvedShot, i: number) => `shot ${i + 1} (${s.start.toFixed(2)}s "${s.anchor}")`;
 
@@ -112,21 +124,19 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
 // whose words were cut out is left out with a warning, so graphics follow the words through a re-cut.
 export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fps = 30, cut = false) => {
   const issues: Issue[] = [];
-  const shots: (ResolvedShot & { index: number })[] = [];
+  const shots: (ResolvedShot & { index: number; src?: (typeof plan.shots)[number] })[] = [];
   let cursor = 0;
   let header = plan.header;
+  const used = new Set<number>();
   const found: { s: (typeof plan.shots)[number]; i: number }[] = [];
   for (const s of plan.shots) {
-    let i = findPhrase(words, s.at, cursor);
-    if (i < 0 && cut) {
-      const used = new Set(found.map((f) => f.i));
-      for (let from = 0; (i = findPhrase(words, s.at, from)) >= 0 && used.has(i); from = i + 1);
-    }
+    const i = findAnchor(words, s.at, cursor, used, cut);
     if (i < 0) {
       if (cut) issues.push({ level: "warn", message: `"${s.at}" is no longer said in the cut, so its shot is left out` });
       else issues.push({ level: "error", message: `shot anchor not found after word ${cursor}: "${s.at}"` });
       continue;
     }
+    used.add(i);
     cursor = i + 1;
     found.push({ s, i });
   }
@@ -144,7 +154,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
       issues.push({ level: "error", message: `"${s.at}" keeps the previous visual, so it needs the same layout as a previous shot with a visual and no visual of its own` });
     // A kept shot carries the tone of the scene it continues.
     const tone = s.keep && prev ? prev.tone : s.tone;
-    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, header, ...(s.id ? { id: s.id } : {}), ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...clean(s) });
+    shots.push({ start, end: duration, layout: s.layout, visual: s.visual, sfx: s.sfx, anchor: s.at, index: i, src: s, header, ...(s.id ? { id: s.id } : {}), ...(s.keep ? { keep: true } : {}), ...(s.zoom ? { zoom: s.zoom } : {}), ...(tone ? { tone } : {}), ...(s.note ? { note: s.note } : {}), ...clean(s) });
   }
   for (let k = 0; k < shots.length - 1; k++) shots[k].end = shots[k + 1].start;
   shotIds(shots).forEach((id, k) => (shots[k].id = id));
@@ -152,7 +162,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
   // The clean style's words on screen (a hit, a title, a chip) land on their own words, searched
   // from the shot's anchor; a hit holds until its `until` words or the end of the shot.
   shots.forEach((shot) => {
-    const s = found.find((f) => f.i === shot.index)?.s;
+    const s = shot.src;
     if (!s) return;
     const at = (a: string | undefined, what: string) => {
       if (!a) return shot.start;
@@ -223,7 +233,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     const own = v.kind === "flow" ? flowIssues(v) : v.kind === "code" ? codeIssues(v) : [];
     for (const m of own) issues.push({ level: "warn", message: `${v.kind} in shot "${shot.anchor}": ${m}` });
   }
-  return { shots: shots.map(({ index, ...s }) => s), issues };
+  return { shots: shots.map(({ index, src, ...s }) => s), issues };
 };
 
 // The clean style's shot fields that need no times.
@@ -422,7 +432,7 @@ export const lintWide = (shots: ResolvedShot[], duration: number): Issue[] => {
   shots.forEach((s, i) => {
     const len = s.end - s.start;
     const label = shotLabel(s, i);
-    if (s.layout === "split" || s.layout === "scene") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
+    if (s.layout === "split" || s.layout === "scene" || s.layout === "card" || s.layout === "diagram") issues.push({ level: "error", message: `${label}: ${s.layout} is a reel layout; use side, media or over on YouTube` });
     if ((s.layout === "side" || s.layout === "half" || s.layout === "media" || s.layout === "cutaway") && !s.visual) issues.push({ level: "error", message: `${label} is ${s.layout} but has no visual` });
     if (s.layout === "over" && s.visual?.kind !== "lower" && s.visual?.kind !== "title" && s.visual?.kind !== "words")
       issues.push({ level: "error", message: `${label}: over takes words, a title or a lower third` });
@@ -572,6 +582,7 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
   const diagram: SfxEvent[] = [];
   const takesOver = (s?: ResolvedShot) => !!s && (s.layout === "diagram" || s.layout === "over" || s.layout === "card");
   const typing = (at: number, chars: number, cps: number) => {
+    if (chars <= 0 || cps <= 0) return;
     for (let n = 0; n <= chars; n += 3) ev.push({ kind: "key", t: at + n / cps, gain: 0.5, exact: true });
   };
   shots.forEach((s, i) => {
@@ -599,8 +610,9 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
       const b = codeBeats(v, s.start, times);
       const diff = isDiff(v);
       b.lines.forEach((l, n) => {
-        if (!diff) typing(l.t0, v.lines[n].text.length, Math.max(1, v.lines[n].text.length) / Math.max(0.05, l.t1 - l.t0));
-        else if (v.lines[n].diff) ev.push({ kind: "pop", t: l.t0, gain: 0.55, exact: true });
+        if (!diff) {
+          if (v.typed && v.lines[n].text.trim()) typing(l.t0, v.lines[n].text.length, v.lines[n].text.length / Math.max(0.05, l.t1 - l.t0));
+        } else if (v.lines[n].diff) ev.push({ kind: "pop", t: l.t0, gain: 0.55, exact: true });
       });
       for (const t of b.marks) ev.push({ kind: "blip", t, gain: 0.6, exact: true });
     }
@@ -646,9 +658,10 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
     if (len > 7 && s.layout !== "split" && !beatsMove) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; the cinematic references cut about every 3 s` });
     // Owain, 2026-11-13: "our reels are a tiny bit slow... a long section with black screen and text".
     if (s.layout === "card" && len > CARD_MAX) issues.push({ level: "warn", message: `${label}: a full-screen card holds ${len.toFixed(1)}s; cut back to the split within ${CARD_MAX} s` });
-    const moments = v?.kind === "custom" ? v.times : v?.kind === "flow" ? flowMoments(v, s.start, v.times) : v?.kind === "code" ? codeMoments(v, s.start, v.times) : undefined;
+    const moments = !s.keep ? (v?.kind === "custom" ? v.times : v?.kind === "flow" ? flowMoments(v, s.start, v.times) : v?.kind === "code" ? codeMoments(v, s.start, v.times) : undefined) : undefined;
     if (moments?.length && s.layout !== "card") {
-      const beats = [s.start, ...moments.filter((t) => t < s.end), s.end];
+      const end = shots[lastKept(shots, i)].end;
+      const beats = [s.start, ...moments.filter((t) => t > s.start && t < end), end];
       const hold = Math.max(...beats.slice(1).map((t, n) => t - beats[n]));
       if (hold > 2) issues.push({ level: "warn", message: `${label}: the diagram holds still for ${hold.toFixed(1)}s; land a part or cut away within 2 s` });
     }
