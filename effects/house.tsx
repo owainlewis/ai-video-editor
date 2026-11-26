@@ -10,7 +10,7 @@ import React from "react";
 import { interpolate } from "remotion";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
 import { easeInOut, FAST, lerp, MOVE, prog, runs } from "./motion";
-import { pal, type Tone, type V } from "./soft";
+import { type Tone, usePal, type V } from "./soft";
 import { t } from "./theme";
 
 type Props<K extends ResolvedVisual["kind"]> = { shot: ResolvedShot; time: number; w: number; h: number; v: V<K> };
@@ -43,7 +43,7 @@ const Line: React.FC<{ text: string; time: number; at: number; accent: string; l
 const fit = (lines: string[], width: number, cap: number) => Math.min(cap, width / (Math.max(...lines.map((l) => plain(l).length), 4) * 0.52));
 
 export const WordsVisual: React.FC<Props<"words"> & { align?: "left" | "right" | "center"; ink?: string }> = ({ shot, time, w, h, v, align = "left", ink }) => {
-  const c = pal(toneOf(shot));
+  const c = usePal(toneOf(shot));
   const fs = fit(v.lines.map((l) => l.text), w * 0.92, (h * 0.8) / (v.lines.length * 1.05));
   const out = leave(time, shot);
   return (
@@ -63,18 +63,19 @@ export const WordsVisual: React.FC<Props<"words"> & { align?: "left" | "right" |
 
 // `words` over the 16:9 picture: in the open side of the frame, away from the face.
 export const WordsOver: React.FC<{ shot: ResolvedShot; time: number; v: V<"words">; face: number; width: number; height: number }> = ({ shot, time, v, face, width, height }) => {
+  const dark = usePal("dark");
   const side = v.side === "auto" || !v.side ? (face < 0.5 ? "right" : "left") : v.side;
   const boxW = side === "center" ? width * 0.8 : width * 0.44;
   const x = side === "left" ? width * 0.07 : side === "right" ? width - width * 0.07 - boxW : (width - boxW) / 2;
   return (
     <div style={{ position: "absolute", left: x, top: height * 0.15, width: boxW, height: height * 0.7 }}>
-      <WordsVisual shot={shot} time={time} w={boxW} h={height * 0.7} v={v} align={side === "center" ? "center" : side} ink={pal("dark").ink} />
+      <WordsVisual shot={shot} time={time} w={boxW} h={height * 0.7} v={v} align={side === "center" ? "center" : side} ink={dark.ink} />
     </div>
   );
 };
 
 export const FocusVisual: React.FC<Props<"focus">> = ({ shot, time, w, h, v }) => {
-  const c = pal(toneOf(shot));
+  const c = usePal(toneOf(shot));
   const pad = w * 0.07;
   // Each item as big as its own words allow, so a short one ("Skills") lands huge. The column
   // they move into is one size for all, and never under 30 px.
@@ -149,7 +150,7 @@ export const mapLayout = (v: V<"map">) => {
 };
 
 export const MapVisual: React.FC<Props<"map">> = ({ shot, time, w, h, v }) => {
-  const c = pal(toneOf(shot));
+  const c = usePal(toneOf(shot));
   // A long label takes two lines, so a row of nodes keeps its type big.
   const lines = v.nodes.map((n) => wrap(n.label));
   const widest = Math.max(...lines.flat().map((l) => l.length), 4);
@@ -259,7 +260,7 @@ export const MapVisual: React.FC<Props<"map">> = ({ shot, time, w, h, v }) => {
 };
 
 export const ShiftVisual: React.FC<Props<"shift">> = ({ shot, time, w, h, v }) => {
-  const c = pal(toneOf(shot));
+  const c = usePal(toneOf(shot));
   const pad = w * 0.08;
   const big = fit([v.from.text, v.to.text], w - pad * 2, h * 0.16);
   const a = when(v, 0, shot);

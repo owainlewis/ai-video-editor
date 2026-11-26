@@ -2,13 +2,13 @@ import { FocusVisual, MapVisual, ShiftVisual, WordsVisual } from "./house";
 import React from "react";
 import { Video } from "@remotion/media";
 import { UiVisual } from "./ui";
-import { Img, interpolate } from "remotion";
+import { Img, interpolate, useVideoConfig } from "remotion";
 import { cameraProgress, frameRect, rectOf } from "./camera";
 import { zoomAt } from "../engine/resolve";
 import { clamp, ease, t } from "./theme";
 import { style } from "./style";
 import { markColor } from "./motion";
-import { FunnelVisual, GridVisual, isBlack, isGraphite, pal, prog, SoftAccented, src, TypeVisual, type Tone } from "./soft";
+import { FunnelVisual, GridVisual, pal, prog, SoftAccented, type SoftTheme, src, TypeVisual, type Tone, usePal, useSoftTheme } from "./soft";
 import { ChartVisual, ConstraintVisual, PipelineVisual } from "./elements";
 import { look } from "./style";
 import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
@@ -25,8 +25,8 @@ type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> 
 
 // Colours for a designed graphic in the shot's tone. On paper the hairline and shadow are the split
 // canvas's own (as they always were); on graphite everything comes from the dark tone.
-const surface = (tone?: "light" | "dark") => {
-  const c = pal(tone);
+const useSurface = (tone?: "light" | "dark") => {
+  const c = usePal(tone);
   return { ...c, canvas: c.bg, line: tone === "dark" ? c.line : t.line, shadow: tone === "dark" ? c.shadow : t.shadow };
 };
 
@@ -113,9 +113,8 @@ const MattedImage: React.FC<Props & { v: V<"image"> }> = (props) => {
 const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h, v }) => {
   const [iw, ih] = v.size ?? [1600, 1000];
   const chrome = v.frame === "browser" ? chromeHeight(w) : 0;
-  const pad = v.frame === "none" ? 0 : 0;
-  const vw = w - pad * 2;
-  const vh = h - chrome - pad * 2;
+  const vw = w;
+  const vh = h - chrome;
   // Default camera: the top of the image at full width, easing slightly closer.
   const topRect: [number, number, number, number] = [0, 0, 1, Math.min(1, (vh / vw) * (iw / ih))];
   const from = rectOf(v.from) ?? topRect;
@@ -127,7 +126,7 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
   // The rect must stay visible; the camera fills the rest of the panel with the page around it.
   const { k, left, top } = frameRect(rect, iw, ih, vw, vh);
   const scene = shot.layout === "scene";
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
 
   return (
     <div
@@ -208,6 +207,8 @@ const ImageCard: React.FC<Props & { v: V<"image"> }> = ({ slug, shot, time, w, h
 // B-roll. In a panel it sits in a rounded card; as a cutaway it fills the frame edge to edge.
 // Either way it gets a slow push-in on top of its own motion, and the speaker's colour grade.
 const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w, h, v, filter, bleed }) => {
+  const { fps } = useVideoConfig();
+  const c = usePal(shot.tone);
   // A synced screen recording: locked, so the page stays sharp and still. It fits the width and hangs
   // from the top, so the page's header always shows and any extra height runs off the bottom.
   if (v.sync) {
@@ -217,21 +218,20 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
     return (
       <div style={{ width: w, height: h, overflow: "hidden" }}>
         <div style={{ width: w, height: full, transformOrigin: "0 0", transform: `translate(${z.tx * w}px, ${z.ty * full}px) scale(${z.s})` }}>
-          <Video src={src(slug, v.src)} muted trimBefore={Math.round(shot.start * 30)} objectFit="cover" style={{ width: w, height: full }} />
+          <Video src={src(slug, v.src)} muted trimBefore={Math.round(shot.start * fps)} objectFit="cover" style={{ width: w, height: full }} />
         </div>
       </div>
     );
   }
   // On a scene the clip sits in a card at its own shape with a locked camera; the clip is the motion.
   if (shot.layout === "scene") {
-    const c = pal(shot.tone);
     const [vw0, vh0] = v.size ?? [16, 9];
     const cw = Math.min(w, (h * vw0) / vh0);
     const ch = (cw * vh0) / vw0;
     return (
       <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: cw, height: ch, overflow: "hidden", borderRadius: 22, boxShadow: c.shadow, background: c.card }}>
-          <Video src={src(slug, v.src)} muted loop={v.loop} playbackRate={v.rate} trimBefore={Math.round(v.start * 30)} objectFit="cover" style={{ width: "100%", height: "100%" }} />
+          <Video src={src(slug, v.src)} muted loop={v.loop} playbackRate={v.rate} trimBefore={Math.round(v.start * fps)} objectFit="cover" style={{ width: "100%", height: "100%" }} />
         </div>
       </div>
     );
@@ -245,7 +245,7 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
         muted
         loop={v.loop}
         playbackRate={v.rate}
-        trimBefore={Math.round(v.start * 30)}
+        trimBefore={Math.round(v.start * fps)}
         objectFit="cover"
         style={{ width: "100%", height: "100%", scale: String(1.02 + 0.05 * p), filter }}
       />
@@ -255,7 +255,7 @@ const VideoVisual: React.FC<Props & { v: V<"video"> }> = ({ slug, shot, time, w,
 
 // Official logos on white tiles. Each one lands on its spoken word.
 const LogosVisual: React.FC<Props & { v: V<"logos"> }> = ({ slug, shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const n = v.items.length;
   // Tiles grow with the panel so logos never float small in empty space.
   const tile = n === 1 ? Math.min(460, h * 0.55) : n === 2 ? Math.min(400, h * 0.42, (w - 48) / 2) : n === 3 ? Math.min(290, (w - 96) / 3) : 210;
@@ -307,8 +307,8 @@ const markIndex = (words: string[], i: number) => {
 const CineTitle: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
   const words = v.text.split(/\s+/);
   const lines = v.text.replace(/\*/g, "").split("//").map((l) => l.trim().length);
-  const size = Math.min(62, Math.floor((w - 80) / (Math.max(...lines) * 0.47)));
-  const c = pal(shot.tone);
+  const size = Math.min(62, Math.floor((w - 80) / (Math.max(1, ...lines) * 0.47)));
+  const c = usePal(shot.tone);
   let k = 0;
   return (
     <div style={{ width: w, height: h, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -316,7 +316,9 @@ const CineTitle: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v })
         {words.map((word, i) => {
           if (word === "//") return <span key={i} style={{ flexBasis: "100%", height: 0 }} />;
           const accent = word.startsWith("*");
-          const p = v.words ? prog(time, v.words[i] - 0.05, 0.55) : prog(time, shot.start + 0.3 + 0.09 * k++, 0.7);
+          const idx = k++;
+          const at = v.words?.[i];
+          const p = at !== undefined ? prog(time, at - 0.05, 0.55) : prog(time, shot.start + 0.3 + 0.09 * idx, 0.7);
           return (
             <span key={i} style={{ display: "inline-block", fontFamily: t.serif, fontStyle: accent ? "italic" : "normal", fontWeight: 400, fontSize: size, lineHeight: 1.15, letterSpacing: -size * 0.005, color: c.ink, opacity: p, filter: `blur(${(1 - p) * 8}px)`, translate: `0 ${(1 - p) * size * 0.12}px` }}>
               {word.replace(/\*/g, "")}
@@ -329,14 +331,15 @@ const CineTitle: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v })
 };
 
 const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v }) => {
+  const theme = useSoftTheme();
+  const c = pal(shot.tone, theme);
   if (v.cine) return <CineTitle shot={shot} time={time} w={w} h={h} v={v} slug="" />;
   const words = v.text.split(/\s+/);
   const len = v.text.replace(/\*/g, "").length;
   // "//" in the text is a line break the plan chose; the type is then sized to the longest line.
   const lines = v.text.replace(/\*/g, "").split("//").map((l) => l.trim().length);
-  const size = lines.length > 1 ? Math.min(132, Math.floor((w - 40) / (Math.max(...lines) * 0.56))) : len > 40 ? 78 : len > 34 ? 92 : len > 20 ? 112 : 132;
+  const size = lines.length > 1 ? Math.min(132, Math.floor((w - 40) / (Math.max(1, ...lines) * 0.56))) : len > 40 ? 78 : len > 34 ? 92 : len > 20 ? 112 : 132;
   let k = 0;
-  const c = pal(shot.tone);
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 36 }}>
       {v.kicker && (
@@ -348,14 +351,17 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
           // Kinetic type is all Helvetica: no serif accent (Owain, 2026-10-25: "keep it all sans serif").
           // Its *marked* words get the highlighter instead, sweeping word by word after the line lands.
           // On black there is no highlighter: marked words take the Signifier italic accent instead.
-          const accent = word.startsWith("*") && (!v.words || isBlack());
-          const marked = !!v.words && !isBlack() && markedAt(words, i);
+          const accent = word.startsWith("*") && (!v.words || theme.black);
+          const marked = !!v.words && !theme.black && markedAt(words, i);
           const m = marked ? markIndex(words, i) : { n: 0, of: 1 };
+          const idx = k++;
+          const at = v.words?.[i];
+          const wordAt = at ?? shot.start + 0.06 * idx;
           // Each marked word is swept as it is said, so the beat lands even when the card cuts away
           // right after the line.
-          const sweep = marked && v.words ? prog(time, v.words[i] + 0.1, 0.3) : 0;
+          const sweep = marked && v.words ? prog(time, wordAt + 0.1, 0.3) : 0;
           // Synced: each word lands as it is said (kinetic type, after the product promos Owain sent).
-          const p = v.words ? prog(time, v.words[i], 0.3) : prog(time, shot.start + 0.06 * k++, 0.4);
+          const p = at !== undefined ? prog(time, at, 0.3) : prog(time, wordAt, 0.4);
           const bare = word.replace(/\*/g, "");
           const stop = v.words && /[.!?]$/.test(bare);
           return (
@@ -406,7 +412,7 @@ const TitleVisual: React.FC<Props & { v: V<"title"> }> = ({ shot, time, w, h, v 
 
 // Rows that arrive as each item is spoken; the newest is active, earlier ones step back.
 const ListVisual: React.FC<Props & { v: V<"list"> }> = ({ shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const n = v.items.length;
   const times = v.times ?? v.items.map((_, i) => shot.start + i * 0.12);
   const current = v.active ?? Math.max(0, times.filter((x) => time >= x).length - 1);
@@ -454,10 +460,10 @@ const ListVisual: React.FC<Props & { v: V<"list"> }> = ({ shot, time, w, h, v })
 
 // A process: nodes join by a line that draws as each step is spoken.
 const StepsVisual: React.FC<Props & { v: V<"steps"> }> = ({ shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const n = v.items.length;
   const times = v.times ?? v.items.map((_, i) => shot.start + i * 0.3);
-  const gap = Math.min(250, (h - (v.title ? 140 : 0)) / n);
+  const gap = Math.min(250, (h - (v.title ? 140 : 0)) / Math.max(1, n));
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", justifyContent: "center", paddingLeft: 30 }}>
       {v.title && (
@@ -467,8 +473,11 @@ const StepsVisual: React.FC<Props & { v: V<"steps"> }> = ({ shot, time, w, h, v 
       )}
       <div style={{ position: "relative", height: gap * n }}>
         {v.items.map((it, i) => {
-          const p = prog(time, times[i], 0.45);
-          const line = i < n - 1 ? interpolate(time, [times[i] + 0.1, times[i + 1] ?? times[i] + 0.6], [0, 1], { ...clamp, easing: ease }) : 0;
+          const t0 = times[i] ?? shot.start + i * 0.3;
+          const p = prog(time, t0, 0.45);
+          const t1 = times[i + 1] ?? t0 + 0.6;
+          const lineFrom = t0 + 0.1;
+          const line = i < n - 1 ? (t1 > lineFrom ? interpolate(time, [lineFrom, t1], [0, 1], { ...clamp, easing: ease }) : time >= t1 ? 1 : 0) : 0;
           const dot = 72;
           return (
             <React.Fragment key={i}>
@@ -495,7 +504,7 @@ const StepsVisual: React.FC<Props & { v: V<"steps"> }> = ({ shot, time, w, h, v 
 // sides of one idea, neither wrong (documentation vs database; humans vs AI): both set alike in
 // Helvetica, no strike (Owain, 2026-10-25).
 const CompareVisual: React.FC<Props & { v: V<"compare"> }> = ({ shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const rightAt = v.times?.[0] ?? shot.start + 0.6;
   const pl = prog(time, shot.start, 0.45);
   const pr = prog(time, rightAt, 0.5);
@@ -517,7 +526,7 @@ const CompareVisual: React.FC<Props & { v: V<"compare"> }> = ({ shot, time, w, h
 };
 
 const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const m = v.value.match(/^([^\d]*)([\d,.]+)(.*)$/);
   const p = prog(time, shot.start, 0.9);
   let shown = v.value;
@@ -554,7 +563,7 @@ const StatVisual: React.FC<Props & { v: V<"stat"> }> = ({ shot, time, w, h, v })
 
 // The end card: what to comment, what they get, and the resource itself when there is one.
 const CtaVisual: React.FC<Props & { v: V<"cta"> }> = ({ slug, shot, time, w, h, v }) => {
-  const c = surface(shot.tone);
+  const c = useSurface(shot.tone);
   const a = prog(time, shot.start, 0.4);
   const b = prog(time, shot.start + 0.15, 0.5);
   return (
@@ -602,7 +611,8 @@ const ChapterHit: React.FC<Props & { v: V<"chapter"> }> = (p) => {
 // timeline ... moving on a journey from 1 to 6"). With `here` 0 (the intro), the stops pop in one
 // after another from `start`, as the whole route is named.
 export const Journey: React.FC<{ tone?: Tone; n: number; here: number; time: number; start: number; width: number }> = ({ tone, n, here, time, start, width }) => {
-  const c = pal(tone);
+  const c = usePal(tone);
+  if (n <= 1) return null;
   const gap = width / (n - 1);
   const x = (i: number) => i * gap;
   const intro = here === 0;
@@ -651,7 +661,7 @@ export const Journey: React.FC<{ tone?: Tone; n: number; here: number; time: num
 // The route of a video at its promise ("the six levels of ..."): a title over the journey track,
 // whose stops pop in one after another on the anchor word.
 const JourneyVisual: React.FC<Props & { v: V<"journey"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const at = v.times?.[0] ?? shot.start;
   return (
     <div style={{ width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 70 }}>
@@ -666,7 +676,7 @@ const JourneyVisual: React.FC<Props & { v: V<"journey"> }> = ({ shot, time, w, h
 // Focus stack (Ivory): a huge numeral held soft and blurred behind one sharp word, both drifting
 // slowly at different speeds, so the frame has depth without any light effects.
 const ChapterStack: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const back = prog(time, shot.start, 1.1);
   const word = prog(time, shot.start + 0.25, 0.7);
   const rule = prog(time, shot.start + 0.15, 0.6);
@@ -726,7 +736,7 @@ const ChapterGlow: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h, 
   const glow = prog(time, shot.start, 0.9);
   const num = prog(time, shot.start + 0.05, 0.55);
   const label = prog(time, shot.start + 0.3, 0.5);
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const d = Math.min(w * 1.05, h * 0.95);
   return (
     <div style={{ position: "relative", width: w, height: h, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 30 }}>
@@ -771,19 +781,22 @@ const ChapterGlow: React.FC<Props & { v: V<"chapter"> }> = ({ shot, time, w, h, 
 // The kit's laid-out kinds (effects/clean/code.tsx, flow.tsx) draw in the reel palette's colours; off
 // a clean reel they take the shot's tone: the light palette, or on dark the video's own dark. On
 // YouTube that is Graphite or Black, never the reels' forest green (Owain: YouTube is "never dark green").
-const laidPalette = (tone?: Tone): Palette => {
+const laidPalette = (tone: Tone | undefined, theme: SoftTheme): Palette => {
   if (tone !== "dark") return PALETTES.light;
-  if (!isGraphite()) return PALETTES.forest;
-  const c = pal("dark");
+  if (!theme.graphite) return PALETTES.forest;
+  const c = pal("dark", theme);
   return { name: "forest", stage: c.bg, diagram: c.card, card: c.bg, text: c.ink, line: c.ink, accent: c.accent, dim: c.muted, faint: c.faint, node: { fill: c.card, sub: c.muted, accentFill: c.chip } };
 };
-const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> }> = ({ slug, shot, time, w, h, v }) => (
-  <PaletteContext.Provider value={laidPalette(shot.tone)}>
-    <div style={{ position: "relative", width: w, height: h }}>
-      {v.kind === "code" ? <CodeView v={v} time={time} start={shot.start} w={w} h={h} /> : <FlowView v={v} time={time} start={shot.start} w={w} h={h} slug={slug} />}
-    </div>
-  </PaletteContext.Provider>
-);
+const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> }> = ({ slug, shot, time, w, h, v }) => {
+  const theme = useSoftTheme();
+  return (
+    <PaletteContext.Provider value={laidPalette(shot.tone, theme)}>
+      <div style={{ position: "relative", width: w, height: h }}>
+        {v.kind === "code" ? <CodeView v={v} time={time} start={shot.start} w={w} h={h} /> : <FlowView v={v} time={time} start={shot.start} w={w} h={h} slug={slug} />}
+      </div>
+    </PaletteContext.Provider>
+  );
+};
 
 export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
   const v = p.v;

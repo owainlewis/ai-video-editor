@@ -17,22 +17,25 @@ export type Pal = ToneTokens;
 // Both tones come from the active style's tokens (src/style.ts).
 
 export { ACCENT };
-// On YouTube, dark is Graphite; reels keep the style's own dark (Forest). The composition sets it
-// once per render, before anything draws.
-let graphite = false;
-// A video with the black theme draws its dark graphics in pure black instead of Graphite.
-let black = false;
-// Dark cards in Black's colours, with the video's own marks and moves (a dark card in a light video).
-let neutral = false;
-const NEUTRAL = { ...BLACK, accent: GRAPHITE.accent };
-export const darkIsGraphite = (on: boolean, isBlack = false, neutralDark = isBlack) => {
-  graphite = on;
-  black = on && isBlack;
-  neutral = on && neutralDark;
+// On YouTube, dark is Graphite (or pure Black / neutral Black); reels keep the style's own dark
+// (Forest). Provided per composition tree via React context so YouTube and Reel trees never leak.
+export type SoftTheme = {
+  graphite: boolean;
+  black: boolean;
+  neutral: boolean;
 };
-export const isBlack = () => black;
-export const isGraphite = () => graphite;
-export const pal = (tone: Tone = "light"): Pal => (tone === "dark" ? (black ? BLACK : neutral ? NEUTRAL : graphite ? GRAPHITE : style.color.dark) : style.color.light);
+export const DEFAULT_SOFT_THEME: SoftTheme = { graphite: false, black: false, neutral: false };
+export const softTheme = (graphite: boolean, isBlack = false, neutralDark = isBlack): SoftTheme => ({
+  graphite,
+  black: graphite && isBlack,
+  neutral: graphite && neutralDark,
+});
+export const SoftThemeContext = React.createContext<SoftTheme>(DEFAULT_SOFT_THEME);
+export const useSoftTheme = (): SoftTheme => React.useContext(SoftThemeContext);
+const NEUTRAL = { ...BLACK, accent: GRAPHITE.accent };
+export const pal = (tone: Tone = "light", theme: SoftTheme = DEFAULT_SOFT_THEME): Pal =>
+  tone === "dark" ? (theme.black ? BLACK : theme.neutral ? NEUTRAL : theme.graphite ? GRAPHITE : style.color.dark) : style.color.light;
+export const usePal = (tone: Tone = "light"): Pal => pal(tone, useSoftTheme());
 
 export type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number };
 export type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[] };
@@ -84,9 +87,10 @@ export const Blueprint: React.FC<{ tone: Tone; width?: number; height?: number; 
 };
 
 export const SceneCanvas: React.FC<{ tone: Tone; time: number; width?: number; height?: number }> = ({ tone, time, width, height }) => {
-  const c = pal(tone);
+  const theme = useSoftTheme();
+  const c = pal(tone, theme);
   // Black is plain: no grid, only a little grain.
-  if (black && tone === "dark")
+  if (theme.black && tone === "dark")
     return (
       <AbsoluteFill data-qc="canvas" style={{ background: c.bg }}>
         <AbsoluteFill style={{ opacity: 0.06, mixBlendMode: "screen" }}>
@@ -203,7 +207,7 @@ const gridGeom = (v: V<"grid">, w: number, h: number) => {
 // A library that fills in with its real thumbnails. Tiles arrive in a wave from the top left, the
 // count rolls up, and each group lights its tiles on its word while the rest step back.
 export const GridVisual: React.FC<Props & { v: V<"grid"> }> = ({ slug, shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const times = v.times ?? [shot.start];
   const at = v.at ? times[0] : shot.start;
   const groupTimes = v.groups.map((_, i) => times[1 + i] ?? shot.start + 0.3 + i * 0.5);
@@ -315,7 +319,7 @@ export const funnelLayout = (v: ResolvedVisual, w: number, h: number) => (v.kind
 // Many sources into one result. Chips of plain words land, lines draw from each into the result
 // card, dots travel down them, and the card's rows land on their words. No items: the card alone.
 export const FunnelVisual: React.FC<Props & { v: V<"funnel"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const g = funnelGeom(v, w, h);
   const times = v.times ?? [];
   const itemT = v.items.map((_, i) => times[i] ?? shot.start + i * 0.1);
@@ -403,7 +407,7 @@ const typeGeom = (v: V<"type">, w: number, h: number) => {
 // Kinetic typing. The text types itself huge across the frame, then on `settle` shrinks toward a
 // plain input and dissolves as the same words resolve inside it; pasted chips pop in after.
 export const TypeVisual: React.FC<Props & { v: V<"type"> }> = ({ shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const times = v.times ?? [];
   const at = v.at ? times[0] : shot.start + 0.1;
   const cps = 16;

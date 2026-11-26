@@ -1,9 +1,10 @@
 import React from "react";
 import { Video } from "@remotion/media";
 import { AbsoluteFill, getRemotionEnvironment, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { shotAt } from "./canvas";
 import { FrameVisual, isFrame } from "./frame";
 import { easeInOut, lerp, MOVE, prog } from "./motion";
-import { darkIsGraphite, pal, SceneCanvas, type Tone } from "./soft";
+import { pal, SceneCanvas, softTheme, SoftThemeContext, type Tone, usePal } from "./soft";
 import { clamp, ease, gradeFilter, t } from "./theme";
 import { Accented, VisualView } from "./Visuals";
 import { WordsOver } from "./house";
@@ -96,7 +97,7 @@ const reveal = (time: number, at: number, dur = 0.6) => interpolate(time, [at, a
 // that draws first. A card, not bare type, because Owain's videos are mostly screen shares on white
 // pages, where light type with a shadow disappears (2026-10-24).
 const Lower: React.FC<{ title: string; sub?: string; shot: ResolvedShot; time: number }> = ({ title, sub, shot, time }) => {
-  const c = pal("light");
+  const c = usePal("light");
   const card = reveal(time, shot.start, 0.5);
   const rule = reveal(time, shot.start + 0.1, 0.5);
   const a = reveal(time, shot.start + 0.2);
@@ -180,11 +181,11 @@ const HalfStage: React.FC<{ r: Resolved; k: number; children: React.ReactNode }>
 export const Wide: React.FC<Resolved> = (r) => {
   const black = r.theme === "black";
   // Dark cards are neutral Black unless the whole video is the old Graphite theme (Owain, 2026-11-09).
-  darkIsGraphite(true, black, r.theme !== "dark");
+  const theme = softTheme(true, black, r.theme !== "dark");
   const frame = useCurrentFrame();
   const time = frame / r.fps;
-  const index = Math.max(0, r.shots.findIndex((s) => time >= s.start && time < s.end));
-  const shot = r.shots[index] ?? r.shots[r.shots.length - 1];
+  const { index, shot } = shotAt(r.shots, time);
+  if (!shot) return <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }} />;
   // Paper by default: the shared visuals are drawn for it. "dark" suits the soft tech visuals.
   const tone: Tone = shot.tone ?? "light";
   const onCanvas = shot.layout === "side" || shot.layout === "media";
@@ -193,6 +194,7 @@ export const Wide: React.FC<Resolved> = (r) => {
   const dim = titled ? interpolate(time, [shot.start, shot.start + 0.6, shot.end - 0.5, shot.end], [1, 0.62, 0.62, 1], clamp) : 1;
 
   return (
+    <SoftThemeContext.Provider value={theme}>
     <AbsoluteFill style={{ background: r.alpha ? "transparent" : "#0E0E0D" }}>
       {black && !r.alpha && designed(shot) && <Backdrop r={r} shots={r.shots} index={index} time={time} />}
       {black && shot.layout === "media" && shot.visual && solid(shot) && (
@@ -233,7 +235,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           const box = half ? HALF : float ? FLOAT_IN : MEDIA;
           const sc = Math.min(box.w / DESIGN_W, box.h / 520);
           const inner = (
-            <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, color: pal(half ? "light" : tone).ink }}>
+            <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, color: pal(half ? "light" : tone, theme).ink }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: box.w / sc, height: box.h / sc, transform: `scale(${sc})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <VisualView slug={r.slug} shot={s} time={time} w={box.w / sc} h={box.h / sc} v={visual} />
               </div>
@@ -265,7 +267,7 @@ export const Wide: React.FC<Resolved> = (r) => {
         const vw = area.w / k, vh = area.h / k;
         return (
           <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
-            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone).ink, opacity: leaving, filter: `blur(${(1 - leaving) * 8}px)` }}>
+            <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone, theme).ink, opacity: leaving, filter: `blur(${(1 - leaving) * 8}px)` }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: vw, height: vh, transform: `scale(${k})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} />
               </div>
@@ -280,5 +282,6 @@ export const Wide: React.FC<Resolved> = (r) => {
       {r.captions && <Captions chunk={r.chunks.find((c) => time >= c.start && time < c.end)} />}
       <Soundtrack r={r} />
     </AbsoluteFill>
+    </SoftThemeContext.Provider>
   );
 };

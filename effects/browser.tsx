@@ -1,7 +1,7 @@
 import React from "react";
 import { Img, interpolate } from "remotion";
 import { frameRect } from "./camera";
-import { pal, src, type Tone } from "./soft";
+import { src, type Tone, usePal } from "./soft";
 import { style } from "./style";
 import { clamp, ease } from "./theme";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
@@ -36,7 +36,7 @@ export const splitUrl = (url: string) => {
 };
 
 export const BrowserChrome: React.FC<{ slug: string; w: number; h?: number; tone?: Tone; url?: string; title?: string; icon?: string }> = ({ slug, w, h = chromeHeight(w), tone = "light", url, title, icon }) => {
-  const c = pal(tone);
+  const c = usePal(tone);
   const k = style.color.window[tone];
   const field = Math.round(h * 0.6);
   const font = chromeFont(h);
@@ -97,7 +97,7 @@ const Page: React.FC<{ slug: string; it: WinItem; w: number; h: number }> = ({ s
 };
 
 export const WindowsVisual: React.FC<WinProps & { v: WV }> = ({ slug, shot, time, w, h, v }) => {
-  const c = pal(shot.tone);
+  const c = usePal(shot.tone);
   const items = v.items as WinItem[];
   const boxes = windowsGeom(items.length, w, h);
   const times = items.map((_, i) => v.times?.[i] ?? shot.start + 0.2 + i * 0.5);
