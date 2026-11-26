@@ -179,7 +179,7 @@ export function resolveProject(projects: string, slug: string, exportCut?: { vid
   for (const s of shots) {
     const v = s.visual;
     if (s.layout === "cutaway" && v?.kind !== "video") issues.push({ level: "error", message: `cutaway at "${s.anchor}" needs a video visual` });
-    const srcs = !v ? [] : v.kind === "image" || v.kind === "video" ? [v.src] : v.kind === "logos" || v.kind === "logowall" || v.kind === "windows" ? v.items.map((i) => i.src) : v.kind === "cta" && v.src ? [v.src] : [];
+    const srcs = !v ? [] : v.kind === "image" || v.kind === "video" ? [v.src] : v.kind === "logos" || v.kind === "logowall" || v.kind === "windows" ? v.items.map((i) => i.src) : v.kind === "cta" && v.src ? [v.src] : v.kind === "gallery" || v.kind === "float" ? v.items.map((i) => i.src) : [];
     // The style's cards are sized for their slots' max lengths.
     if (v && !s.keep) for (const m of slotIssues(v)) issues.push({ level: "warn", message: `"${s.anchor}": ${m}` });
     for (const src of srcs) {

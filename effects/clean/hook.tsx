@@ -1,6 +1,6 @@
 // The clean style's text hook (Owain, 2026-11-11; geometry in engine/resolve.ts, HOOK): one headline
 // at the top of the frame from the first frame, set as written, with its one *marked* phrase set apart
-// by colour (Helvetica only, Owain 2026-11-13). It cuts in and out with no fade. On a split it sits on the top of the panel,
+// by tone, grey against black (Helvetica only, Owain 2026-11-13; neutral 2026-11-26). It cuts in and out with no fade. On a split it sits on the top of the panel,
 // which starts again below it; over the speaker it sits in the top third on a soft scrim, its type
 // sized to keep two lines above his brow.
 import React from "react";
@@ -8,7 +8,9 @@ import { HOOK, HOOK_BAND, hookParts } from "../../engine/resolve";
 import type { Resolved, ResolvedShot } from "../../engine/schema";
 import { faceRect } from "../Speaker";
 import { PALETTES, W } from "./kit";
-import { display, GREEN, WHITE } from "./text";
+import { display, INK, WHITE } from "./text";
+
+export const HOOK_TONE = { light: { words: "#686B67", phrase: INK }, dark: { words: "rgba(255,255,255,0.68)", phrase: WHITE } };
 
 // A shot the hook is on screen in. A split among them keeps its panel below the hook's band for the
 // whole shot, so nothing jumps when the hook cuts out.
@@ -21,12 +23,12 @@ export const Hook: React.FC<{ r: Resolved; shot: ResolvedShot; time: number; fac
   if (!r.hook || time >= r.hook.until) return null;
   const footage = shot.layout === "full" || shot.layout === "over" || shot.layout === "cutaway";
   const paper = shot.layout === "card" && shot.bg === "paper";
-  // Sage is too light on paper; there the phrase is set apart by its face alone. On the stage the hook
-  // takes the palette; over footage it is white.
+  // Neutral, not green (Owain, 2026-11-26: "I don't like the green colors on the visual hooks... lean
+  // more into plainer black or white"). The marked phrase is set apart by tone alone: on a light ground
+  // the words are a mid grey and the phrase near-black; on a dark one, soft white and full white.
   const pal = PALETTES[r.palette ?? "light"];
-  // Dark ground (footage, a black card, the forest stage): white with sage. Light stage: the palette.
   const dark = footage || (shot.layout === "card" && !paper) || pal.name === "forest";
-  const [color, accent] = paper ? [GREEN, GREEN] : dark ? [WHITE, PALETTES.forest.accent] : [pal.text, pal.accent];
+  const [color, accent] = dark ? [HOOK_TONE.dark.words, HOOK_TONE.dark.phrase] : [HOOK_TONE.light.words, HOOK_TONE.light.phrase];
   const head = shot.layout === "full" && !shot.picture && !faceless ? faceRect({ ...r, split: "half" }, shot, time) : undefined;
   const face = head && { left: head.left, top: head.top + head.height * BROW, width: head.width, height: head.height * (1 - BROW) };
   const room = face ? face.top - 24 - HOOK.top : Infinity;
@@ -52,15 +54,12 @@ export const Hook: React.FC<{ r: Resolved; shot: ResolvedShot; time: number; fac
           ...(footage ? { textShadow: "0 2px 22px rgba(0,0,0,0.55)" } : {}),
         }}
       >
-        {hookParts(r.hook.text).map((p, i) =>
-          i % 2 ? (
-            <span key={i} style={{ color: accent }}>
-              {p}
-            </span>
-          ) : (
-            p
-          ),
-        )}
+        {hookParts(r.hook.text).map((p, i, all) => {
+          // Punctuation straight after the phrase belongs to it: "manager." ends in black, not grey.
+          const tail = (x: string) => /^[.,!?:;]+/.exec(x)?.[0] ?? "";
+          if (i % 2) return <span key={i} style={{ color: accent }}>{p + tail(all[i + 1] ?? "")}</span>;
+          return i > 0 ? p.slice(tail(p).length) : p;
+        })}
       </div>
     </>
   );

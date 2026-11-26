@@ -5,16 +5,18 @@
 import React, { useMemo } from "react";
 import { Img, staticFile } from "remotion";
 import type { ResolvedVisual } from "../../engine/schema";
-import { accentOf, ARROW_DRAW, FLOW, flowBeats, isImageIcon, layoutFlow, TRACK, type FlowLayout } from "../../engine/flow";
+import { accentOf, ARROW_DRAW, cameraAt, cameraKeys, FLOW, flowBeats, isImageIcon, layoutFlow, TRACK, type FlowLayout } from "../../engine/flow";
 import { k, move, type Palette, SANS, usePalette } from "./kit";
 
 type FlowV = Extract<ResolvedVisual, { kind: "flow" }>;
 
-// A card's colours on each stage: white cards on the light stage, deep cards on forest.
+// A card's colours on each stage. Light (2026-11-26, Owain: "Your borders are a bit harsh... go black
+// text for a more standard look like Jeff"): near-black type, a soft grey hairline and a faint shadow
+// on white cards, grey arrows; the accent stays on the one node that matters. Forest keeps its own.
 export const cardTone = (p: Palette) =>
   p.name === "light"
-    ? { fill: "#FFFFFF", line: p.line, text: p.text, sub: "#46665B", accent: p.accent, accentFill: "#EAF3ED", item: "#FFFFFF", itemLine: "rgba(18,58,46,0.32)" }
-    : { fill: p.node?.fill ?? "#15211B", line: p.line, text: "#FFFFFF", sub: p.node?.sub ?? "#BFCCC5", accent: p.accent, accentFill: p.node?.accentFill ?? "#203A2F", item: p.node?.fill ?? "#15211B", itemLine: "rgba(245,245,242,0.34)" };
+    ? { fill: "#FFFFFF", line: "rgba(17,17,17,0.13)", wire: "#A3A6A2", text: "#151515", sub: "#62666A", icon: "#2A2A2A", accent: p.accent, accentFill: "#F1F7F3", item: "#FFFFFF", itemLine: "rgba(17,17,17,0.13)", weight: 1.5, shadow: true }
+    : { fill: p.node?.fill ?? "#15211B", line: p.line, wire: p.line, text: "#FFFFFF", sub: p.node?.sub ?? "#BFCCC5", icon: p.line, accent: p.accent, accentFill: p.node?.accentFill ?? "#203A2F", item: p.node?.fill ?? "#15211B", itemLine: "rgba(245,245,242,0.34)", weight: 2.5, shadow: false };
 
 // ---------- line icons, on a 48 grid ----------
 
@@ -47,7 +49,7 @@ export const Glyph: React.FC<{ name: string; size: number; color: string }> = ({
     </svg>
   ) : null;
 
-const Icon: React.FC<{ src: string; size: number; color: string; slug?: string }> = ({ src, size, color, slug }) => {
+export const Icon: React.FC<{ src: string; size: number; color: string; slug?: string }> = ({ src, size, color, slug }) => {
   if (!isImageIcon(src)) return <Glyph name={src} size={size} color={color} />;
   // An unresolved "logo:" (a plan the resolver has not seen) draws nothing rather than a broken image.
   if (src.startsWith("logo:")) return <div style={{ width: size, height: size }} />;
@@ -105,8 +107,27 @@ const Words: React.FC<{ lines: string[]; size: number; color: string; weight: nu
   </div>
 );
 
-export const FlowView: React.FC<{ v: FlowV; time: number; start: number; w: number; h: number; slug?: string }> = ({ v, time: t, start, w, h, slug }) => {
+export const FlowView: React.FC<{ v: FlowV; time: number; start: number; end?: number; w: number; h: number; slug?: string; room?: { l: number; t: number; r: number; b: number } }> = ({ v, time: t, start, end, w, h, slug, room = { l: 0, t: 0, r: 0, b: 0 } }) => {
   const L: FlowLayout = useMemo(() => layoutFlow(v, w, h), [v, w, h]);
+  const keys = useMemo(() => cameraKeys(v, L, w, h, start, end, v.times ?? []), [v, L, w, h, start, end]);
+  const cam = cameraAt(keys, t);
+  const inner = <FlowParts v={v} t={t} start={start} w={w} h={h} slug={slug} L={L} />;
+  if (!cam) return inner;
+  // The travelling camera: the diagram scales about the frame's centre and slides so the camera's
+  // point sits there. Parts may run past the box into `room` (full frame: to the frame's edge, which
+  // cuts them as the canvas going on); where the box has no room, its edge fades over 24 px rather
+  // than slicing a card.
+  const W = w + room.l + room.r, H = h + room.t + room.b;
+  const edge = (dir: string, a: number, b: number, len: number) => `linear-gradient(${dir}, ${a ? "#000" : "transparent"} 0, #000 ${a ? 0 : 24}px, #000 ${len - (b ? 0 : 24)}px, ${b ? "#000" : "transparent"} 100%)`;
+  const mask = cam.z > 1.001 ? `${edge("to right", room.l, room.r, W)}, ${edge("to bottom", room.t, room.b, H)}` : undefined;
+  return (
+    <div style={{ position: "absolute", left: -room.l, top: -room.t, width: W, height: H, overflow: "hidden", ...(mask ? { maskImage: mask, maskComposite: "intersect", WebkitMaskImage: mask, WebkitMaskComposite: "source-in" } : {}) }}>
+      <div style={{ position: "absolute", left: room.l, top: room.t, width: w, height: h, transformOrigin: "0 0", transform: `translate(${w / 2 - cam.x * cam.z}px, ${h / 2 - cam.y * cam.z}px) scale(${cam.z})` }}>{inner}</div>
+    </div>
+  );
+};
+
+const FlowParts: React.FC<{ v: FlowV; t: number; start: number; w: number; h: number; slug?: string; L: FlowLayout }> = ({ v, t, start, w, h, slug, L }) => {
   const c = cardTone(usePalette());
   const beats = flowBeats(v, start, v.times ?? []);
   const hot = accentOf(v);
@@ -114,6 +135,13 @@ export const FlowView: React.FC<{ v: FlowV; time: number; start: number; w: numb
   return (
     <div style={{ position: "absolute", left: 0, top: 0, width: w, height: h }}>
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        {c.shadow && (
+          <defs>
+            <filter id="flow-lift" x="-10%" y="-10%" width="120%" height="130%">
+              <feDropShadow dx="0" dy="4" stdDeviation="9" floodColor="#000" floodOpacity="0.06" />
+            </filter>
+          </defs>
+        )}
         {L.cards.map((b, i) => {
           const p = k(t, beats.nodes[i], 0.5);
           if (p <= 0) return null;
@@ -123,8 +151,8 @@ export const FlowView: React.FC<{ v: FlowV; time: number; start: number; w: numb
           const dim = strike !== undefined && i === 0 ? 1 - 0.55 * k(t, strike + 0.15, 0.3) : 1;
           return (
             <g key={i} opacity={dim}>
-              <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius} fill={accent ? c.accentFill : c.fill} opacity={p} />
-              <rect data-qc="edge" x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius} fill="none" stroke={accent ? c.accent : c.line} strokeWidth={accent ? 4 : 2.5} strokeDasharray={`${len * p} ${len}`} />
+              <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius} fill={accent ? c.accentFill : c.fill} opacity={p} filter={c.shadow ? "url(#flow-lift)" : undefined} />
+              <rect data-qc="edge" x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius} fill="none" stroke={accent ? c.accent : c.line} strokeWidth={accent ? c.weight + 1 : c.weight} strokeDasharray={`${len * p} ${len}`} />
             </g>
           );
         })}
@@ -135,12 +163,12 @@ export const FlowView: React.FC<{ v: FlowV; time: number; start: number; w: numb
           return (
             <g key={`${b.node}-${b.item}`}>
               <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius * 0.7} fill={c.item} opacity={p} />
-              <rect data-qc="edge" x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius * 0.7} fill="none" stroke={c.itemLine} strokeWidth={2} strokeDasharray={`${len * p} ${len}`} />
+              <rect data-qc="edge" x={b.x} y={b.y} width={b.w} height={b.h} rx={L.radius * 0.7} fill="none" stroke={c.itemLine} strokeWidth={c.weight} strokeDasharray={`${len * p} ${len}`} />
             </g>
           );
         })}
         {L.arrows.map((a, j) => (
-          <Arrow key={j} pts={a.points} p={move(t, beats.arrows[j].t, ARROW_DRAW)} color={c.line} />
+          <Arrow key={j} pts={a.points} p={move(t, beats.arrows[j].t, ARROW_DRAW)} color={c.wire} />
         ))}
       </svg>
 
@@ -170,7 +198,7 @@ export const FlowView: React.FC<{ v: FlowV; time: number; start: number; w: numb
               transform: `translateY(${(1 - q) * 16}px)`,
             }}
           >
-            {nd.icon && <Icon src={nd.icon} size={L.icon} color={accent ? c.accent : c.line} slug={slug} />}
+            {nd.icon && <Icon src={nd.icon} size={L.icon} color={accent ? c.accent : c.icon} slug={slug} />}
             <div style={{ display: "flex", flexDirection: "column", alignItems: tile ? "center" : "flex-start", gap: Math.round(L.size * 0.22), position: "relative", flex: tile ? undefined : 1, minWidth: 0 }}>
               <Words lines={b.label} size={L.size} color={c.text} weight={700} track={TRACK.label} lead={1.12} align={tile ? "center" : "left"} strike={struck} />
               {b.sub.length > 0 && <Words lines={b.sub} size={L.sub} color={c.sub} weight={400} track={TRACK.text} lead={1.25} align={tile ? "center" : "left"} />}

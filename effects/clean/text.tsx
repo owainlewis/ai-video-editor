@@ -6,6 +6,9 @@ import { C, k, SANS, type Word } from "./kit";
 
 export const WHITE = "#FFFFFF"; // all type over footage and dark stages
 export const GREEN = "#1D3832"; // diagrams, and type on paper
+// Type on the light stage and on paper: captions, hits, card words and the hook's phrase. Neutral black,
+// not green (Owain, 2026-11-26: "lean more into plainer black or white").
+export const INK = "#111111";
 export const MONO = type.mono; // code only: commands, skills, file names
 
 // The one type style of a clean reel (Owain, 2026-11-08): tight white lower-case Helvetica Bold, at

@@ -19,11 +19,17 @@ The clean reel style, the only reel style. `Clean.tsx` draws every resolved reel
 - `Word` (re-exported from the schema).
 - SVG parts that draw on as `p` goes 0 to 1: `Line`, `Ring`, `Rect`, `Doc`, `Dots`. Also `Stage` (the svg a diagram draws in), `Label` (text placed by its centre) and `rand(seed)` (seeded noise).
 
-**Laid-out kinds (`flow.tsx`, `code.tsx`)**
+**Laid-out kinds (`laid.tsx`: `flow.tsx`, `code.tsx`, `chart.tsx`, `prompt.tsx`, `doc.tsx`, `gallery.tsx`)**
+
+- `LaidView` and `isLaid` route each laid-out kind to its view; `Clean.tsx` and `../Visuals.tsx` both draw through them.
 
 - `FlowView` draws a `flow` from `layoutFlow` (`../../engine/flow.ts`): card outlines and arrows carry `data-qc="edge"`, so QC measures every label's clearance. `cardTone(palette)`, `Glyph` (the line icons).
 - `CodeView` draws a `code` visual from `codeLayout`, `codeBeats`, `codePans` and `tokenize` (`../../engine/code.ts`), in GitHub Light's colours whatever the palette. Like the app windows, the window is its box edge to edge, with a status bar (the caret's line and column, the indent, the language); the code takes one size for the shot, the largest at which its longest line and every line fit (30 to 46 px on a reel, 24 to 38 in YouTube's 900 px panel, which is scaled up), and a file too long for the box at the least size pans a whole row at a time to the line being typed or changed, and centres a mark. Lines are at most 46 characters (44 in a diff).
-- Both size themselves to the box `Clean.tsx` gives them: the safe panel on a split, the glass's inside on `over` (in the forest palette), the middle of the frame otherwise. `../Visuals.tsx` draws them on YouTube in the shot's tone.
+- `ChartView` draws a `chart` on a white card in `cardTone`'s colours: grey bars and the accent on the highlight, or an accent line with a faint wash. A value fades in as its point settles, never counting up. Reels only; YouTube keeps `../elements.tsx:ChartVisual`.
+- `PromptView` draws a `prompt` from `promptLayout` and `promptBeats` (`../../engine/prompt.ts`): a composer (text area of four lines or more, the logo and send button in a toolbar row) or a search pill under a large logo, in a 960 px design space scaled to the box. The marker stops at a line's last letter, and the marked run keeps the sentence's block so QC reads it as one line.
+- `DocView` draws a `doc` from `docHeight`, `docHead`, `barShare` and `docBeats` (`../../engine/doc.ts`): a skeleton card, also in a 960 px design space. Bars and their widths are fixed per row, so every render matches.
+- `GalleryView` and `FloatView` (`gallery.tsx`) draw a `gallery` and a `float` from `galleryTiles`, `galleryBeats`, `floatPlaces` and `floatBeats` (`../../engine/gallery.ts`). On a split both bleed edge to edge like a `frame: "none"` page (`bleeds` in `Clean.tsx`). Captures show from their top. The float's 3D needs `perspective` on the pages' own parent: a transform between them flattens it. QC skips its "no text on screen" check for both, since they are all picture.
+- All of them size themselves to the box `Clean.tsx` gives them: the safe panel on a split, the glass's inside on `over` (in the forest palette), the middle of the frame otherwise. `../Visuals.tsx` draws them on YouTube in the shot's tone.
 
 **Text kit (`text.tsx`)**
 

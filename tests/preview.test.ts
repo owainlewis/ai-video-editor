@@ -58,7 +58,9 @@ describe("the gallery's plans", () => {
     // Today's library on reels is the clean kit, nothing retired.
     const now = effectList("reel", readCardLibrary()).filter((e) => e.approved);
     expect(now.length).toBeGreaterThanOrEqual(15);
-    expect(now.some((e) => ["words", "kpi", "chart", "custom"].includes(e.kind))).toBe(false);
+    expect(now.some((e) => ["words", "kpi", "custom"].includes(e.kind))).toBe(false);
+    // The parts from the Jeff Su study (2026-11-26) joined the kit: a chart, a prompt bar, a doc.
+    for (const kind of ["chart", "prompt", "doc"]) expect(now.some((e) => e.kind === kind && !e.off)).toBe(true);
     expect(effectList("youtube", EVERY).filter((e) => e.off).map((e) => e.kind)).toEqual(["lower"]);
   });
 

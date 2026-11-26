@@ -4,7 +4,7 @@
 // from Owain's own sessions. Each card's limits are the longest text its layout is tested to hold
 // (tests/flow.test.ts).
 import type { Card, Slot } from "../catalog";
-import { sampleLogo } from "./samples";
+import { sampleLogo, sampleThumb } from "./samples";
 
 const at = (name: string): Slot => ({ name, type: "anchor", optional: true, note: "a spoken phrase; the part lands on its first word" });
 const LAYOUTS: Card["layouts"] = ["split", "side", "media"];
@@ -226,6 +226,127 @@ export const kitCards = (): Card[] => [
       },
       header: "Side by *side*",
       scene: "Side by *side*",
+    },
+  },
+  {
+    id: "blueprint.t2.prompt",
+    kind: "prompt",
+    tier: "t2",
+    purpose: "prompt",
+    summary: "A prompt box in the neutral card look: the product's logo, the words typing in on their word, the marked phrase swept with a marker, the send button pressing.",
+    layouts: LAYOUTS,
+    slots: [
+      { name: "text", type: "richtext", maxChars: 110, note: "Owain's own prompt; *mark* one phrase" },
+      { name: "app", type: "image", optional: true, note: "logo:<name>" },
+      at("at"),
+      at("mark"),
+      at("send"),
+    ],
+    sample: {
+      visual: { kind: "prompt", app: sampleLogo("S", 0), text: "Read this sample thread and *draft a short reply* in my voice", at: "read", mark: "draft", send: "send" },
+      header: "The *prompt*",
+      scene: "The *prompt*",
+    },
+  },
+  {
+    id: "blueprint.t2.prompt.search",
+    kind: "prompt",
+    tier: "t2",
+    purpose: "prompt",
+    treatment: "search",
+    summary: "A search field: the real logo above a pill with a magnifier, the words typing in, the marked phrase swept with a marker.",
+    layouts: LAYOUTS,
+    slots: [
+      { name: "text", type: "richtext", maxChars: 34 },
+      { name: "app", type: "image", optional: true, note: "logo:<name>" },
+      at("at"),
+      at("mark"),
+    ],
+    sample: {
+      visual: { kind: "prompt", search: true, app: sampleLogo("S", 1), text: "sample search for *one idea*", at: "sample", mark: "idea" },
+      header: "Just *search*",
+      scene: "Just *search*",
+    },
+  },
+  {
+    id: "blueprint.t2.doc",
+    kind: "doc",
+    tier: "t2",
+    purpose: "doc",
+    summary: "A document as a skeleton card: a tag, its real title, grey bars where the text would be. A scan sweeps down it as an agent reads; a row lights on its word.",
+    layouts: LAYOUTS,
+    slots: [
+      { name: "title", type: "text", maxChars: 30 },
+      { name: "tag", type: "text", maxChars: 12, optional: true },
+      { name: "icon", type: "image", optional: true, note: "logo:<name>, or a line icon" },
+      { name: "marks", type: "list", maxItems: 3, optional: true },
+      at("marks[].at"),
+      at("scan"),
+    ],
+    sample: {
+      visual: { kind: "doc", title: "Sample report.md", tag: "Doc", icon: "file", rows: 6, marks: [{ row: 4, at: "this line" }], scan: "reads" },
+      header: "It *reads* it",
+      scene: "It *reads* it",
+    },
+  },
+  {
+    id: "blueprint.t2.doc.table",
+    kind: "doc",
+    tier: "t2",
+    purpose: "doc",
+    treatment: "table",
+    summary: "A table as a skeleton card: real column names over grey cells. A scan sweeps the rows; a row lights on its word.",
+    layouts: LAYOUTS,
+    slots: [
+      { name: "title", type: "text", maxChars: 30 },
+      { name: "tag", type: "text", maxChars: 12, optional: true },
+      { name: "cols", type: "list", minItems: 2, maxItems: 4 },
+      { name: "cols[]", type: "text", maxChars: 12 },
+      { name: "marks", type: "list", maxItems: 3, optional: true },
+      at("marks[].at"),
+      at("scan"),
+    ],
+    sample: {
+      visual: { kind: "doc", title: "Sample leads", tag: "Sheet", icon: "database", cols: ["Name", "Company", "Status"], rows: 5, marks: [{ row: 2, at: "this one" }], scan: "scans" },
+      header: "Every *row*",
+      scene: "Every *row*",
+    },
+  },
+  {
+    id: "blueprint.t2.gallery",
+    kind: "gallery",
+    tier: "t2",
+    purpose: "gallery",
+    summary: "A wall of real captures filling the split's top edge to edge: four to nine pages or components landing in a quick wave; one grows to fill the panel on its word.",
+    layouts: ["split", "media"],
+    slots: [
+      { name: "items", type: "list", minItems: 4, maxItems: 9 },
+      { name: "items[].src", type: "image", note: "a real capture (assets/pages/<name>.png from `capture`)" },
+      at("items[].at"),
+      at("focus.at"),
+    ],
+    sample: {
+      visual: { kind: "gallery", items: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ src: sampleThumb(n) })), focus: { item: 5, at: "this one" } },
+      header: "So many *options*",
+      scene: "So many *options*",
+    },
+  },
+  {
+    id: "blueprint.t2.float",
+    kind: "float",
+    tier: "t2",
+    purpose: "gallery",
+    summary: "Real pages floating in depth across the split's top, each flying in from behind, the stack slowly pushing in. An opener, or a line about how many there are.",
+    layouts: ["split", "media"],
+    slots: [
+      { name: "items", type: "list", minItems: 3, maxItems: 6 },
+      { name: "items[].src", type: "image", note: "a real capture (assets/pages/<name>.png from `capture`)" },
+      at("items[].at"),
+    ],
+    sample: {
+      visual: { kind: "float", items: [1, 2, 3, 4, 5].map((n) => ({ src: sampleThumb(n) })) },
+      header: "Every *page*",
+      scene: "Every *page*",
     },
   },
 ];

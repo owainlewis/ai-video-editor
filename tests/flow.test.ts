@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Visual } from "../engine/schema.ts";
-import { FLOW, flowBeats, flowIssues, flowTimes, layoutFlow, textWidth, type Box, type Flow, type FlowLayout } from "../engine/flow.ts";
+import { CAMERA, cameraAt, cameraKeys, FLOW, flowAnchors, flowBeats, flowIssues, flowTimes, layoutFlow, textWidth, type Box, type Flow, type FlowLayout } from "../engine/flow.ts";
 import { CODE, codeBeats, codeChars, codeIssues, codeLayout, codePans, codeTimes, langOf, tokenize, typeSecs, type Code } from "../engine/code.ts";
 import { resolveShots, cleanSfx } from "../engine/resolve.ts";
 import { Edit } from "../engine/schema.ts";
@@ -326,5 +326,64 @@ describe("the tokenizer", () => {
     expect(langOf({ file: "main.py" })).toBe("py");
     expect(langOf({ file: "terminal" })).toBe("bash");
     expect(langOf({ file: "notes.md" })).toBe("text");
+  });
+});
+
+describe("the travelling camera", () => {
+  const W = 1920, H = 1080;
+  const travel = (shape: Flow["shape"], labels: string[], more: Partial<Flow> = {}) => ({ ...flow(shape, labels), camera: "travel", ...more }) as Flow;
+  const v = travel("row", ["Gmail", "Your AI", "Brief", "You"]);
+  const L = layoutFlow(v, W, H);
+  const times = [1, 3, 5, 7];
+  const keys = cameraKeys(v, L, W, H, 0, 12, times);
+
+  it("is off unless asked for, and on a versus", () => {
+    expect(cameraKeys(flow("row", ["A", "B"]), L, W, H, 0, 10)).toEqual([]);
+    const vs = travel("versus", ["Old", "New"]);
+    expect(cameraKeys(vs, layoutFlow(vs, W, H), W, H, 0, 10)).toEqual([]);
+    expect(flowIssues(vs).join()).toMatch(/cannot travel/);
+  });
+  it("goes to each node as it lands, then pulls back to the whole", () => {
+    expect(keys).toHaveLength(5);
+    expect(keys[0].t).toBe(0);
+    expect(keys.slice(1, 4).map((k) => k.t)).toEqual([3, 5, 7].map((t) => t - CAMERA.lead));
+    expect(keys[0].z).toBeGreaterThan(1.2);
+    const last = keys[4];
+    expect([last.z, last.x, last.y]).toEqual([1, W / 2, H / 2]);
+    // Near the end of the shot, holding the whole long enough to read it.
+    expect(last.t).toBeLessThanOrEqual(12 - CAMERA.hold);
+    expect(last.t).toBeGreaterThanOrEqual(7 + CAMERA.rest - 0.01);
+  });
+  it("frames each node it reaches, centred", () => {
+    keys.slice(0, 4).forEach((k, i) => {
+      const c = L.cards[i];
+      const hw = W / (2 * k.z), hh = H / (2 * k.z);
+      expect(c.x).toBeGreaterThanOrEqual(k.x - hw - 0.5);
+      expect(c.x + c.w).toBeLessThanOrEqual(k.x + hw + 0.5);
+      expect(c.y).toBeGreaterThanOrEqual(k.y - hh - 0.5);
+      expect(c.y + c.h).toBeLessThanOrEqual(k.y + hh + 0.5);
+    });
+    expect(keys[0].x).toBeCloseTo(L.cards[0].x + L.cards[0].w / 2);
+    for (let t = 0; t <= 12; t += 0.1) expect(cameraAt(keys, t)!.z).toBeGreaterThanOrEqual(1);
+  });
+  it("holds still between moves", () => {
+    const a = cameraAt(keys, 3 - CAMERA.lead + CAMERA.travel + 0.05)!, b = cameraAt(keys, 5 - CAMERA.lead - 0.05)!;
+    expect(b).toEqual(a);
+  });
+  it("always ends on the whole diagram, even in a short shot", () => {
+    // The last node lands 1.2 s before the end: no time to visit it and pull back after.
+    const k = cameraKeys(v, L, W, H, 0, 8.2, times);
+    const end = cameraAt(k, 8.2)!;
+    expect([end.z, end.x, end.y]).toEqual([1, W / 2, H / 2]);
+    expect(k[k.length - 1].t).toBeLessThanOrEqual(8.2 - CAMERA.hold);
+    k.slice(1, -1).forEach((key) => expect(key.t + CAMERA.travel).toBeLessThanOrEqual(k[k.length - 1].t));
+  });
+  it("pulls back on the wide word when one is given", () => {
+    const w = travel("row", ["A", "B", "C"], { wide: "the whole thing" });
+    expect(flowAnchors(w)).toHaveLength(4);
+    expect(flowTimes(w, 0, [1, 2, 3, 6])).toEqual([1, 2, 3, 6]);
+    const k = cameraKeys(w, layoutFlow(w, W, H), W, H, 0, 10, [1, 2, 3, 6]);
+    expect(k[k.length - 1].t).toBe(6);
+    expect(flowIssues({ ...w, camera: undefined }).join()).toMatch(/wide/);
   });
 });

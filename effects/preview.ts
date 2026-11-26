@@ -1,5 +1,7 @@
 // Plans for the gallery (app/Gallery.tsx): one graphic on its own, played live in the browser with
 // the real compositions. Nothing is rendered to a file, so a change to a visual shows in seconds.
+import { DOC } from "../engine/doc";
+import { promptBeats } from "../engine/prompt";
 import type { Resolved, ResolvedShot } from "../engine/schema";
 import { visualAnchors } from "../engine/resolve";
 import { appBeats, appEnd, isApp } from "../engine/apps";
@@ -15,7 +17,7 @@ export type Canvas = "reel" | "youtube";
 const HOUSE = ["words", "focus", "shift", "map"];
 // Every reel is a clean reel. The library kinds the clean style draws as part of its kit, beside the
 // cards made for it (`styles: ["clean"]`): the house graphics in the split's top panel, and real captures.
-const CLEAN_KINDS = new Set([...HOUSE, "image", "windows", "cli", "claudeapp", "grokbot", "code", "flow"]);
+const CLEAN_KINDS = new Set([...HOUSE, "image", "windows", "cli", "claudeapp", "grokbot", "code", "flow", "chart", "prompt", "doc", "gallery", "float"]);
 
 // Why a card does not fit a project's look, or undefined when it does (Owain, 2026-11-07: "improve
 // the library so it matches my theme / brand"). The library hides these unless asked.
@@ -72,6 +74,17 @@ export function cardPlan(cardId: string, canvas: Canvas, theme?: Resolved["theme
     // Marks land after the lines have typed, as a speaker names a range once it is on screen.
     times = codeTimes(v, 0, times.slice(0, v.lines.length));
     duration = Math.max(...times, ...codeBeats(v, 0, times).lines.map((l) => l.t1)) + 2;
+  }
+  // A prompt types at its own pace, then marks and sends (engine/prompt.ts).
+  if (v.kind === "prompt") {
+    const b = promptBeats(v, 0, times);
+    duration = Math.max(b.t1, b.markAt ?? 0, b.sendAt ?? 0) + 2;
+  }
+  // A doc scans as it lands, then lights its rows one by one once the scan has passed.
+  if (v.kind === "doc") {
+    const scan = v.scan ? [0.5] : [];
+    times = [...scan, ...v.marks.map((_, j) => (v.scan ? 0.5 + DOC.scan : 0.6) + 0.3 + j * 0.9)];
+    duration = Math.max(...times, 1) + 2;
   }
   const youtube = canvas === "youtube";
   const clean = !youtube;

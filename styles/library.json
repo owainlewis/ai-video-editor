@@ -23,7 +23,15 @@
     "blueprint.t1.windows",
     "blueprint.t2.logos",
     "blueprint.t2.flow.before-after",
-    "blueprint.t2.flow.fan-out"
+    "blueprint.t2.flow.fan-out",
+    "blueprint.t2.chart.bar",
+    "blueprint.t2.chart.line",
+    "blueprint.t2.prompt",
+    "blueprint.t2.prompt.search",
+    "blueprint.t2.doc",
+    "blueprint.t2.doc.table",
+    "blueprint.t2.gallery",
+    "blueprint.t2.float"
   ],
   "removed": [
     "blueprint.t1.cli.diff",

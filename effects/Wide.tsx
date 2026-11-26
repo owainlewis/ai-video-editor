@@ -25,6 +25,8 @@ export const WH = 1080;
 const CARD = { x: WW - 64 - 500, y: 110, w: 500, h: 860 };
 export const SIDE = { x: 110, y: 110, w: CARD.x - 80 - 110, h: WH - 220 };
 export const MEDIA = { x: 160, y: 90, w: WW - 320, h: WH - 180 };
+// The frame around a box, in the box's own units once scaled by `k`.
+const roomOf = (b: { x: number; y: number; w: number; h: number }, k: number) => ({ l: b.x / k, t: b.y / k, r: (WW - b.x - b.w) / k, b: (WH - b.y - b.h) / k });
 // The black theme (Owain, 2026-10-30): nothing hard cuts. Full-frame cards dissolve in and out over
 // the picture, panels float as a dark rounded card over the picture blurred and dimmed behind it
 // (after his own screen-recording shots, "this sick overlay style"), and `half` dissolves to a paper
@@ -237,7 +239,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           const inner = (
             <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, color: pal(half ? "light" : tone, theme).ink }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: box.w / sc, height: box.h / sc, transform: `scale(${sc})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <VisualView slug={r.slug} shot={s} time={time} w={box.w / sc} h={box.h / sc} v={visual} />
+                <VisualView slug={r.slug} shot={s} time={time} w={box.w / sc} h={box.h / sc} v={visual} room={box === MEDIA ? roomOf(box, sc) : undefined} />
               </div>
             </div>
           );
@@ -269,7 +271,7 @@ export const Wide: React.FC<Resolved> = (r) => {
           <Sequence key={i} from={from} durationInFrames={dur} premountFor={15} name={`${i + 1} ${s.layout} ${visual.kind}`}>
             <div style={{ position: "absolute", left: area.x, top: area.y, width: area.w, height: area.h, color: pal(tone, theme).ink, opacity: leaving, filter: `blur(${(1 - leaving) * 8}px)` }}>
               <div style={{ position: "absolute", left: 0, top: 0, width: vw, height: vh, transform: `scale(${k})`, transformOrigin: "0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} />
+                <VisualView slug={r.slug} shot={s} time={time} w={vw} h={vh} v={visual} room={s.layout === "media" ? roomOf(area, k) : undefined} />
               </div>
             </div>
           </Sequence>

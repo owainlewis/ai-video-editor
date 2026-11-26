@@ -24,11 +24,10 @@ import { Speaker } from "../Speaker";
 import { BAND } from "../theme";
 import { VisualView } from "../Visuals";
 import { C, H, lerp, move, type Palette, PALETTES, PaletteContext, usePalette, W } from "./kit";
-import { blurIn, Center, Chip, chunkClean, display, GREEN, Typed, WHITE } from "./text";
+import { blurIn, Center, Chip, chunkClean, display, GREEN, INK, Typed, WHITE } from "./text";
 import { HOOK_BAND } from "../../engine/resolve";
 import { Hook, underHook } from "./hook";
-import { CodeView } from "./code";
-import { FlowView } from "./flow";
+import { isLaid, LaidView } from "./laid";
 
 // The split's panel ends where the caption band starts; the footage starts below the band.
 export const PANEL = BAND.top;
@@ -43,6 +42,12 @@ export const box = (layout: ResolvedShot["layout"]) =>
 // A screen recording or frameless image on a split fills the whole panel, edge to edge, down to the band.
 export const fillsPanel = (s: ResolvedShot) =>
   s.layout === "split" && ((s.visual?.kind === "video" && !!s.visual.sync) || (s.visual?.kind === "image" && s.visual.frame === "none"));
+// A full-bleed page (`frame: "none"`), the gallery wall and the floating pages on a split run edge to
+// edge from the top of the frame, or from below the hook's band while it is up, so a page's framing
+// fits what shows (Owain, 2026-11-26: "I like the full bleed shots on the split screen - not
+// everything needs to be inside a browser"). Instagram's top bar sits over their top edge, which is
+// picture, not words the reel needs read. A synced recording keeps its place and the band covers it.
+const bleeds = (s: ResolvedShot) => s.layout === "split" && ((s.visual?.kind === "image" && s.visual.frame === "none") || s.visual?.kind === "gallery" || s.visual?.kind === "float");
 
 // A card's colour; on the light palette an ink card is black (Owain, 2026-11-13: "occasional black screens").
 const bgOf = (s: ResolvedShot, p: Palette) => (s.layout === "diagram" ? p.diagram : s.layout === "card" ? { ink: p.card, paper: C.paper, green: GREEN }[s.bg ?? "ink"] : p.stage);
@@ -85,17 +90,17 @@ const Visual: React.FC<{ r: Resolved; s: ResolvedShot; time: number; hooked: boo
   const top = hooked && s.layout === "split" ? HOOK_BAND : 100;
   // The kit's laid-out kinds (code, flow) size themselves to the box: on a split the safe panel, under
   // the glass its inside, full frame the middle of the frame clear of the caption.
-  const laid = v.kind === "code" || v.kind === "flow";
-  const b = laid
+  const laid = isLaid(v);
+  const b = laid && !bleeds(s)
     ? s.layout === "split" ? { left: 60, top, width: W - 120, height: PANEL - 40 - top } : s.layout === "over" ? { left: GLASS.left + 48, top: GLASS.top + 48, width: GLASS.width - 96, height: GLASS.height - 96 } : { left: 60, top: 220, width: W - 120, height: 1180 }
-    : fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top, height: PANEL - 40 - top } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top, width: W - 120, height: PANEL - 40 - top } : hooked && s.layout === "split" ? { left: 0, top, width: W, height: PANEL - top } : box(s.layout);
+    : bleeds(s) ? { left: 0, top: hooked ? HOOK_BAND : 0, width: W, height: PANEL - (hooked ? HOOK_BAND : 0) } : fillsPanel(s) ? box(s.layout) : v.kind === "image" ? { ...box(s.layout), left: 48, width: W - 96, ...(s.layout === "split" ? { top, height: PANEL - 40 - top } : {}) } : v.kind !== "custom" && s.layout === "split" ? { left: 60, top, width: W - 120, height: PANEL - 40 - top } : hooked && s.layout === "split" ? { left: 0, top, width: W, height: PANEL - top } : box(s.layout);
   const Custom = v.kind === "custom" ? CUSTOM[v.name] : undefined;
   return (
     <div style={{ position: "absolute", ...b, overflow: "visible" }}>
       {laid ? (
         // Under the dark glass the diagram takes the forest colours, whatever the reel's palette.
         <PaletteContext.Provider value={s.layout === "over" ? PALETTES.forest : pal}>
-          {v.kind === "code" ? <CodeView v={v} time={time} start={s.start} w={b.width} h={b.height} /> : v.kind === "flow" ? <FlowView v={v} time={time} start={s.start} w={b.width} h={b.height} slug={r.slug} /> : null}
+          <LaidView v={v} time={time} start={s.start} end={s.end} w={b.width} h={b.height} slug={r.slug} />
         </PaletteContext.Provider>
       ) : Custom && v.kind === "custom" ? (
         <Custom shot={s} time={time} props={v.props ?? {}} times={v.times ?? []} width={b.width} height={b.height} panel={s.layout !== "diagram"} />
@@ -116,9 +121,10 @@ export const Clean: React.FC<Resolved> = (r) => {
   if (!shot) return <AbsoluteFill style={{ background: pal.stage }} />;
 
   const paper = shot.layout === "card" && shot.bg === "paper";
-  // Type on the stage takes the palette's colour; over footage and on dark cards it stays white.
+  // Type on the light stage and on paper is neutral black (2026-11-26); on the forest stage it takes
+  // the palette; over footage and on dark cards it stays white.
   const onStage = shot.layout === "split" || shot.layout === "diagram";
-  const ink = paper ? GREEN : onStage ? pal.text : WHITE;
+  const ink = paper || (onStage && pal.name === "light") ? INK : onStage ? pal.text : WHITE;
   const glass = shot.layout === "over";
   const v = shot.visual;
 

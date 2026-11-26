@@ -2,6 +2,9 @@
 // Pure functions, so they are easy to test.
 import type { Chunk, EditPlan, ResolvedShot, SfxEvent, VisualSpec, Word } from "./schema.ts";
 import { appAnchors, appBeats, isApp, typeRate } from "./apps.ts";
+import { docAnchors, docBeats, docIssues } from "./doc.ts";
+import { floatAnchors, floatBeats, galleryAnchors, galleryBeats, galleryIssues } from "./gallery.ts";
+import { promptAnchors, promptBeats, promptIssues, promptText } from "./prompt.ts";
 import { actionBeats, actionOffset, FOCUS } from "./actions.ts";
 import { codeAnchors, codeBeats, codeIssues, codeMoments, codeResets, codeTimes, isDiff } from "./code.ts";
 import { flowAnchors, flowBeats, flowIssues, flowMoments, flowResets, flowTimes } from "./flow.ts";
@@ -107,6 +110,10 @@ export const visualAnchors = (v: VisualSpec): (string | undefined)[] => {
     case "constraint": return [...v.stages.map((st) => st.at), v.at];
     case "flow": return flowAnchors(v);
     case "code": return codeAnchors(v);
+    case "prompt": return promptAnchors(v);
+    case "doc": return docAnchors(v);
+    case "gallery": return galleryAnchors(v);
+    case "float": return floatAnchors(v);
     case "grid": return [v.at, ...v.groups.map((g) => g.at)];
     case "funnel": return [...v.items.map((it) => it.at), v.at, ...v.target.lines.map((l) => l.at)];
     case "type": return [v.at, v.settle, ...v.chips.map((c) => c.at)];
@@ -230,7 +237,7 @@ export const resolveShots = (plan: EditPlan, words: Word[], duration: number, fp
     });
     // A flow's unanchored arrows and a code view's lines are timed by what they join or follow.
     shot.visual = { ...v, times: v.kind === "code" ? codeTimes(v, shot.start, times) : v.kind === "flow" ? flowTimes(v, shot.start, times) : times };
-    const own = v.kind === "flow" ? flowIssues(v) : v.kind === "code" ? codeIssues(v) : [];
+    const own = v.kind === "flow" ? flowIssues(v) : v.kind === "code" ? codeIssues(v) : v.kind === "prompt" ? promptIssues(v) : v.kind === "doc" ? docIssues(v) : v.kind === "gallery" ? galleryIssues(v) : [];
     for (const m of own) issues.push({ level: "warn", message: `${v.kind} in shot "${shot.anchor}": ${m}` });
   }
   return { shots: shots.map(({ index, src, ...s }) => s), issues };
@@ -616,6 +623,24 @@ export const cleanSfx = (shots: ResolvedShot[]): SfxEvent[] => {
       });
       for (const t of b.marks) ev.push({ kind: "blip", t, gain: 0.6, exact: true });
     }
+    // Keys under a prompt as it types, a blip on its marker, a click on send.
+    if (v.kind === "prompt") {
+      const b = promptBeats(v, s.start, times);
+      typing(b.t0, promptText(v.text).plain.length, promptText(v.text).plain.length / Math.max(0.05, b.t1 - b.t0));
+      if (b.markAt !== undefined) ev.push({ kind: "blip", t: b.markAt, gain: 0.6, exact: true });
+      if (b.sendAt !== undefined) ev.push({ kind: "pop", t: b.sendAt, gain: 0.55, exact: true });
+    }
+    // A gallery ticks as its first tile lands and as each named one does, and whooshes as one fills the
+    // panel; floating pages tick as each named one flies in.
+    if (v.kind === "gallery") {
+      const b = galleryBeats(v, s.start, times);
+      b.tiles.forEach((t, n) => { if (n === 0 || v.items[n].at) ev.push({ kind: "pop", t, gain: 0.55, exact: true }); });
+      if (b.focus !== undefined) ev.push({ kind: "whoosh", t: b.focus - 0.15, gain: 0.45, exact: true });
+    }
+    if (v.kind === "float") floatBeats(v, s.start, times).forEach((t, n) => { if (n === 0 || v.items[n].at) ev.push({ kind: "pop", t, gain: 0.5, exact: true }); });
+    // A doc blips as each row lights; a chart ticks as each point lands.
+    if (v.kind === "doc") for (const t of docBeats(v, s.start, times).marks) ev.push({ kind: "blip", t, gain: 0.6, exact: true });
+    if (v.kind === "chart") times.forEach((t, n) => { if (v.points[n]?.at || n === 0) ev.push({ kind: "pop", t, gain: 0.55, exact: true }); });
     // An agent on a page: a click as each target is pressed, keys under what it types. Its marks blip.
     if (v.kind === "image" && v.actions?.length) {
       const off = actionOffset(v);

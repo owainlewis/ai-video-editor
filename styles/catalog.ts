@@ -122,7 +122,7 @@ export const cardFor = (cards: Card[], v: VisualSpec) => {
   const all = cards.filter((c) => c.kind === v.kind);
   // A list with a bracketed title ("[REVIEW]") is the clean style's list card.
   // A flow by its shape (a row is the plain card), a code view by whether it is a diff.
-  const treatment = v.kind === "chart" ? v.type : v.kind === "image" ? (v.frame === "browser" ? "browser" : "card") : v.kind === "list" && v.title?.startsWith("[") ? "bracket" : v.kind === "flow" && v.shape !== "row" ? v.shape : v.kind === "code" && v.lines.some((l) => l.diff) ? "diff" : undefined;
+  const treatment = v.kind === "chart" ? v.type : v.kind === "image" ? (v.frame === "browser" ? "browser" : "card") : v.kind === "list" && v.title?.startsWith("[") ? "bracket" : v.kind === "flow" && v.shape !== "row" ? v.shape : v.kind === "code" && v.lines.some((l) => l.diff) ? "diff" : v.kind === "prompt" && v.search ? "search" : v.kind === "doc" && v.cols ? "table" : undefined;
   return all.find((c) => (treatment ? c.treatment === treatment : !c.treatment)) ?? all[0];
 };
 

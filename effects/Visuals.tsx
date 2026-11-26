@@ -15,11 +15,13 @@ import { BrowserChrome, chromeHeight, WindowsVisual } from "./browser";
 import { PageActions } from "./pageactions";
 import { AgendaCard, BeforeAfterCard, BentoCard, ChecklistCard, KpiCard, LevelsCard, LogowallCard, MatrixCard, MeterCard, QuoteCard, RingCard, TimelineCard, WaffleCard } from "./cards";
 import type { ResolvedShot, ResolvedVisual } from "../engine/schema";
-import { CodeView } from "./clean/code";
-import { FlowView } from "./clean/flow";
+import { LaidView } from "./clean/laid";
 import { type Palette, PALETTES, PaletteContext } from "./clean/kit";
 
-type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number; filter?: string; bleed?: boolean };
+// `room`: how far a visual may draw past its box on each side (in its own units), up to the frame's
+// edge; a travelling flow camera uses it so cards run off the frame, not off an inner box.
+type Room = { l: number; t: number; r: number; b: number };
+type Props = { slug: string; shot: ResolvedShot; time: number; w: number; h: number; filter?: string; bleed?: boolean; room?: Room };
 type V<K extends ResolvedVisual["kind"]> = Extract<ResolvedVisual, { kind: K }> & { times?: number[]; size?: [number, number] };
 
 
@@ -787,12 +789,12 @@ const laidPalette = (tone: Tone | undefined, theme: SoftTheme): Palette => {
   const c = pal("dark", theme);
   return { name: "forest", stage: c.bg, diagram: c.card, card: c.bg, text: c.ink, line: c.ink, accent: c.accent, dim: c.muted, faint: c.faint, node: { fill: c.card, sub: c.muted, accentFill: c.chip } };
 };
-const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> }> = ({ slug, shot, time, w, h, v }) => {
+const Laid: React.FC<Props & { v: V<"code"> | V<"flow"> | V<"prompt"> | V<"doc"> | V<"gallery"> | V<"float"> }> = ({ slug, shot, time, w, h, v, room }) => {
   const theme = useSoftTheme();
   return (
     <PaletteContext.Provider value={laidPalette(shot.tone, theme)}>
       <div style={{ position: "relative", width: w, height: h }}>
-        {v.kind === "code" ? <CodeView v={v} time={time} start={shot.start} w={w} h={h} /> : <FlowView v={v} time={time} start={shot.start} w={w} h={h} slug={slug} />}
+        <LaidView v={v} time={time} start={shot.start} end={shot.end} w={w} h={h} slug={slug} room={room} />
       </div>
     </PaletteContext.Provider>
   );
@@ -819,6 +821,10 @@ export const VisualView: React.FC<Props & { v: ResolvedVisual }> = (p) => {
     case "chapter": return <ChapterVisual {...p} v={v} />;
     case "flow":
     case "code":
+    case "prompt":
+    case "doc":
+    case "gallery":
+    case "float":
       return <Laid {...p} v={v} />;
     case "grid": return <GridVisual {...p} v={v} />;
     case "funnel": return <FunnelVisual {...p} v={v} />;

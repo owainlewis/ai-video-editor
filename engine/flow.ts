@@ -73,8 +73,11 @@ export const flowSlots = (v: Flow): FlowSlot[] => [
   ...v.nodes.flatMap((n, i): FlowSlot[] => (n.arrow ? [{ part: "arrow", node: i }] : [])),
   ...v.nodes.flatMap((n, i) => n.items.map((_, j): FlowSlot => ({ part: "item", node: i, item: j }))),
 ];
-export const flowAnchors = (v: Flow) =>
-  flowSlots(v).map((s) => (s.part === "node" ? v.nodes[s.node].at : s.part === "arrow" ? v.nodes[s.node].arrow?.at : v.nodes[s.node].items[s.item].at));
+// A travelling camera's `wide` word comes last, after every part.
+export const flowAnchors = (v: Flow) => [
+  ...flowSlots(v).map((s) => (s.part === "node" ? v.nodes[s.node].at : s.part === "arrow" ? v.nodes[s.node].arrow?.at : v.nodes[s.node].items[s.item].at)),
+  ...(v.camera === "travel" && v.wide ? [v.wide] : []),
+];
 // Where the search for a part's word starts again from the shot's start: arrows and each node's items
 // are said in their own order, interleaved with the nodes.
 export const flowResets = (v: Flow) => {
@@ -132,10 +135,14 @@ export const flowMoments = (v: Flow, start: number, times: number[] = []) => {
 // what the viewer sees.
 export const flowTimes = (v: Flow, start: number, times: number[]) => {
   const b = flowBeats(v, start, times);
-  return flowSlots(v).map((s, k) => {
-    if (s.part !== "arrow" || v.nodes[s.node].arrow?.at) return times[k] ?? start;
-    return b.arrows.find((a) => a.owner === s.node)?.t ?? times[k] ?? start;
-  });
+  const slots = flowSlots(v);
+  return [
+    ...slots.map((s, k) => {
+      if (s.part !== "arrow" || v.nodes[s.node].arrow?.at) return times[k] ?? start;
+      return b.arrows.find((a) => a.owner === s.node)?.t ?? times[k] ?? start;
+    }),
+    ...times.slice(slots.length),
+  ];
 };
 
 // Plan problems a schema cannot see.
@@ -150,6 +157,8 @@ export const flowIssues = (v: Flow): string[] => {
     if (nd.arrow && !edges.some((e) => e.owner === i)) out.push(`node ${i + 1} ("${nd.label}") has an arrow entry, but no arrow in a ${v.shape} is ${v.shape === "fan-in" ? "drawn from" : "drawn into"} it`);
     if (nd.icon && !isImageIcon(nd.icon) && !(FLOW_ICONS as readonly string[]).includes(nd.icon)) out.push(`node ${i + 1} icon "${nd.icon}" is neither a logo ("logo:<name>") nor one of ${FLOW_ICONS.join(", ")}`);
   });
+  if (v.camera === "travel" && v.shape === "versus") out.push(`a versus compares two columns side by side; the camera cannot travel it`);
+  if (v.wide && v.camera !== "travel") out.push(`"wide" is the word a travelling camera pulls back on; add "camera": "travel" or drop it`);
   if (v.nodes.filter((nd) => nd.accent).length > 1) out.push(`the accent goes on the one node that matters; ${v.nodes.filter((nd) => nd.accent).length} have it`);
   return out;
 };
@@ -392,4 +401,70 @@ export const layoutFlow = (v: Pick<Flow, "shape" | "nodes">, w: number, h: numbe
   const cw = (w - (n - 1) * (2 * FLOW.inset + FLOW.arrow)) / n;
   const cards: FlowCard[] = nodes.map((nd, i) => ({ x: i * (cw + 2 * FLOW.inset + FLOW.arrow), y: h / 2 - h * 0.3, w: cw, h: h * 0.6, mode: "tile", label: [nd.label], sub: nd.sub ? [nd.sub] : [], icon: !!nd.icon }));
   return { axis: "x", size: FLOW.min, sub: z.sub, icon: z.icon, pad: z.pad, radius: z.radius, cards, arrows: [], items: [], itemSize: 26, bounds: boundsOf(cards), fits: false };
+};
+
+// ---------- the travelling camera ----------
+
+// `camera: "travel"` (2026-11-26, from Jeff Su's plugin video): the diagram is laid out to fit the
+// frame as always, and the camera moves over it. It starts close on the first node, travels to each
+// node as it lands, framed with the nodes it joins that are already there, and pulls back to the
+// whole diagram on `wide`, or near the end of the shot. Between moves the frame holds still.
+export const CAMERA = {
+  zoom: 1.6, // the closest the camera goes
+  frame: 0.84, // the share of the frame a framed group fills, at most, across and down
+  travel: 0.8, // one move, in seconds
+  lead: 0.25, // a move starts this long before its node lands, so the node lands as the camera arrives
+  hold: 1.6, // the whole diagram holds at least this long before the shot ends
+  rest: 0.9, // and pulls back no sooner than this after the last part lands
+};
+export type Camera = { z: number; x: number; y: number }; // zoom, and the canvas point at the frame's centre
+export type CameraKey = Camera & { t: number };
+
+const union = (bs: Box[]): Box => boundsOf(bs);
+// The stage around the box, out to the frame's edge, on each side (none when the box is a panel).
+// Parts draw into it; past it they are cut (effects/clean/flow.tsx).
+export type Room = { l: number; t: number; r: number; b: number };
+// The camera that frames `b` in a w x h frame, centred on it. Past the diagram is plain stage, so
+// the camera may look there: a first card at the edge still lands in the middle of the frame.
+export const frameBox = (b: Box, w: number, h: number): Camera => ({
+  z: Math.max(1, Math.min(CAMERA.zoom, (w * CAMERA.frame) / b.w, (h * CAMERA.frame) / b.h)),
+  x: b.x + b.w / 2,
+  y: b.y + b.h / 2,
+});
+
+// Where the camera goes and when: one key per node as it lands, then the wide. `wide` is the time
+// of the `wide` word, if any; `end` the shot's end.
+export const cameraKeys = (v: Flow, L: FlowLayout, w: number, h: number, start: number, end?: number, times: number[] = []): CameraKey[] => {
+  if (v.camera !== "travel" || v.shape === "versus" || !L.cards.length) return [];
+  const b = flowBeats(v, start, times);
+  const edges = flowEdges(v);
+  const order = v.nodes.map((_, i) => i).sort((a, c) => b.nodes[a] - b.nodes[c] || a - c);
+  const keys: CameraKey[] = order.map((i, n) => {
+    const joined = edges.flatMap((e) => (e.from === i ? [e.to] : e.to === i ? [e.from] : [])).filter((j) => order.indexOf(j) < n);
+    const cam = frameBox(union([L.cards[i], ...joined.map((j) => L.cards[j])]), w, h);
+    return { ...cam, t: n === 0 ? start : Math.max(start, b.nodes[i] - CAMERA.lead) };
+  });
+  const last = Math.max(...flowMoments(v, start, times));
+  const said = v.wide ? times[flowSlots(v).length] : undefined;
+  const latest = end !== undefined ? end - CAMERA.hold : Infinity;
+  const tw = Math.max(start, said ?? Math.min(latest, Math.max(last + CAMERA.rest, Math.min(latest, last + 2 * CAMERA.rest))));
+  // The whole is always seen: in a short shot the camera pulls back as the last nodes land instead
+  // of travelling to them first, since a move it cannot finish before the wide is wasted.
+  while (keys.length > 1 && keys[keys.length - 1].t + CAMERA.travel > tw) keys.pop();
+  keys.push({ z: 1, x: w / 2, y: h / 2, t: tw });
+  return keys;
+};
+
+const io = (p: number) => (p < 0.5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2);
+// The camera at time `t`: each move eases from wherever the camera is to its key, so moves that
+// overlap blend rather than jump. Zoom moves in log space, so a pull back feels even.
+export const cameraAt = (keys: CameraKey[], t: number): Camera | undefined => {
+  if (!keys.length) return undefined;
+  let c: Camera = { z: keys[0].z, x: keys[0].x, y: keys[0].y };
+  for (const k of keys.slice(1)) {
+    const p = io(Math.min(1, Math.max(0, (t - k.t) / CAMERA.travel)));
+    if (p <= 0) break;
+    c = { z: Math.exp(Math.log(c.z) + (Math.log(k.z) - Math.log(c.z)) * p), x: c.x + (k.x - c.x) * p, y: c.y + (k.y - c.y) * p };
+  }
+  return c;
 };

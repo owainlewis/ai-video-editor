@@ -162,6 +162,16 @@ Best to borrow, in our style (Helvetica, clean strokes, one accent): spawn from 
 
 Our MOVE (460 ms) is about 1.5x slower than their child spawn (270 to 330 ms) and our FAST (180 ms) slower than their strokes and node fades (70 to 170 ms). Their diagrams feel lively because the parts are quick and something is always flowing, not because anything is big.
 
+## Diagrams on a travelling camera: Jeff Su, "8 AI Plugins" (studied 2026-11-26)
+
+Owain loves the graphics. Full study: `research/youtube/e0EGefCi7GE/NOTES.md`. A new picture about every 2.6 s; his face alone about a quarter of the run.
+
+- **One canvas, a camera that travels it.** The camera starts close on the first card, moves to each card as it lands, framed with what it joins, cards cut off at the frame edge, then pulls back to the whole. Ours: `"camera": "travel"` on a `flow`, `"wide": "<words>"` for the pull back (else near the shot's end, holding the whole 1.6 s). Moves 0.8 s, frame still between them. The camera centres on what it frames; on a full-frame `media` card cards run off at the frame's edge, in a panel they fade at the panel's edge. Not on `versus`.
+- **Neutral cards.** White cards, soft grey hairline, near-black type, real logos, one accent. Now the light `flow` look (RULES 2026-11-26).
+- Still to borrow: plain stand-in content inside a node (a transcript card whose lines tint, a table a highlight sweeps), a typed prompt bar, a chart card, and the product icon on chapter cards.
+
+Built from the same study (2026-11-26): `prompt` (his typed prompts, the key phrase marked), `doc` (his skeleton product cards, with a scan that sweeps a table) and `chart` in the reel kit. Use a prompt when Owain says what he asked an agent, a doc when an agent reads or finds something in a file or sheet, a chart only with real numbers and their source. All three keep the neutral card look; the marker is our accent, not his yellow.
+
 ## Story and pacing: "If nobody watches your videos do this" (studied 2026-11-02)
 
 About 1M views, 5:17. The full breakdown, with timestamps and frames, is in `docs/studies/if-nobody-watches.md`. The editing that carries it is structure, not effects: 131 cuts (median shot 2.2 s), only about 15 text moments, and each one lands on a key line.
@@ -179,3 +189,12 @@ What fits Owain, as graphics where he is on camera:
 - **Dense early, sparse later.** Their cut rate falls from 33 a minute in the hook to 18 in the last part. Put more graphics in the first minute, then the usual one every 20 to 60 s.
 
 Does not fit: text behind the speaker, light leaks and film burns, a colour per chapter, script and handwriting fonts, fake camera UI, counters with numbers nobody said, other creators' clips, punch-ins on YouTube.
+
+## Full-bleed pages on the split: a "5 design skills" listicle (studied 2026-11-26)
+
+Notes and frames in `research/reels/psf7xmsl0f20/`. What Owain liked: the split's top half is the real thing edge to edge (a hero, a component gallery, a code editor, a docs page), never framed in a browser or a card, cropped tight to what is said and set large. A new framing is a hard cut about every second. We do this with `frame: "none"` on a split, now edge to edge from the top of the frame to the seam. Keep `browser` for when the address is the point.
+
+Built from it (2026-11-26): `gallery`, a wall of real captures landing on their names with one growing to fill the panel, and `float`, real pages floating in depth for an opener. Tried in `projects/reels25-4-parts` (the T3 Code reel): the agents' home pages float in under the hook, and on "run Codex, Claude Code, OpenCode" each page lands on its name before T3 Code fills the panel on "single user interface". A diagram explains; a wall of the real things shows. Prefer the wall when the products are real and named.
+
+Not taken: his yellow "#N" over the face and yellow serif words (off our type and palette), and his caption pill on the seam (our band stays).
+

@@ -17,7 +17,7 @@ const prog = (time: number, at: number, dur = 0.28) => (isFinite(at) ? interpola
 // A value as the source wrote it, never rounded into a different number ($2.95 once showed as $3):
 // as many decimals as `exact` has, up to two; money with cents always shows both digits.
 const decimals = (x: number) => (Number.isInteger(x) ? 0 : Math.min(2, (String(x).split(".")[1] ?? "").length));
-const fmt = (n: number, unit = "", exact = n) => {
+export const fmt = (n: number, unit = "", exact = n) => {
   const d = unit === "$" && !Number.isInteger(exact) ? 2 : decimals(exact);
   return `${unit === "$" ? "$" : ""}${n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}${unit && unit !== "$" ? unit : ""}`;
 };

@@ -278,9 +278,14 @@ export const Visual = z.discriminatedUnion("kind", [
   // mail, code, branch, lock, check, gear), `accent` on the one node that matters, `at` its word.
   // `arrow`: the arrow into this node (on a fan-in, out of it): `label` (what is passed, "plan.md")
   // and `at`; left out, the arrow draws as the node it joins lands. A diagram, never stand-in UI.
+  // `camera: "travel"` (2026-11-26, from Jeff Su's diagrams): the camera starts close on the first
+  // node and travels to each node as it lands, framing it with the nodes it joins, then pulls back to
+  // the whole diagram on `wide` (a spoken word), or near the shot's end. Off, the whole diagram holds still.
   z.object({
     kind: z.literal("flow"),
     shape: z.enum(["row", "column", "fan-out", "fan-in", "before-after", "versus"]).default("row"),
+    camera: z.enum(["still", "travel"]).optional(),
+    wide: Anchor.optional(),
     nodes: z
       .array(
         z.object({
@@ -310,6 +315,49 @@ export const Visual = z.discriminatedUnion("kind", [
     typed: z.boolean().default(true),
     lines: z.array(z.object({ text: z.string(), diff: z.enum(["add", "del"]).optional(), at: Anchor.optional() })).min(1).max(16),
     marks: z.array(z.object({ from: z.number().int().min(1), to: z.number().int().min(1).optional(), at: Anchor })).max(4).default([]),
+  }),
+  // A prompt or search bar (engine/prompt.ts; 2026-11-26, from Jeff Su's typed prompts). `text` types
+  // into the bar on `at`; its *marked* phrase takes a marker on `mark` (or as soon as it is typed); the
+  // send button presses on `send`. `app`: a real logo in the bar ("logo:<name>"). `search`: a one-line
+  // search field with a magnifier (and the logo above it) instead of a prompt box. Owain's own words only.
+  z.object({
+    kind: z.literal("prompt"),
+    text: z.string().min(1).max(140),
+    app: z.string().optional(),
+    search: z.boolean().optional(),
+    at: Anchor.optional(),
+    mark: Anchor.optional(),
+    send: Anchor.optional(),
+  }),
+  // A document or a table as a skeleton card (engine/doc.ts; 2026-11-26, from Jeff Su): a tag, the real
+  // title, and grey bars where its text would be, so it reads as a doc without inventing a word of it.
+  // `cols` makes it a table with those headers. `marks` light a row (counted from 1) on a word; `scan`
+  // sweeps a bar down it on a word, as an agent reads it. `icon`: a logo or a flow line icon.
+  z.object({
+    kind: z.literal("doc"),
+    title: z.string().min(1),
+    tag: z.string().optional(),
+    icon: z.string().optional(),
+    cols: z.array(z.string()).min(2).max(4).optional(),
+    rows: z.number().int().min(2).max(8).default(5),
+    marks: z.array(z.object({ row: z.number().int().min(1), at: Anchor })).max(3).default([]),
+    scan: Anchor.optional(),
+  }),
+  // A wall of real captures (engine/gallery.ts; 2026-11-26, from a listicle reel Owain liked): four to
+  // nine pages or components in a grid that fills the split's top edge to edge, landing in a quick
+  // wave (or each on its `at`). `focus` grows one tile (counted from 1) to fill the panel on its word.
+  // Real captures only (`capture`, or a project asset), never stand-ins.
+  z.object({
+    kind: z.literal("gallery"),
+    items: z.array(z.object({ src: z.string(), at: Anchor.optional() })).min(4).max(9),
+    focus: z.object({ item: z.number().int().min(1), at: Anchor }).optional(),
+  }),
+  // Real pages floating in depth (engine/gallery.ts; 2026-11-26, the same reel's opener): three to six
+  // captures drift at different depths across the panel, each flying in from behind on its `at` (or in a
+  // quick cascade), the whole stack slowly pushing in. For an opener or a "there are so many" line.
+  z.object({
+    kind: z.literal("float"),
+    items: z.array(z.object({ src: z.string(), at: Anchor.optional() })).min(3).max(6),
   }),
   // A library that fills in: real thumbnails (`items`, captured from the source's own site) arrive in
   // a wave and `count` rolls up like an odometer on `at`. `groups` light a set of tiles on their words,

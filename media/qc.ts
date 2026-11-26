@@ -236,7 +236,9 @@ async function checkGraphic(page: Page, r: Resolved, s: ResolvedShot, where: str
       if (t === settled) {
         measured = file;
         writeJson(join(frames, `${name}-measure.json`), m);
-        if (!m.texts.length) issues.push({ level: "warn", message: `${where}: no text on screen when it should have settled (${t.toFixed(1)}s); check it is not already gone` });
+        // A wall or a stack of captures is all picture: its words are in the pages, not on screen as text.
+        const pictures = s.visual?.kind === "gallery" || s.visual?.kind === "float";
+        if (!m.texts.length && !pictures) issues.push({ level: "warn", message: `${where}: no text on screen when it should have settled (${t.toFixed(1)}s); check it is not already gone` });
       }
       // Chapter cards sit on a left margin by design (2026-10-25 motion lab); everything else full
       // frame is centred. Centring is judged once everything has landed.
