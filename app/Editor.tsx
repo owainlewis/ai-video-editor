@@ -25,11 +25,14 @@ const KEYS: [string, string][] = [
   ["M", "Write a review note at the playhead"],
   ["⌘Z or ⇧⌘Z", "Undo or redo"],
   ["⌘↩", "Send the note to Claude"],
-  ["⌘1 ⌘2 ⌘3", "Show or hide the library, the timeline, or Claude and the inspector"],
+  ["⌘1 ⌘2 ⌘3 ⌘4", "Show or hide the library, the timeline, Claude, or the inspector"],
+  ["G", "Show or hide the safe area over the picture"],
+  ["S", "Skim: the viewer follows the pointer over the timeline"],
   ["Esc", "Close the open graphic"],
 ];
 import { component } from "./Gallery";
-import { Inspector } from "./Inspector";
+import { Inspector, NoInspector } from "./Inspector";
+import { SafeArea, Transport, useFit } from "./Transport";
 import { Library } from "./Library";
 import { type Range, Timeline } from "./Timeline";
 
@@ -99,15 +102,55 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const { panels } = layout;
   // A graphic opened from the timeline or the library needs the inspector on screen.
   useEffect(() => {
-    if (kind && picked !== null) layout.set({ showRight: true });
+    if (kind && picked !== null) layout.set({ showInspector: true });
   }, [kind, picked, layout.set]);
-  // ⌘1, ⌘2 and ⌘3 show and hide the library, the timeline and the right-hand panel, even while typing.
+  // The safe area over the picture (G), kept in this browser like the panels.
+  const [safe, setSafe] = useState(() => {
+    try {
+      return localStorage.getItem("studio-safe") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSafe = () =>
+    setSafe((v) => {
+      try {
+        localStorage.setItem("studio-safe", v ? "0" : "1");
+      } catch {
+        // Kept for this visit only.
+      }
+      return !v;
+    });
+  // Skimming (S): while on and paused, the viewer shows the frame under the pointer on the timeline
+  // and goes back to the playhead when the pointer leaves. The playhead itself does not move.
+  const [skim, setSkim] = useState(false);
+  const skimming = useRef(false);
+  const onSkim = (t: number | null) => {
+    const pl = player.current;
+    if (!pl || !r) return;
+    if (t === null) {
+      if (!skimming.current) return;
+      skimming.current = false;
+      pl.seekTo(Math.round(playhead.get() * r.fps));
+      return;
+    }
+    if (pl.isPlaying()) return;
+    skimming.current = true;
+    pl.seekTo(Math.round(t * r.fps));
+  };
+  // Turning skimming off puts the viewer back on the playhead.
+  useEffect(() => {
+    if (!skim) onSkim(null);
+  }, [skim]);
+  // The viewer's box, fitted to the space, so the safe area sits on the picture.
+  const screen = useRef<HTMLDivElement>(null);
+  // ⌘1 to ⌘4 show and hide the library, the timeline, Claude and the inspector, even while typing.
   const toggleRef = useRef(layout.toggle);
   toggleRef.current = layout.toggle;
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const which = ({ "1": "showLeft", "2": "showBottom", "3": "showRight" } as const)[e.key as "1" | "2" | "3"];
+      const which = ({ "1": "showLeft", "2": "showBottom", "3": "showRight", "4": "showInspector" } as const)[e.key as "1" | "2" | "3" | "4"];
       if (!which) return;
       e.preventDefault();
       toggleRef.current(which);
@@ -133,7 +176,8 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     const pl = player.current;
     if (!pl || !p?.resolved) return;
     const fps = p.resolved.fps;
-    const on = (e: { detail: { frame: number } }) => playhead.set(e.detail.frame / fps);
+    // A skim shows another frame without moving the playhead.
+    const on = (e: { detail: { frame: number } }) => !skimming.current && playhead.set(e.detail.frame / fps);
     pl.addEventListener("frameupdate", on);
     return () => pl.removeEventListener("frameupdate", on);
   }, [p?.resolved]);
@@ -147,6 +191,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   // The server's next plan includes the edit, so the patch is dropped when it arrives.
   useEffect(() => setDraft(null), [p?.resolved]);
   const seek = (t: number) => {
+    skimming.current = false;
     player.current?.seekTo(Math.round(t * (r?.fps ?? 30)));
     playhead.set(t);
   };
@@ -185,7 +230,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   // The editor's keys, as in Final Cut: J K L to play back, pause and play (again to go faster),
   // I and O to mark a range, B to blade at the playhead, Delete to ripple delete the selected
   // segment or the marked range, Cmd-Z and Shift-Cmd-Z to undo and redo. Not while typing a note.
-  const keys = useRef({ selection, segment, cut, rate, picked, duration: r?.duration ?? 0, fps: r?.fps ?? 30, beats, step, seek });
+  const keys = useRef({ selection, segment, cut, rate, picked, duration: r?.duration ?? 0, fps: r?.fps ?? 30, beats, step, seek, toggleSafe, setSkim });
   const marks = useRef<{ in?: number; out?: number }>({});
   // J K L: which way the playhead is moving, and the timer that steps it back for J.
   const shuttle = useRef<{ dir: -1 | 0 | 1; speed: number; timer?: number }>({ dir: 0, speed: 1 });
@@ -202,6 +247,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     if (!pl) return;
     const paused = () => shuttle.current.dir === 1 && ((shuttle.current = { dir: 0, speed: 1 }), setRate(1));
     const played = () => {
+      // Playing while skimming plays from the skimmed frame, as in Final Cut: it becomes the
+      // playhead, and the playhead follows playback again.
+      if (skimming.current) {
+        skimming.current = false;
+        playhead.set(pl.getCurrentFrame() / (p?.resolved?.fps ?? 30));
+      }
       if (shuttle.current.dir === -1) {
         clearInterval(shuttle.current.timer);
         shuttle.current = { dir: 0, speed: 1 };
@@ -214,7 +265,7 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       pl.removeEventListener("play", played);
     };
   }, [p?.resolved]);
-  keys.current = { selection, segment, cut, rate, picked, duration: r?.duration ?? 0, fps: r?.fps ?? 30, beats, step, seek };
+  keys.current = { selection, segment, cut, rate, picked, duration: r?.duration ?? 0, fps: r?.fps ?? 30, beats, step, seek, toggleSafe, setSkim };
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest?.("input, textarea, select, [contenteditable]")) return;
@@ -236,6 +287,8 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       } else if (key === "b") saveCut(splitAt(k.cut, time)).catch(() => {});
       // A note for the review at this moment. The video keeps playing while it is written.
       else if (key === "m") setNoting(time);
+      else if (key === "g") k.toggleSafe();
+      else if (key === "s") k.setSkim((v) => !v);
       else if (key === "delete" || key === "backspace") {
         e.preventDefault();
         if (k.segment) saveCut(rippleDelete(k.cut, k.segment)).then(() => setSegment(null)).catch(() => {});
@@ -292,6 +345,9 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       shuttle.current = { dir: 0, speed: 1 };
     };
   }, [slug]);
+
+  const aspect = r ? compositionFor(r.canvas).width / compositionFor(r.canvas).height : 9 / 16;
+  const fitted = useFit(screen, aspect, !!(r && p?.words));
 
   if (error) return <Shell title={slug}><p className="error pad">{error}</p></Shell>;
   if (!p) return <Shell title={slug}><p className="pad muted">Loading…</p></Shell>;
@@ -367,33 +423,53 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
       }
     >
       <div
-        className={`editor ${r.canvas === "youtube" ? "wide" : ""} ${panels.showLeft ? "" : "no-left"} ${panels.showRight ? "" : "no-right"} ${panels.showBottom ? "" : "no-bottom"}`}
+        className={`editor ${r.canvas === "youtube" ? "wide" : ""} ${panels.showLeft ? "" : "no-left"} ${panels.showInspector ? "" : "no-inspector"} ${panels.showRight ? "" : "no-right"} ${panels.showBottom ? "" : "no-bottom"}`}
         style={panelStyle(panels)}
       >
         <Splitters panels={panels} set={layout.set} reset={layout.reset} />
         <Library slug={slug} r={r} picked={picked} onPick={(t) => setPicked(t)} cut={cut} onCut={saveCut} onSelect={setSelection} bin={p.bin ?? []} canvas={r.canvas} theme={r.theme} assets={p.assets ?? []} words={p.words} onSeek={seek} onUse={(ref) => setNote((n) => `${n}${n && !n.endsWith(" ") ? " " : ""}${ref} `)} />
         <section className="stage">
-          <div className="screen">
-          <Player
-            ref={player}
-            component={component(r)}
-            inputProps={r}
-            durationInFrames={Math.max(1, Math.round(r.duration * r.fps))}
-            fps={r.fps}
-            compositionWidth={comp.width}
-            compositionHeight={comp.height}
-            style={{ height: "100%", maxWidth: "100%", aspectRatio: `${comp.width} / ${comp.height}` }}
-            playbackRate={rate}
-            controls
-            clickToPlay
-            spaceKeyToPlayOrPause
-            acknowledgeRemotionLicense
-          />
+          <div className="screen" ref={screen}>
+            <div className="frame" style={{ width: fitted.width, height: fitted.height }}>
+              <Player
+                ref={player}
+                component={component(r)}
+                inputProps={r}
+                durationInFrames={Math.max(1, Math.round(r.duration * r.fps))}
+                fps={r.fps}
+                compositionWidth={comp.width}
+                compositionHeight={comp.height}
+                style={{ width: "100%", height: "100%" }}
+                playbackRate={rate}
+                clickToPlay
+                spaceKeyToPlayOrPause
+                acknowledgeRemotionLicense
+              />
+              {safe && <SafeArea />}
+            </div>
           </div>
-          <div className="stage-foot">
-            {beats.length > 0 ? <LiveBeatBar beats={beats} shots={r.shots} onStep={step} /> : <span className="spacer" />}
+          <Transport
+            player={player}
+            ready={p.resolved}
+            duration={r.duration}
+            rate={rate}
+            aspect={r.canvas === "youtube" ? "16:9" : "9:16"}
+            safe={safe}
+            onSafe={toggleSafe}
+            onToggle={() => {
+              // Playing back (J) steps the playhead on a timer; stop it so play does not fight it.
+              if (shuttle.current.dir === -1) (clearInterval(shuttle.current.timer), (shuttle.current = { dir: 0, speed: 1 }));
+              player.current?.toggle();
+            }}
+            onFrame={(dir) => (stopShuttle(), seek(Math.max(0, Math.min(r.duration, playhead.get() + dir / r.fps))))}
+          >
             <SoundPick slug={slug} p={p} on={mixed} set={setMixed} />
-          </div>
+          </Transport>
+          {beats.length > 0 && (
+            <div className="stage-foot">
+              <LiveBeatBar beats={beats} shots={r.shots} onStep={step} />
+            </div>
+          )}
           {noting !== null && (
             <NoteBox
               at={noting}
@@ -411,13 +487,15 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             id={picked}
             words={p.words}
             onPreview={setDraft}
-            onAsk={() => setPicked(null)}
+            onAsk={() => (layout.set({ showRight: true }), requestAnimationFrame(() => document.getElementById("chat-note")?.focus()))}
             onClose={() => setPicked(null)}
             onSeek={seek}
             variants={p.variants}
             working={working}
           />
         ) : (
+          <NoInspector />
+        )}
         <Chat
           slug={slug}
           messages={chat}
@@ -431,11 +509,11 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
           onSeek={seek}
           onClear={() => setSelection(null)}
         />
-        )}
         <section className="bottom">
           <Timeline r={r} words={p.words} selection={selection} camera={p.camera} music={music} onSeek={seek} onSelect={setSelection} drafts={(p.suggestions ?? []).filter((x) => x.status === "pending")} onDropClip={(ref, at, length) => api.post(slug, "drop", { ref, at, length }).then(() => setError("")).catch((e) => setDropError(String(e.message)))}
             cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart}
             picked={picked} onPick={(t) => (setPicked(t), setSegment(null))} beats={beats} onBeat={step} notes={notes}
+            strips={p.strips ?? {}} skim={skim} onSkim={onSkim}
             previews={p.previews ?? {}} rendering={!!rendering} onParts={(change) => api.post(slug, "parts", change).catch((e) => setDropError(String(e.message)))} onRender={(ask) => api.post(slug, "render", ask).catch((e) => setDropError(String(e.message)))} />
         </section>
         {dropError && (
@@ -546,8 +624,8 @@ const Chat: React.FC<{
 
   return (
     <aside className="chat">
-      <div className="suggest-bar">
-        <h3 className="panel-h">Claude</h3>
+      <div className="panel-bar suggest-bar">
+        <b>Claude</b>
         <span className="spacer" />
         {pending.length > 0 && <span className="muted small">{pending.length} to review</span>}
         <button onClick={() => api.post(slug, "suggest").catch((e) => setError(String(e.message)))} disabled={working}>
@@ -614,6 +692,7 @@ const Chat: React.FC<{
         )}
         <div className="box">
           <textarea
+            id="chat-note"
             value={note}
             placeholder="What should change?"
             onChange={(e) => setNote(e.target.value)}

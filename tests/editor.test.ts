@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { clock, createEventBus, type Event, type EventSourceLike, watchRestarts } from "../app/api.ts";
 import { mixPlanKey } from "../app/Editor.tsx";
-import { Fields } from "../app/Inspector.tsx";
+import { bigWords, type PlanShot } from "../app/Inspector.tsx";
 import { clamp, DEFAULTS, dragSize, LIMITS, panelStyle, parsePanels } from "../app/layout.tsx";
 import { mergeProject } from "../app/project.ts";
 
@@ -48,44 +48,43 @@ describe("panel parsing and clamping", () => {
         JSON.stringify({ left: "300", right: null, bottom: 9999, showLeft: "no", showRight: false, showBottom: 0 }),
         "youtube",
       ),
-    ).toEqual({
-      left: DEFAULTS.youtube.left,
-      right: DEFAULTS.youtube.right,
-      bottom: LIMITS.bottom[1],
-      showLeft: true,
-      showRight: false,
-      showBottom: true,
-    });
+    ).toEqual({ ...DEFAULTS.youtube, bottom: LIMITS.bottom[1], showRight: false });
     expect(
       parsePanels(JSON.stringify({ left: 100, right: 420.4, bottom: 50, showLeft: false }), "reel"),
-    ).toEqual({
-      left: LIMITS.left[0],
-      right: 420,
-      bottom: LIMITS.bottom[0],
-      showLeft: false,
-      showRight: true,
-      showBottom: true,
-    });
+    ).toEqual({ ...DEFAULTS.reel, left: LIMITS.left[0], right: 420, bottom: LIMITS.bottom[0], showLeft: false });
+  });
+
+  it("keeps panels saved before the inspector had its own column", () => {
+    // An old save has no inspector: it shows, at its usual width.
+    const old = parsePanels(JSON.stringify({ left: 300, right: 360, bottom: 280, showLeft: true, showRight: true, showBottom: true }), "reel");
+    expect(old.inspector).toBe(DEFAULTS.reel.inspector);
+    expect(old.showInspector).toBe(true);
+    expect(parsePanels(JSON.stringify({ inspector: 999, showInspector: false }), "reel")).toMatchObject({ inspector: LIMITS.inspector[1], showInspector: false });
   });
 
   it("clamps splitter drag sizes to limits while preserving minimum viewer room", () => {
-    const rect = { left: 0, right: 1000, bottom: 800, width: 1000, height: 800 };
-    const panels = { left: 280, right: 400, bottom: 300, showLeft: true, showRight: true, showBottom: true };
-    // Viewer needs 280px, right takes 400px -> max room for left is 320px even if cursor is at 450px.
-    expect(dragSize("left", { x: 450, y: 0 }, rect, panels)).toBe(320);
-    // When right panel is hidden, left can reach its full max limit (480px).
-    expect(dragSize("left", { x: 600, y: 0 }, rect, { ...panels, showRight: false })).toBe(480);
-    // Right panel respects viewer room and clamps to min 280px.
-    expect(dragSize("right", { x: 950, y: 0 }, rect, panels)).toBe(280);
-    // Bottom panel keeps 220px for viewer height (800 - 220 = 580, clamped by LIMITS.bottom[1] = 560).
+    const rect = { left: 0, right: 1400, bottom: 800, width: 1400, height: 800 };
+    const panels = { left: 280, inspector: 280, right: 400, bottom: 300, showLeft: true, showInspector: true, showRight: true, showBottom: true };
+    // The room for the library: 1400 less padding (12), its gap (6), the inspector and Claude with
+    // their gaps (286 + 406) and the viewer's 280 = 410, even with the pointer further right.
+    expect(dragSize("left", { x: 700, y: 0 }, rect, panels)).toBe(410);
+    // With Claude and the inspector hidden it reaches its own limit.
+    expect(dragSize("left", { x: 900, y: 0 }, rect, { ...panels, showRight: false, showInspector: false })).toBe(480);
+    // The pointer's distance from the right edge, less the padding and half the gap.
+    expect(dragSize("right", { x: 1400 - 9 - 350, y: 0 }, rect, panels)).toBe(350);
+    // The inspector's edge is Claude's column further in.
+    expect(dragSize("inspector", { x: 1400 - 9 - 406 - 300, y: 0 }, rect, panels)).toBe(300);
+    expect(dragSize("inspector", { x: 1400 - 9 - 300, y: 0 }, rect, { ...panels, showRight: false })).toBe(300);
+    // The timeline keeps 220 px for the viewer, clamped to its own limits.
     expect(dragSize("bottom", { x: 0, y: 100 }, rect, panels)).toBe(560);
     expect(dragSize("bottom", { x: 0, y: 750 }, rect, panels)).toBe(150);
   });
 
-  it("sets hidden panels to 0px in panelStyle", () => {
-    expect(panelStyle({ left: 300, right: 350, bottom: 250, showLeft: false, showRight: true, showBottom: false })).toEqual({
+  it("gives each shown side panel its width and gap, and a hidden one nothing", () => {
+    expect(panelStyle({ left: 300, inspector: 260, right: 350, bottom: 250, showLeft: false, showInspector: true, showRight: true, showBottom: false })).toEqual({
       "--left": "0px",
-      "--right": "350px",
+      "--inspector": "266px",
+      "--right": "356px",
       "--bottom": "0px",
     });
   });
@@ -233,19 +232,24 @@ describe("project reload merging and mix retry key", () => {
   });
 });
 
-describe("Inspector Fields control stability", () => {
-  it("renders a stable textarea for strings both under and over 48 chars so focus never drops", () => {
-    const shortHtml = renderToStaticMarkup(React.createElement(Fields, { name: "text", value: "Short text", onChange: () => {} }));
-    const longHtml = renderToStaticMarkup(
-      React.createElement(Fields, {
-        name: "text",
-        value: "A string that is definitely longer than forty-eight characters to test crossing the threshold",
-        onChange: () => {},
-      }),
-    );
-    expect(shortHtml).toContain("<textarea");
-    expect(shortHtml).not.toContain("<input");
-    expect(longHtml).toContain("<textarea");
-    expect(longHtml).not.toContain("<input");
+describe("inspector: only the big words", () => {
+  it("offers the hit word, a diagram's title, the header and a card's own title, and writes each back", () => {
+    const shot: PlanShot = { at: "x", layout: "split", header: "Setup", hit: { text: "FAST", at: "fast" }, title: { lines: ["code", "review"] }, visual: { kind: "chart", title: "Speed", points: [] } as never };
+    const w = bigWords(shot);
+    expect(w.map((x) => x.label)).toEqual(["Hit word", "Title", "Header", "Title"]);
+    expect((w[0].set(shot, "FASTER").hit as { text: string; at: string })).toEqual({ text: "FASTER", at: "fast" });
+    expect((w[1].set(shot, "one\ntwo three").title as { lines: string[] }).lines).toEqual(["one", "two three"]);
+    expect(w[2].set(shot, "").header).toBeUndefined();
+    expect((w[3].set(shot, "Cost").visual as { title: string }).title).toBe("Cost");
+  });
+  it("offers each beat's words and keeps the rest of the item", () => {
+    const shot: PlanShot = { at: "x", layout: "card", visual: { kind: "beats", items: [{ text: "one", size: "huge", at: "one" }, { text: "two", size: "mid" }] } as never };
+    const w = bigWords(shot);
+    expect(w.map((x) => x.label)).toEqual(["Beat 1", "Beat 2"]);
+    expect((w[1].set(shot, "TWO").visual as { items: unknown[] }).items).toEqual([{ text: "one", size: "huge", at: "one" }, { text: "TWO", size: "mid" }]);
+  });
+  it("offers nothing for a graphic made of small print", () => {
+    expect(bigWords({ at: "x", layout: "split", visual: { kind: "flow", shape: "row", nodes: [{ label: "a" }, { label: "b" }] } as never })).toEqual([]);
+    expect(bigWords({ at: "x", layout: "split", visual: { kind: "image", src: "a.png", frame: "browser" } as never })).toEqual([]);
   });
 });

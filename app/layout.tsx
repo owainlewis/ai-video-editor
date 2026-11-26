@@ -1,20 +1,30 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-// The editor's workspace: the library on the left, the viewer in the middle, Claude or the
-// inspector on the right, the timeline across the bottom. Each panel can be dragged to a new size
+// The editor's workspace: the library on the left, the viewer in the middle, the inspector and
+// Claude on the right, the timeline across the bottom. Each panel can be dragged to a new size
 // or hidden, as in Final Cut, so the viewer gets the room when Owain is watching. Sizes are kept
 // per kind of video (a reel wants height, a YouTube video wants width), in this browser only.
 
-export type Panels = { left: number; right: number; bottom: number; showLeft: boolean; showRight: boolean; showBottom: boolean };
+export type Panels = {
+  left: number; inspector: number; right: number; bottom: number;
+  showLeft: boolean; showInspector: boolean; showRight: boolean; showBottom: boolean;
+};
+export type Side = "left" | "inspector" | "right" | "bottom";
+export type Show = "showLeft" | "showInspector" | "showRight" | "showBottom";
 export type Kind = "reel" | "youtube";
 
 export const DEFAULTS: Record<Kind, Panels> = {
-  reel: { left: 280, right: 340, bottom: 300, showLeft: true, showRight: true, showBottom: true },
-  youtube: { left: 280, right: 340, bottom: 300, showLeft: true, showRight: true, showBottom: true },
+  reel: { left: 280, inspector: 280, right: 340, bottom: 300, showLeft: true, showInspector: true, showRight: true, showBottom: true },
+  // A 16:9 viewer needs the width: the inspector opens when a graphic is picked.
+  youtube: { left: 280, inspector: 280, right: 340, bottom: 300, showLeft: true, showInspector: false, showRight: true, showBottom: true },
 };
 // What a drag may reach. The viewer always keeps room in the middle.
-export const LIMITS = { left: [240, 480], right: [280, 560], bottom: [150, 560] } as const;
+export const LIMITS = { left: [240, 480], inspector: [240, 420], right: [280, 560], bottom: [150, 560] } as const;
 export const VIEWER_MIN = { width: 280, height: 220 };
+// The editor's padding and the gap between panels (app/style.css .editor). A side panel's column is
+// its width plus the gap beside it, so a hidden panel leaves no gap behind.
+export const PAD = 6;
+export const GAP = 6;
 
 const key = (kind: Kind) => `studio-panels-${kind}`;
 export const clamp = (v: number, [lo, hi]: readonly [number, number], fallback = lo) =>
@@ -31,9 +41,11 @@ export const parsePanels = (raw: string | null, kind: Kind): Panels => {
     const bool = (v: unknown, fb: boolean) => (typeof v === "boolean" ? v : fb);
     return {
       left: num(kept.left, LIMITS.left, def.left),
+      inspector: num(kept.inspector, LIMITS.inspector, def.inspector),
       right: num(kept.right, LIMITS.right, def.right),
       bottom: num(kept.bottom, LIMITS.bottom, def.bottom),
       showLeft: bool(kept.showLeft, def.showLeft),
+      showInspector: bool(kept.showInspector, def.showInspector),
       showRight: bool(kept.showRight, def.showRight),
       showBottom: bool(kept.showBottom, def.showBottom),
     };
@@ -50,21 +62,28 @@ export const loadPanels = (kind: Kind): Panels => {
   }
 };
 
+// The room the side columns other than `which` take.
+const besides = (which: "left" | "inspector" | "right", p: Panels) =>
+  (which !== "left" && p.showLeft ? p.left + GAP : 0) + (which !== "inspector" && p.showInspector ? p.inspector + GAP : 0) + (which !== "right" && p.showRight ? p.right + GAP : 0);
+
 export const dragSize = (
-  which: "left" | "right" | "bottom",
+  which: Side,
   client: { x: number; y: number },
   rect: { left: number; right: number; bottom: number; width: number; height: number },
   panels: Panels,
 ): number => {
-  if (which === "left") {
-    const room = rect.width - (panels.showRight ? panels.right : 0) - VIEWER_MIN.width;
-    return clamp(Math.min(client.x - rect.left, room), LIMITS.left, DEFAULTS.reel.left);
+  if (which !== "bottom") {
+    const room = rect.width - 2 * PAD - GAP - besides(which, panels) - VIEWER_MIN.width;
+    // The edge is the middle of the gap. The inspector sits left of Claude, so its edge is Claude's
+    // column further in.
+    const edge = PAD + GAP / 2;
+    const want =
+      which === "left" ? client.x - rect.left - edge
+      : which === "right" ? rect.right - client.x - edge
+      : rect.right - client.x - edge - (panels.showRight ? panels.right + GAP : 0);
+    return clamp(Math.min(want, room), LIMITS[which], DEFAULTS.reel[which]);
   }
-  if (which === "right") {
-    const room = rect.width - (panels.showLeft ? panels.left : 0) - VIEWER_MIN.width;
-    return clamp(Math.min(rect.right - client.x, room), LIMITS.right, DEFAULTS.reel.right);
-  }
-  return clamp(Math.min(rect.bottom - client.y, rect.height - VIEWER_MIN.height), LIMITS.bottom, DEFAULTS.reel.bottom);
+  return clamp(Math.min(rect.bottom - client.y - PAD - GAP / 2, rect.height - 2 * PAD - GAP - VIEWER_MIN.height), LIMITS.bottom, DEFAULTS.reel.bottom);
 };
 
 export function usePanels(kind: Kind | undefined) {
@@ -83,12 +102,7 @@ export function usePanels(kind: Kind | undefined) {
       if (!k) return cur;
       const next = fn(cur.panels, k);
       if (
-        next.left === cur.panels.left &&
-        next.right === cur.panels.right &&
-        next.bottom === cur.panels.bottom &&
-        next.showLeft === cur.panels.showLeft &&
-        next.showRight === cur.panels.showRight &&
-        next.showBottom === cur.panels.showBottom
+        (Object.keys(next) as (keyof Panels)[]).every((k) => next[k] === cur.panels[k])
       ) {
         return cur;
       }
@@ -101,27 +115,28 @@ export function usePanels(kind: Kind | undefined) {
     });
   }, []);
   const set = useCallback((change: Partial<Panels>) => update((old) => ({ ...old, ...change })), [update]);
-  const toggle = useCallback((which: "showLeft" | "showRight" | "showBottom") => update((old) => ({ ...old, [which]: !old[which] })), [update]);
-  const reset = useCallback((which: "left" | "right" | "bottom") => update((old, k) => ({ ...old, [which]: DEFAULTS[k][which] })), [update]);
+  const toggle = useCallback((which: Show) => update((old) => ({ ...old, [which]: !old[which] })), [update]);
+  const reset = useCallback((which: Side) => update((old, k) => ({ ...old, [which]: DEFAULTS[k][which] })), [update]);
   return { panels: state.panels, set, toggle, reset };
 }
 
 // The grid's sizes, as CSS variables on the editor. A hidden panel takes no room.
 export const panelStyle = (p: Panels): React.CSSProperties =>
   ({
-    "--left": p.showLeft ? `${p.left}px` : "0px",
-    "--right": p.showRight ? `${p.right}px` : "0px",
-    "--bottom": p.showBottom ? `${p.bottom}px` : "0px",
+    "--left": p.showLeft ? `${p.left + GAP}px` : "0px",
+    "--inspector": p.showInspector ? `${p.inspector + GAP}px` : "0px",
+    "--right": p.showRight ? `${p.right + GAP}px` : "0px",
+    "--bottom": p.showBottom ? `${p.bottom + GAP}px` : "0px",
   }) as React.CSSProperties;
 
-// The three edges a panel is dragged by. They sit over the lines between panels; a double click
+// The edges a panel is dragged by. They sit over the lines between panels; a double click
 // puts that panel back to its usual size.
-export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => void; reset: (w: "left" | "right" | "bottom") => void }> = ({ panels, set, reset }) => {
+export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => void; reset: (w: Side) => void }> = ({ panels, set, reset }) => {
   const box = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const [dragging, setDragging] = useState<"left" | "right" | "bottom" | null>(null);
+  const [dragging, setDragging] = useState<Side | null>(null);
   useEffect(() => () => cleanupRef.current?.(), []);
-  const start = (which: "left" | "right" | "bottom") => (e: React.PointerEvent) => {
+  const start = (which: Side) => (e: React.PointerEvent) => {
     const editor = box.current?.parentElement;
     if (!editor || e.button !== 0) return;
     e.preventDefault();
@@ -131,7 +146,7 @@ export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => 
     setDragging(which);
     const move = (ev: PointerEvent) => {
       latest = dragSize(which, { x: ev.clientX, y: ev.clientY }, rect, panels);
-      editor.style.setProperty(`--${which}`, `${latest}px`);
+      editor.style.setProperty(`--${which}`, `${latest + GAP}px`);
     };
     const detach = () => {
       window.removeEventListener("pointermove", move);
@@ -147,7 +162,7 @@ export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => 
     const cancel = () => {
       detach();
       setDragging(null);
-      editor.style.setProperty(`--${which}`, `${panels[which]}px`);
+      editor.style.setProperty(`--${which}`, `${panels[which] + GAP}px`);
     };
     cleanupRef.current = detach;
     window.addEventListener("pointermove", move);
@@ -157,7 +172,8 @@ export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => 
   return (
     <div ref={box} className={`splitters ${dragging ? `dragging drag-${dragging}` : ""}`}>
       {panels.showLeft && <div className="split split-col split-left" onPointerDown={start("left")} onDoubleClick={() => reset("left")} title="Drag to resize the library. Double-click for its usual size." />}
-      {panels.showRight && <div className="split split-col split-right" onPointerDown={start("right")} onDoubleClick={() => reset("right")} title="Drag to resize the panel. Double-click for its usual size." />}
+      {panels.showInspector && <div className="split split-col split-inspector" onPointerDown={start("inspector")} onDoubleClick={() => reset("inspector")} title="Drag to resize the inspector. Double-click for its usual size." />}
+      {panels.showRight && <div className="split split-col split-right" onPointerDown={start("right")} onDoubleClick={() => reset("right")} title="Drag to resize Claude. Double-click for its usual size." />}
       {panels.showBottom && <div className="split split-row split-bottom" onPointerDown={start("bottom")} onDoubleClick={() => reset("bottom")} title="Drag to resize the timeline. Double-click for its usual size." />}
     </div>
   );
@@ -170,19 +186,23 @@ const Svg: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 const LeftIcon: React.FC<{ on: boolean }> = ({ on }) => <Svg><rect x="1.5" y="2.5" width="13" height="11" rx="2" /><rect x="1.5" y="2.5" width="4.5" height="11" rx="2" fill={on ? "currentColor" : "none"} /></Svg>;
 const RightIcon: React.FC<{ on: boolean }> = ({ on }) => <Svg><rect x="1.5" y="2.5" width="13" height="11" rx="2" /><rect x="10" y="2.5" width="4.5" height="11" rx="2" fill={on ? "currentColor" : "none"} /></Svg>;
+const InspectorIcon: React.FC<{ on: boolean }> = ({ on }) => <Svg><rect x="1.5" y="2.5" width="13" height="11" rx="2" /><path d="M9 2.5v11" /><path d="M10.8 6h1.9M10.8 8h1.9M10.8 10h1.2" strokeWidth={on ? 1.6 : 1} /></Svg>;
 const BottomIcon: React.FC<{ on: boolean }> = ({ on }) => <Svg><rect x="1.5" y="2.5" width="13" height="11" rx="2" /><rect x="1.5" y="9" width="13" height="4.5" rx="2" fill={on ? "currentColor" : "none"} /></Svg>;
 
-// The buttons in the header that show and hide each panel, with their keys (⌘1 ⌘2 ⌘3).
-export const PanelToggles: React.FC<{ panels: Panels; toggle: (w: "showLeft" | "showRight" | "showBottom") => void }> = ({ panels, toggle }) => (
+const TOGGLES: { which: Show; name: string; key: string; Icon: React.FC<{ on: boolean }> }[] = [
+  { which: "showLeft", name: "the library", key: "⌘1", Icon: LeftIcon },
+  { which: "showBottom", name: "the timeline", key: "⌘2", Icon: BottomIcon },
+  { which: "showInspector", name: "the inspector", key: "⌘4", Icon: InspectorIcon },
+  { which: "showRight", name: "Claude", key: "⌘3", Icon: RightIcon },
+];
+
+// The buttons in the header that show and hide each panel, with their keys.
+export const PanelToggles: React.FC<{ panels: Panels; toggle: (w: Show) => void }> = ({ panels, toggle }) => (
   <span className="panel-toggles">
-    <button className={`icon ${panels.showLeft ? "on" : ""}`} onClick={() => toggle("showLeft")} title={`${panels.showLeft ? "Hide" : "Show"} the library (⌘1)`} aria-label="Library" aria-pressed={panels.showLeft}>
-      <LeftIcon on={panels.showLeft} />
-    </button>
-    <button className={`icon ${panels.showBottom ? "on" : ""}`} onClick={() => toggle("showBottom")} title={`${panels.showBottom ? "Hide" : "Show"} the timeline (⌘2)`} aria-label="Timeline" aria-pressed={panels.showBottom}>
-      <BottomIcon on={panels.showBottom} />
-    </button>
-    <button className={`icon ${panels.showRight ? "on" : ""}`} onClick={() => toggle("showRight")} title={`${panels.showRight ? "Hide" : "Show"} Claude and the inspector (⌘3)`} aria-label="Claude and the inspector" aria-pressed={panels.showRight}>
-      <RightIcon on={panels.showRight} />
-    </button>
+    {TOGGLES.map(({ which, name, key, Icon }) => (
+      <button key={which} className={`icon ${panels[which] ? "on" : ""}`} onClick={() => toggle(which)} title={`${panels[which] ? "Hide" : "Show"} ${name} (${key})`} aria-label={name} aria-pressed={panels[which]}>
+        <Icon on={panels[which]} />
+      </button>
+    ))}
   </span>
 );
