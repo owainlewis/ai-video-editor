@@ -31,7 +31,8 @@
     "blueprint.t2.doc",
     "blueprint.t2.doc.table",
     "blueprint.t2.gallery",
-    "blueprint.t2.float"
+    "blueprint.t2.float",
+    "blueprint.t2.flow.cycle"
   ],
   "removed": [
     "blueprint.t1.cli.diff",

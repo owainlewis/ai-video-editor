@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Edit, Visual, type VisualSpec } from "../engine/schema.ts";
 import { PROMPT, promptBeats, promptIssues, promptLayout, promptLines, promptText, typedCount } from "../engine/prompt.ts";
 import { DOC, docBeats, docHead, docHeight, docIssues } from "../engine/doc.ts";
-import { textWidth } from "../engine/flow.ts";
+import { flowEdges, flowIssues, layoutFlow, textWidth } from "../engine/flow.ts";
 import { floatPlaces, galleryBeats, galleryGrid, galleryIssues, galleryTiles } from "../engine/gallery.ts";
 import { cleanSfx, resolveShots } from "../engine/resolve.ts";
 import { cards } from "../styles/blueprint/style.ts";
@@ -144,5 +144,30 @@ describe("the gallery wall and floating pages", () => {
     const sfx = cleanSfx(shots);
     expect(sfx.filter((e) => e.kind === "pop")).toHaveLength(3);
     expect(sfx.some((e) => e.kind === "whoosh" && e.t > 8)).toBe(true);
+  });
+});
+
+describe("the cycle flow", () => {
+  const cyc = (steps: string[]) => Visual.parse({ kind: "flow", shape: "cycle", nodes: [{ label: "Software factory", sub: "same steps, every job" }, ...steps.map((label) => ({ label }))] }) as Extract<VisualSpec, { kind: "flow" }>;
+  const steps = ["Idea or bug", "Triage", "Spec", "Implement", "Review", "Ship", "Monitor"];
+  it("runs round the ring and back, the hub joining nothing", () => {
+    const e = flowEdges(cyc(steps));
+    expect(e).toHaveLength(7);
+    expect(e.at(-1)).toEqual({ from: 7, to: 1, owner: 7 });
+    expect(e.some((x) => x.from === 0 || x.to === 0)).toBe(false);
+  });
+  it("fits a hub and seven steps in the split's panel with no card touching another", () => {
+    const L = layoutFlow(cyc(steps), 960, 724);
+    expect(L.fits).toBe(true);
+    expect(L.size).toBeGreaterThanOrEqual(32);
+    const hub = L.cards[0];
+    expect(hub.x + hub.w / 2).toBeCloseTo(480);
+    expect(L.cards[1].y).toBeLessThan(L.cards[4].y); // the first step is at the top
+    for (const a of L.arrows) expect(a.points.length).toBeGreaterThan(2);
+  });
+  it("needs three steps, and only a cycle takes more than six nodes", () => {
+    expect(flowIssues(cyc(["A", "B"]))).toContain("a cycle takes a hub and three or more steps");
+    const row = Visual.parse({ kind: "flow", shape: "row", nodes: steps.map((label) => ({ label })) }) as Extract<VisualSpec, { kind: "flow" }>;
+    expect(flowIssues(row).some((m) => m.includes("six nodes at most"))).toBe(true);
   });
 });

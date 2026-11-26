@@ -278,12 +278,15 @@ export const Visual = z.discriminatedUnion("kind", [
   // mail, code, branch, lock, check, gear), `accent` on the one node that matters, `at` its word.
   // `arrow`: the arrow into this node (on a fan-in, out of it): `label` (what is passed, "plan.md")
   // and `at`; left out, the arrow draws as the node it joins lands. A diagram, never stand-in UI.
+  // cycle (2026-11-26, from Owain's software factory talk): the first node is the hub in the middle,
+  // the rest go round it clockwise from the top, each passing to the next and the last back to the
+  // first: a loop that runs every time. Up to eight nodes (a hub and seven steps); the others take six.
   // `camera: "travel"` (2026-11-26, from Jeff Su's diagrams): the camera starts close on the first
   // node and travels to each node as it lands, framing it with the nodes it joins, then pulls back to
   // the whole diagram on `wide` (a spoken word), or near the shot's end. Off, the whole diagram holds still.
   z.object({
     kind: z.literal("flow"),
-    shape: z.enum(["row", "column", "fan-out", "fan-in", "before-after", "versus"]).default("row"),
+    shape: z.enum(["row", "column", "fan-out", "fan-in", "before-after", "versus", "cycle"]).default("row"),
     camera: z.enum(["still", "travel"]).optional(),
     wide: Anchor.optional(),
     nodes: z
@@ -299,7 +302,7 @@ export const Visual = z.discriminatedUnion("kind", [
         }),
       )
       .min(2)
-      .max(6),
+      .max(8),
   }),
   // An editor window (engine/code.ts): the file's tab, line numbers, syntax colours in a light theme.
   // Lines type on, each on its word (`at`), or straight after the line above. Any line with `diff`

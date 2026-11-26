@@ -7,7 +7,7 @@ import { floatAnchors, floatBeats, galleryAnchors, galleryBeats, galleryIssues }
 import { promptAnchors, promptBeats, promptIssues, promptText } from "./prompt.ts";
 import { actionBeats, actionOffset, FOCUS } from "./actions.ts";
 import { codeAnchors, codeBeats, codeIssues, codeMoments, codeResets, codeTimes, isDiff } from "./code.ts";
-import { flowAnchors, flowBeats, flowIssues, flowMoments, flowResets, flowTimes } from "./flow.ts";
+import { cameraKeys, flowAnchors, flowBeats, flowIssues, flowMoments, flowResets, flowTimes, layoutFlow } from "./flow.ts";
 
 export const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}']+/gu, "");
 
@@ -683,7 +683,9 @@ export const lintClean = (shots: ResolvedShot[], duration: number, faceless: boo
     if (len > 7 && s.layout !== "split" && !beatsMove) issues.push({ level: "warn", message: `${label} holds ${len.toFixed(1)}s; the cinematic references cut about every 3 s` });
     // Owain, 2026-11-13: "our reels are a tiny bit slow... a long section with black screen and text".
     if (s.layout === "card" && len > CARD_MAX) issues.push({ level: "warn", message: `${label}: a full-screen card holds ${len.toFixed(1)}s; cut back to the split within ${CARD_MAX} s` });
-    const moments = !s.keep ? (v?.kind === "custom" ? v.times : v?.kind === "flow" ? flowMoments(v, s.start, v.times) : v?.kind === "code" ? codeMoments(v, s.start, v.times) : undefined) : undefined;
+    // A travelling camera's moves change the screen too (the split's panel size is close enough for times).
+    const moves = v?.kind === "flow" && v.camera === "travel" ? cameraKeys(v, layoutFlow(v, 960, 724), 960, 724, s.start, s.end, v.times).map((c) => c.t + 0.4) : [];
+    const moments = !s.keep ? (v?.kind === "custom" ? v.times : v?.kind === "flow" ? [...flowMoments(v, s.start, v.times), ...moves].sort((a, b) => a - b) : v?.kind === "code" ? codeMoments(v, s.start, v.times) : undefined) : undefined;
     if (moments?.length && s.layout !== "card") {
       const end = shots[lastKept(shots, i)].end;
       const beats = [s.start, ...moments.filter((t) => t > s.start && t < end), end];

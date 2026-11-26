@@ -137,6 +137,32 @@ export const kitCards = (): Card[] => [
     },
   },
   {
+    id: "blueprint.t2.flow.cycle",
+    kind: "flow",
+    tier: "t2",
+    purpose: "flow",
+    treatment: "cycle",
+    summary: "A loop: the hub in the middle, the steps round it clockwise from the top, each passing to the next and the last back to the first.",
+    layouts: LAYOUTS,
+    slots: flowSlots([4, 8], 16, 22),
+    sample: {
+      visual: {
+        kind: "flow",
+        shape: "cycle",
+        nodes: [
+          { label: "Sample loop", sub: "same steps each time", accent: true, items: [] },
+          { label: "Plan", items: [] },
+          { label: "Build", items: [] },
+          { label: "Check", items: [] },
+          { label: "Ship", items: [] },
+          { label: "Learn", items: [] },
+        ],
+      },
+      header: "Round and *round*",
+      scene: "Round and *round*",
+    },
+  },
+  {
     id: "blueprint.t2.flow.fan-out",
     kind: "flow",
     tier: "t2",

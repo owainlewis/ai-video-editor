@@ -96,6 +96,9 @@ export const flowEdges = (v: Pick<Flow, "shape" | "nodes">): FlowEdge[] => {
     case "fan-out": return idx.slice(1).map((i) => ({ from: 0, to: i, owner: i }));
     case "fan-in": return idx.slice(0, -1).map((i) => ({ from: i, to: n - 1, owner: i }));
     case "before-after": return n >= 2 ? [{ from: 0, to: 1, owner: 1 }] : [];
+    // Round the ring and back to its first step; the hub in the middle joins nothing. The arrow that
+    // closes the loop belongs to the last step, so it draws as the loop completes.
+    case "cycle": return n < 3 ? [] : [...idx.slice(2).map((i) => ({ from: i - 1, to: i, owner: i })), { from: n - 1, to: 1, owner: n - 1 }];
     default: return idx.slice(1).map((i) => ({ from: i - 1, to: i, owner: i }));
   }
 };
@@ -151,6 +154,8 @@ export const flowIssues = (v: Flow): string[] => {
   const n = v.nodes.length;
   if ((v.shape === "before-after" || v.shape === "versus") && n !== 2) out.push(`a ${v.shape} flow takes two nodes, not ${n}`);
   if ((v.shape === "fan-out" || v.shape === "fan-in") && n < 3) out.push(`a ${v.shape} takes a hub and two or more others`);
+  if (v.shape === "cycle" && n < 4) out.push("a cycle takes a hub and three or more steps");
+  if (v.shape !== "cycle" && n > 6) out.push(`a ${v.shape} holds six nodes at most; only a cycle takes ${n}`);
   if (v.shape !== "versus" && v.nodes.some((nd) => nd.items.length)) out.push(`items are drawn only in a versus flow`);
   const edges = flowEdges(v);
   v.nodes.forEach((nd, i) => {
@@ -320,6 +325,69 @@ const flowAt = (shape: FlowShape, nodes: NodeContent[], W: number, H: number, ax
   return { axis, size: s, sub: z.sub, icon: z.icon, pad: z.pad, radius: z.radius, cards, arrows, items: [], itemSize: 0, bounds: boundsOf(parts), fits: true };
 };
 
+// A loop (`cycle`): the hub's card in the middle, the steps on an ellipse round it clockwise from the
+// top, each card as narrow as its words allow, and arrows that follow the ellipse from card to card.
+// At each size it tries the widest steps first, narrowing them (more lines each) until the ring fits.
+const cycleAt = (nodes: NodeContent[], W: number, H: number, s: number): FlowLayout | undefined => {
+  for (const share of [0.3, 0.27, 0.24, 0.21, 0.18]) {
+    const l = cycleWith(nodes, W, H, s, W * share);
+    if (l) return l;
+  }
+  return undefined;
+};
+const cycleWith = (nodes: NodeContent[], W: number, H: number, s: number, maxW: number): FlowLayout | undefined => {
+  const z = sizes(s);
+  const ring = nodes.slice(1);
+  const m = ring.length;
+  if (m < 2) return undefined;
+  const fit = (nd: NodeContent, cap: number) => {
+    const w = Math.min(cap, natural(nd, s, "tile", !!nd.icon));
+    const c = content(nd, s, "tile", w, !!nd.icon);
+    return c && { w, ...c };
+  };
+  const hub = fit(nodes[0], W * 0.34);
+  const steps = ring.map((nd) => fit(nd, maxW));
+  if (!hub || steps.some((x) => !x)) return undefined;
+  // Every step is one size, the widest step's; the hub keeps its own.
+  const cw = Math.max(...steps.map((x) => x!.w));
+  const fitted = ring.map((nd) => content(nd, s, "tile", cw, !!nd.icon));
+  if (fitted.some((x) => !x)) return undefined;
+  const ch = Math.max(...fitted.map((x) => x!.h));
+  const ang = (k: number) => -Math.PI / 2 + (2 * Math.PI * k) / m;
+  // The ring fills the box's height exactly: the first step at the top, the lowest step at the bottom.
+  const low = Math.max(...ring.map((_, k) => Math.sin(ang(k))));
+  const rx = W / 2 - cw / 2, ry = (H - ch) / (1 + low);
+  if (rx <= 0 || ry <= 0) return undefined;
+  const cx = W / 2, cy = ch / 2 + ry;
+  const cards: FlowCard[] = [];
+  cards[0] = { x: cx - hub.w / 2, y: cy - hub.h / 2, w: hub.w, h: hub.h, mode: "tile", label: hub.label, sub: hub.sub, icon: !!nodes[0].icon };
+  ring.forEach((nd, k) => {
+    const f = fitted[k]!;
+    const x = cx + rx * Math.cos(ang(k)), y = cy + ry * Math.sin(ang(k));
+    cards[k + 1] = { x: x - cw / 2, y: y - ch / 2, w: cw, h: ch, mode: "tile", label: f.label, sub: f.sub, icon: !!nd.icon };
+  });
+  // Nothing may touch: every pair of cards keeps the arrow's room between them.
+  const gap = 2 * FLOW.inset + FLOW.head * 2;
+  const near = (a: Box, b: Box) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap * 0.5 && b.y < a.y + a.h + gap * 0.5;
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) if (near(cards[i], cards[j])) return undefined;
+  // An arrow is the ellipse between two cards, cut where it leaves the first and enters the second.
+  const inside = (b: Box, [x, y]: [number, number]) => x > b.x - FLOW.inset && x < b.x + b.w + FLOW.inset && y > b.y - FLOW.inset && y < b.y + b.h + FLOW.inset;
+  const arrows: FlowArrow[] = flowEdges({ shape: "cycle", nodes: nodes as Flow["nodes"] }).map((e) => {
+    const a0 = ang(e.from - 1), a1 = ang(e.to - 1) + (e.to < e.from ? 2 * Math.PI : 0);
+    const pts: [number, number][] = [];
+    for (let q = 0; q <= 48; q++) {
+      const t = a0 + ((a1 - a0) * q) / 48;
+      const p: [number, number] = [cx + rx * Math.cos(t), cy + ry * Math.sin(t)];
+      if (!inside(cards[e.from], p) && !inside(cards[e.to], p)) pts.push(p);
+    }
+    return { ...e, points: pts.length >= 2 ? pts : [[cx, cy], [cx, cy]] };
+  });
+  if (arrows.some((a) => a.points.length < 3)) return undefined;
+  const parts = [...cards];
+  if (parts.some((b) => b.x < -0.5 || b.y < -0.5 || b.x + b.w > W + 0.5 || b.y + b.h > H + 0.5)) return undefined;
+  return { axis: "x", size: s, sub: z.sub, icon: z.icon, pad: z.pad, radius: z.radius, cards, arrows, items: [], itemSize: 0, bounds: boundsOf(parts), fits: true };
+};
+
 // Two columns compared: each node's card on top, its items in rows under it, aligned across, "vs"
 // between the two cards.
 const versusAt = (nodes: NodeContent[], W: number, H: number, s: number): FlowLayout | undefined => {
@@ -372,8 +440,8 @@ const boundsOf = (bs: Box[]): Box => {
 // where the shape leaves it open (fans and before/after), else the smallest size, marked as not fitting.
 export const layoutFlow = (v: Pick<Flow, "shape" | "nodes">, w: number, h: number): FlowLayout => {
   const nodes = v.nodes as NodeContent[];
-  const at = (s: number, axis: "x" | "y") => (v.shape === "versus" ? versusAt(nodes, w, h, s) : flowAt(v.shape, nodes, w, h, axis, s));
-  const axes: ("x" | "y")[] = v.shape === "row" || v.shape === "versus" ? ["x"] : v.shape === "column" ? ["y"] : ["x", "y"];
+  const at = (s: number, axis: "x" | "y") => (v.shape === "versus" ? versusAt(nodes, w, h, s) : v.shape === "cycle" ? cycleAt(nodes, w, h, s) : flowAt(v.shape, nodes, w, h, axis, s));
+  const axes: ("x" | "y")[] = v.shape === "row" || v.shape === "versus" || v.shape === "cycle" ? ["x"] : v.shape === "column" ? ["y"] : ["x", "y"];
   let best: FlowLayout | undefined;
   for (const axis of axes)
     for (let s = FLOW.max; s >= FLOW.min; s -= 2) {

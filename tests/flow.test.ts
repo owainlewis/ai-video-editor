@@ -40,7 +40,8 @@ const boxToPath = (b: Box, pts: [number, number][]) => {
 };
 
 // What the layout engine promises, for any layout in any box.
-const guarantees = (L: FlowLayout, w: number, h: number, label: string) => {
+// `curved`: a cycle, whose arrows follow its ring rather than running straight or in right angles.
+const guarantees = (L: FlowLayout, w: number, h: number, label: string, curved = false) => {
   expect(L.fits, `${label} fits`).toBe(true);
   const parts: Box[] = [...L.cards, ...L.items, ...L.arrows.flatMap((a) => (a.label ? [a.label] : []))];
   // Inside its box.
@@ -52,8 +53,9 @@ const guarantees = (L: FlowLayout, w: number, h: number, label: string) => {
   }
   // Nothing overlaps anything else.
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) expect(overlaps(parts[i], parts[j]), `${label} parts ${i} and ${j} overlap`).toBe(false);
-  // Every card is one size.
-  for (const c of L.cards) expect([Math.round(c.w), Math.round(c.h)], label).toEqual([Math.round(L.cards[0].w), Math.round(L.cards[0].h)]);
+  // Every card is one size. A cycle's hub is its own size: it is the loop, not a step in it.
+  const same = curved ? L.cards.slice(1) : L.cards;
+  for (const c of same) expect([Math.round(c.w), Math.round(c.h)], label).toEqual([Math.round(same[0].w), Math.round(same[0].h)]);
   // Fills the box and sits in its middle.
   expect(L.bounds.h / h, `${label} fills its height`).toBeGreaterThanOrEqual(FLOW.fill - 0.25);
   expect(Math.abs(L.bounds.y + L.bounds.h / 2 - h / 2), `${label} centred down`).toBeLessThan(1);
@@ -62,7 +64,7 @@ const guarantees = (L: FlowLayout, w: number, h: number, label: string) => {
   for (const a of L.arrows) {
     for (let i = 1; i < a.points.length; i++) {
       const [p, q] = [a.points[i - 1], a.points[i]];
-      expect(Math.abs(p[0] - q[0]) < 0.01 || Math.abs(p[1] - q[1]) < 0.01, `${label} arrow segment is axis-aligned`).toBe(true);
+      if (!curved) expect(Math.abs(p[0] - q[0]) < 0.01 || Math.abs(p[1] - q[1]) < 0.01, `${label} arrow segment is axis-aligned`).toBe(true);
     }
     for (const c of L.cards) expect(boxToPath(c, a.points), `${label} arrow clear of a card`).toBeGreaterThanOrEqual(FLOW.inset - 0.5);
     for (const o of L.arrows) if (o.label) expect(boxToPath(o.label, a.points), `${label} "${o.label.text}" clear of an arrow`).toBeGreaterThanOrEqual(FLOW.clear - 0.5);
@@ -146,7 +148,7 @@ describe("the flow layout engine", () => {
         it(`${c.id} ${longest ? "at its limits" : "sample"} lays out in the ${name} box`, () => {
           const v = Visual.parse((longest ? atMax(c) : c.sample)!.visual) as Flow;
           const L = layoutFlow(v, w, h);
-          guarantees(L, w, h, `${c.id} ${name}`);
+          guarantees(L, w, h, `${c.id} ${name}`, v.shape === "cycle");
           // The split panel is what QC judges: the graphic fills at least 45% of the 864 px panel.
           if (name === "split") expect(L.bounds.h, `${c.id} fills the split panel`).toBeGreaterThanOrEqual(0.45 * 864);
         });
