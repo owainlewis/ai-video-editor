@@ -134,7 +134,7 @@ Handled in `Review`, on `window`:
 ## Side Effects
 
 - HTTP through `api.ts`, plus direct GETs for `build/level.json`, thumbnails, `checks/frame.jpg`, the render download, and `build/edit.resolved.json` in QC.
-- `Home`, `Gallery`, `Editor` and `Library` each open their own EventSource through `api.events`. There is no polling of the server.
+- `Home`, `Gallery`, `Editor`, `Library` and `watchRestarts` share one singleton `EventSource` on `/api/events` through `api.events`. There is no polling of the server.
 - Changes `location.hash` to navigate. `Gallery` calls `history.replaceState`.
 - Adds `window` listeners for keys, hash changes and drags, and removes them on cleanup.
 - Writes the `qc*` globals on `window` in QC.

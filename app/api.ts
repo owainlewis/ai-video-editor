@@ -63,9 +63,57 @@ export type Project = {
   mix?: { file: string; at: number; fresh: boolean } | null;
 };
 export type Event =
+  | { type: "hello"; boot: string; slug?: undefined }
   | { type: "plan" | "status"; slug: string }
   | { type: "library" | "cards"; slug?: undefined }
   | { type: "chat"; slug: string; message: ChatMessage | { role: "status"; text: string } };
+
+export type EventSourceLike = { onmessage: ((m: MessageEvent) => unknown) | null; close: () => void };
+
+// One shared EventSource per tab: every page and panel subscribes through this multiplexer so
+// multiple open tabs stay well under Chromium's 6-connection HTTP/1.1 pool.
+export function createEventBus(connect: () => EventSourceLike = () => new EventSource("/api/events")) {
+  let es: EventSourceLike | null = null;
+  const listeners = new Set<(e: Event) => void>();
+  return (on: (e: Event) => void) => {
+    listeners.add(on);
+    if (!es) {
+      es = connect();
+      es.onmessage = (m) => {
+        let ev: Event;
+        try {
+          ev = JSON.parse(m.data) as Event;
+        } catch {
+          return;
+        }
+        for (const fn of [...listeners]) fn(ev);
+      };
+    }
+    return () => {
+      listeners.delete(on);
+      if (listeners.size === 0 && es) {
+        es.close();
+        es = null;
+      }
+    };
+  };
+}
+
+const sharedEvents = createEventBus();
+
+// Reload only when the server actually restarted (a new boot ID), not on a transient SSE drop or
+// Mac sleep/wake, so in-progress notes and edits are never wiped.
+export function watchRestarts(
+  subscribe: (on: (e: Event) => void) => () => void = sharedEvents,
+  reload: () => void = () => location.reload(),
+) {
+  let boot: string | null = null;
+  return subscribe((e) => {
+    if (e.type !== "hello") return;
+    if (boot !== null && e.boot !== boot) reload();
+    boot = e.boot;
+  });
+}
 
 const json = async <T,>(res: Response): Promise<T> => {
   const data = await res.json();
@@ -97,11 +145,13 @@ export const api = {
     fetch(`/api/projects/${slug}/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload ?? {}) }).then((r) => json<{ ok?: boolean }>(r)),
   // Moves the project to projects/.trash/. The caller asks first (app/dialog.tsx).
   remove: (slug: string) => fetch(`/api/projects/${slug}/delete`, { method: "POST" }).then((r) => json<{ ok?: boolean }>(r)),
-  events: (on: (e: Event) => void) => {
-    const es = new EventSource("/api/events");
-    es.onmessage = (m) => on(JSON.parse(m.data));
-    return () => es.close();
-  },
+  events: sharedEvents,
 };
 
-export const clock = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+export const clock = (t: number) => {
+  const safe = Number.isFinite(t) ? Math.max(0, t) : 0;
+  const tenths = Math.round(safe * 10);
+  const mins = Math.floor(tenths / 600);
+  const secs = (tenths % 600) / 10;
+  return `${mins}:${secs.toFixed(1).padStart(4, "0")}`;
+};

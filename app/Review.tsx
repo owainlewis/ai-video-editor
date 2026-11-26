@@ -58,7 +58,8 @@ export const Review: React.FC<{ slug: string }> = ({ slug }) => {
   const shown = items.filter((it) => only === "all" || state!.review.items[it.id]?.status === only);
   const item = items.find((it) => it.id === current) ?? shown[0] ?? items[0];
   const fps = r?.fps ?? 30;
-  const act = (run: Promise<unknown>) => run.then(() => setFailed("")).catch((e) => setFailed(String(e.message)));
+  const act = (run: Promise<unknown>): Promise<boolean> =>
+    run.then(() => (setFailed(""), true)).catch((e) => (setFailed(String(e.message)), false));
 
   // The item loops from just before it to just after it.
   const total = Math.max(1, Math.round((r?.duration ?? 0) * fps));
@@ -101,7 +102,7 @@ export const Review: React.FC<{ slug: string }> = ({ slug }) => {
       if (key === "j") go(k.shown[Math.min(k.shown.length - 1, at + 1)]);
       else if (key === "k") go(k.shown[Math.max(0, at - 1)]);
       else if (key === "n") k.next("waiting");
-      else if (key === "a" && k.item && !k.watch) k.decide(k.item, { status: "approved" }).then(() => k.next("waiting"));
+      else if (key === "a" && k.item && !k.watch) k.decide(k.item, { status: "approved" }).then((ok) => ok && k.next("waiting"));
       else if (key === "c" && k.item && !k.watch) (k.decide(k.item, { status: "change" }), field.current?.focus());
       else if (key === "w") setWatch((w) => !w);
       else if (key === "p") setPhone((v) => !v);
@@ -240,7 +241,7 @@ export const Review: React.FC<{ slug: string }> = ({ slug }) => {
             )}
           </div>
           {noting !== null && (
-            <NoteBox at={noting} onCancel={() => setNoting(null)} onSave={(text) => act(api.post(slug, "note", { t: noting, text })).then(() => setNoting(null))} />
+            <NoteBox at={noting} onCancel={() => setNoting(null)} onSave={(text) => act(api.post(slug, "note", { t: noting, text })).then((ok) => ok && setNoting(null))} />
           )}
           {failed && <p className="error small">{failed}</p>}
         </section>
@@ -262,7 +263,7 @@ export const Review: React.FC<{ slug: string }> = ({ slug }) => {
               rv={rv}
               field={field}
               onDecide={(change) => decide(item, change)}
-              onApprove={() => decide(item, { status: "approved" }).then(() => next("waiting"))}
+              onApprove={() => decide(item, { status: "approved" }).then((ok) => ok && next("waiting"))}
             />
           )}
         </aside>

@@ -31,7 +31,7 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| any | `/api/events` | Server-sent events: `plan`, `status`, `library`, `chat`. |
+| any | `/api/events` | Server-sent events: `hello` (with process `boot` ID), `plan`, `status`, `library`, `cards`, `chat`. |
 | POST | `/api/upload?name&title&canvas` | Saves a source video, starts an ingest job, returns `{ slug }`. |
 | POST | `/api/library?name` | Saves a b-roll clip, starts `broll index`, returns `{ ok }`. |
 | any other | `/api/library` | Returns `{ busy, clips }`. |

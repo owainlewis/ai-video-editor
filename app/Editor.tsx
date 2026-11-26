@@ -47,17 +47,21 @@ export const playable = (r: Resolved, mix?: string): Resolved => ({
 // its own once the plan has been still for a moment: Owain never heard the music or the effects in
 // the editor because the mix waited for a click (2026-11-13). One try per plan, so a mix that fails
 // is not retried in a loop.
+export const mixPlanKey = (p: Project): string | Resolved | undefined =>
+  p.plan !== undefined ? `${p.wordsKey ?? ""}\0${p.plan}` : p.resolved;
+
 export const SoundPick: React.FC<{ slug: string; p: Project; on: boolean; set: (on: boolean) => void }> = ({ slug, p, on, set }) => {
   const [error, setError] = useState("");
   const running = !!p.status && !p.status.done;
   const make = () => api.post(slug, "mix").then(() => setError("")).catch((e) => setError(String(e.message)));
   const tried = useRef<unknown>(null);
   const stale = !p.mix || !p.mix.fresh;
+  const planKey = mixPlanKey(p);
   useEffect(() => {
-    if (!on || !stale || running || !p.resolved || tried.current === p.resolved) return;
-    const t = setTimeout(() => ((tried.current = p.resolved), make()), 1500);
+    if (!on || !stale || running || !p.resolved || tried.current === planKey) return;
+    const t = setTimeout(() => ((tried.current = planKey), make()), 1500);
     return () => clearTimeout(t);
-  }, [on, stale, running, p.resolved]);
+  }, [on, stale, running, p.resolved, planKey]);
   return (
     <div className="seg sound" title={error || "What the player sounds like: the voice alone, or the mix with music and sound effects"}>
       <button className={!on || !p.mix ? "on" : ""} onClick={() => set(false)}>Voice</button>
@@ -89,12 +93,14 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
   const mix = mixed && p?.mix ? p.mix.file : undefined;
   const player = useRef<PlayerRef>(null);
   // The panels' sizes and which are showing (app/layout.tsx), kept apart for reels and YouTube.
-  const layout = usePanels(p?.resolved?.canvas === "youtube" ? "youtube" : "reel");
+  // Wait until the project's canvas is known so opening a YouTube project never touches reel panels.
+  const kind = p?.resolved ? (p.resolved.canvas === "youtube" ? "youtube" : "reel") : undefined;
+  const layout = usePanels(kind);
   const { panels } = layout;
   // A graphic opened from the timeline or the library needs the inspector on screen.
   useEffect(() => {
-    if (picked !== null && !panels.showRight) layout.set({ showRight: true });
-  }, [picked]);
+    if (kind && picked !== null) layout.set({ showRight: true });
+  }, [kind, picked, layout.set]);
   // ⌘1, ⌘2 and ⌘3 show and hide the library, the timeline and the right-hand panel, even while typing.
   const toggleRef = useRef(layout.toggle);
   toggleRef.current = layout.toggle;
@@ -155,7 +161,8 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
 
   // Every cut edit writes the whole cut back; the server saves it as a version and resolves the
   // plan on it, and the editor reloads when it says so.
-  const cut: CutPlan = p?.cut ?? wholeCut(r?.duration ?? 0);
+  const duration = r?.duration ?? 0;
+  const cut: CutPlan = useMemo(() => p?.cut ?? wholeCut(duration), [p?.cut, duration]);
   // A re-cut moves what plays at every time, so a selected range no longer means the same words.
   const cutKey = JSON.stringify(p?.cut ?? null);
   const firstCut = useRef(cutKey);
@@ -188,13 +195,24 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     player.current?.pause();
     setRate(1);
   };
-  // Pausing from the player's own controls or the space bar ends the shuttle too.
+  // Pausing or playing forward from the player's own controls or the space bar ends the shuttle too.
+  useEffect(() => () => clearInterval(shuttle.current.timer), []);
   useEffect(() => {
     const pl = player.current;
     if (!pl) return;
     const paused = () => shuttle.current.dir === 1 && ((shuttle.current = { dir: 0, speed: 1 }), setRate(1));
+    const played = () => {
+      if (shuttle.current.dir === -1) {
+        clearInterval(shuttle.current.timer);
+        shuttle.current = { dir: 0, speed: 1 };
+      }
+    };
     pl.addEventListener("pause", paused);
-    return () => pl.removeEventListener("pause", paused);
+    pl.addEventListener("play", played);
+    return () => {
+      pl.removeEventListener("pause", paused);
+      pl.removeEventListener("play", played);
+    };
   }, [p?.resolved]);
   keys.current = { selection, segment, cut, rate, picked, duration: r?.duration ?? 0, fps: r?.fps ?? 30, beats, step, seek };
   useEffect(() => {
@@ -251,18 +269,28 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         if (shuttle.current.dir === -1) shuttle.current.speed = Math.min(4, shuttle.current.speed * 2);
         else {
           stopShuttle();
-          const fps = r?.fps ?? 30;
           shuttle.current = { dir: -1, speed: 1, timer: window.setInterval(() => {
             const frame = (pl?.getCurrentFrame() ?? 0) - shuttle.current.speed;
             pl?.seekTo(Math.max(0, frame));
             if (frame <= 0) stopShuttle();
-          }, 1000 / fps) };
+          }, 1000 / k.fps) };
         }
+      } else if (key === " ") {
+        // Let the player's own Space toggle run, but stop reverse shuttle so it does not fight playback.
+        if (shuttle.current.dir === -1) {
+          clearInterval(shuttle.current.timer);
+          shuttle.current = { dir: 0, speed: 1 };
+        }
+        return;
       } else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
+    return () => {
+      window.removeEventListener("keydown", on);
+      clearInterval(shuttle.current.timer);
+      shuttle.current = { dir: 0, speed: 1 };
+    };
   }, [slug]);
 
   if (error) return <Shell title={slug}><p className="error pad">{error}</p></Shell>;
@@ -409,12 +437,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
             cut={cut} bin={p.bin ?? []} clipWords={p.clipWords ?? {}} levels={levels} segment={segment} onSegment={setSegment} onCut={saveCut} onShotStart={shotStart}
             picked={picked} onPick={(t) => (setPicked(t), setSegment(null))} beats={beats} onBeat={step} notes={notes}
             previews={p.previews ?? {}} rendering={!!rendering} onParts={(change) => api.post(slug, "parts", change).catch((e) => setDropError(String(e.message)))} onRender={(ask) => api.post(slug, "render", ask).catch((e) => setDropError(String(e.message)))} />
-          {dropError && (
-            <div className="toast" onClick={() => setDropError("")}>
-              {dropError}
-            </div>
-          )}
         </section>
+        {dropError && (
+          <div className="toast" onClick={() => setDropError("")}>
+            {dropError}
+          </div>
+        )}
       </div>
       {preflight && <Preflight slug={slug} p={p} onClose={() => setPreflight(false)} />}
     </Shell>

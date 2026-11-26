@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 // The editor's workspace: the library on the left, the viewer in the middle, Claude or the
 // inspector on the right, the timeline across the bottom. Each panel can be dragged to a new size
@@ -6,46 +6,104 @@ import React, { useEffect, useRef, useState } from "react";
 // per kind of video (a reel wants height, a YouTube video wants width), in this browser only.
 
 export type Panels = { left: number; right: number; bottom: number; showLeft: boolean; showRight: boolean; showBottom: boolean };
-type Kind = "reel" | "youtube";
+export type Kind = "reel" | "youtube";
 
-const DEFAULTS: Record<Kind, Panels> = {
+export const DEFAULTS: Record<Kind, Panels> = {
   reel: { left: 280, right: 340, bottom: 300, showLeft: true, showRight: true, showBottom: true },
   youtube: { left: 280, right: 340, bottom: 300, showLeft: true, showRight: true, showBottom: true },
 };
 // What a drag may reach. The viewer always keeps room in the middle.
-const LIMITS = { left: [240, 480], right: [280, 560], bottom: [150, 560] } as const;
-const VIEWER_MIN = { width: 280, height: 220 };
+export const LIMITS = { left: [240, 480], right: [280, 560], bottom: [150, 560] } as const;
+export const VIEWER_MIN = { width: 280, height: 220 };
 
 const key = (kind: Kind) => `studio-panels-${kind}`;
-const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.round(Math.max(lo, Math.min(hi, v)));
+export const clamp = (v: number, [lo, hi]: readonly [number, number], fallback = lo) =>
+  Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v))) : fallback;
 
-const load = (kind: Kind): Panels => {
+export const parsePanels = (raw: string | null, kind: Kind): Panels => {
+  const def = DEFAULTS[kind];
+  if (!raw) return def;
   try {
-    const kept = JSON.parse(localStorage.getItem(key(kind)) ?? "null");
-    if (!kept) return DEFAULTS[kind];
-    const p = { ...DEFAULTS[kind], ...kept };
-    return { ...p, left: clamp(p.left, LIMITS.left), right: clamp(p.right, LIMITS.right), bottom: clamp(p.bottom, LIMITS.bottom) };
+    const kept = JSON.parse(raw);
+    if (!kept || typeof kept !== "object" || Array.isArray(kept)) return def;
+    const num = (v: unknown, lim: readonly [number, number], fb: number) =>
+      typeof v === "number" && Number.isFinite(v) ? clamp(v, lim, fb) : fb;
+    const bool = (v: unknown, fb: boolean) => (typeof v === "boolean" ? v : fb);
+    return {
+      left: num(kept.left, LIMITS.left, def.left),
+      right: num(kept.right, LIMITS.right, def.right),
+      bottom: num(kept.bottom, LIMITS.bottom, def.bottom),
+      showLeft: bool(kept.showLeft, def.showLeft),
+      showRight: bool(kept.showRight, def.showRight),
+      showBottom: bool(kept.showBottom, def.showBottom),
+    };
+  } catch {
+    return def;
+  }
+};
+
+export const loadPanels = (kind: Kind): Panels => {
+  try {
+    return parsePanels(localStorage.getItem(key(kind)), kind);
   } catch {
     return DEFAULTS[kind];
   }
 };
 
-export function usePanels(kind: Kind) {
-  const [panels, setPanels] = useState<Panels>(() => load(kind));
-  useEffect(() => setPanels(load(kind)), [kind]);
-  const set = (change: Partial<Panels>) =>
-    setPanels((old) => {
-      const next = { ...old, ...change };
+export const dragSize = (
+  which: "left" | "right" | "bottom",
+  client: { x: number; y: number },
+  rect: { left: number; right: number; bottom: number; width: number; height: number },
+  panels: Panels,
+): number => {
+  if (which === "left") {
+    const room = rect.width - (panels.showRight ? panels.right : 0) - VIEWER_MIN.width;
+    return clamp(Math.min(client.x - rect.left, room), LIMITS.left, DEFAULTS.reel.left);
+  }
+  if (which === "right") {
+    const room = rect.width - (panels.showLeft ? panels.left : 0) - VIEWER_MIN.width;
+    return clamp(Math.min(rect.right - client.x, room), LIMITS.right, DEFAULTS.reel.right);
+  }
+  return clamp(Math.min(rect.bottom - client.y, rect.height - VIEWER_MIN.height), LIMITS.bottom, DEFAULTS.reel.bottom);
+};
+
+export function usePanels(kind: Kind | undefined) {
+  const [state, setState] = useState<{ kind: Kind | undefined; panels: Panels }>(() => ({
+    kind,
+    panels: kind ? loadPanels(kind) : DEFAULTS.reel,
+  }));
+  const kindRef = useRef(kind);
+  kindRef.current = kind;
+  if (kind && state.kind !== kind) {
+    setState({ kind, panels: loadPanels(kind) });
+  }
+  const update = useCallback((fn: (old: Panels, k: Kind) => Panels) => {
+    setState((cur) => {
+      const k = cur.kind ?? kindRef.current;
+      if (!k) return cur;
+      const next = fn(cur.panels, k);
+      if (
+        next.left === cur.panels.left &&
+        next.right === cur.panels.right &&
+        next.bottom === cur.panels.bottom &&
+        next.showLeft === cur.panels.showLeft &&
+        next.showRight === cur.panels.showRight &&
+        next.showBottom === cur.panels.showBottom
+      ) {
+        return cur;
+      }
       try {
-        localStorage.setItem(key(kind), JSON.stringify(next));
+        localStorage.setItem(key(k), JSON.stringify(next));
       } catch {
         // A browser that keeps nothing still resizes for this visit.
       }
-      return next;
+      return { kind: k, panels: next };
     });
-  const toggle = (which: "showLeft" | "showRight" | "showBottom") => set({ [which]: !panels[which] });
-  const reset = (which: "left" | "right" | "bottom") => set({ [which]: DEFAULTS[kind][which] });
-  return { panels, set, toggle, reset };
+  }, []);
+  const set = useCallback((change: Partial<Panels>) => update((old) => ({ ...old, ...change })), [update]);
+  const toggle = useCallback((which: "showLeft" | "showRight" | "showBottom") => update((old) => ({ ...old, [which]: !old[which] })), [update]);
+  const reset = useCallback((which: "left" | "right" | "bottom") => update((old, k) => ({ ...old, [which]: DEFAULTS[k][which] })), [update]);
+  return { panels: state.panels, set, toggle, reset };
 }
 
 // The grid's sizes, as CSS variables on the editor. A hidden panel takes no room.
@@ -60,31 +118,41 @@ export const panelStyle = (p: Panels): React.CSSProperties =>
 // puts that panel back to its usual size.
 export const Splitters: React.FC<{ panels: Panels; set: (c: Partial<Panels>) => void; reset: (w: "left" | "right" | "bottom") => void }> = ({ panels, set, reset }) => {
   const box = useRef<HTMLDivElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
   const [dragging, setDragging] = useState<"left" | "right" | "bottom" | null>(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
   const start = (which: "left" | "right" | "bottom") => (e: React.PointerEvent) => {
     const editor = box.current?.parentElement;
     if (!editor || e.button !== 0) return;
     e.preventDefault();
+    cleanupRef.current?.();
     const rect = editor.getBoundingClientRect();
+    let latest: number | null = null;
     setDragging(which);
     const move = (ev: PointerEvent) => {
-      if (which === "left") {
-        const room = rect.width - (panels.showRight ? panels.right : 0) - VIEWER_MIN.width;
-        set({ left: clamp(Math.min(ev.clientX - rect.left, room), LIMITS.left) });
-      } else if (which === "right") {
-        const room = rect.width - (panels.showLeft ? panels.left : 0) - VIEWER_MIN.width;
-        set({ right: clamp(Math.min(rect.right - ev.clientX, room), LIMITS.right) });
-      } else {
-        set({ bottom: clamp(Math.min(rect.bottom - ev.clientY, rect.height - VIEWER_MIN.height), LIMITS.bottom) });
-      }
+      latest = dragSize(which, { x: ev.clientX, y: ev.clientY }, rect, panels);
+      editor.style.setProperty(`--${which}`, `${latest}px`);
     };
-    const up = () => {
-      setDragging(null);
+    const detach = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      if (cleanupRef.current === detach) cleanupRef.current = null;
     };
+    const up = () => {
+      detach();
+      setDragging(null);
+      if (latest !== null) set({ [which]: latest });
+    };
+    const cancel = () => {
+      detach();
+      setDragging(null);
+      editor.style.setProperty(`--${which}`, `${panels[which]}px`);
+    };
+    cleanupRef.current = detach;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
   return (
     <div ref={box} className={`splitters ${dragging ? `dragging drag-${dragging}` : ""}`}>

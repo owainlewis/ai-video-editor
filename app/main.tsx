@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { watchRestarts } from "./api";
 import { Dialogs } from "./dialog";
 import { Editor } from "./Editor";
 import { Gallery } from "./Gallery";
@@ -24,16 +25,8 @@ const App: React.FC = () => {
   return slug ? <Editor key={slug} slug={decodeURIComponent(slug)} /> : <Home />;
 };
 
-// The server restarts itself when its code changes (electron/server.ts). The event stream drops and
-// reconnects on its own, but the page does not: a load that failed in the gap stays on screen as an
-// error, and the player keeps a broken video. So when the stream comes back after a drop, reload.
-// (Owain, 2026-11-23: "Studio seems to be down again", twice in a day, with the server up.)
-const watchRestarts = () => {
-  const es = new EventSource("/api/events");
-  let dropped = false;
-  es.onerror = () => (dropped = true);
-  es.onopen = () => dropped && location.reload();
-};
+// The server restarts itself when its code changes (electron/server.ts). Watch the shared event
+// stream and reload only when a new server boot ID connects, not on transient drops or sleep/wake.
 watchRestarts();
 
 createRoot(document.getElementById("root")!).render(
