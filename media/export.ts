@@ -4,14 +4,14 @@
 // original file in one hardware-encoded pass. His picture and grade are untouched everywhere else,
 // and a 27 minute video exports in minutes, not hours (2026-10-24).
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { compositionFor } from "../effects/canvas.ts";
 import { frameWindow, overlayEnable, type Preview, rangesInWindow, sectionFrames } from "../engine/parts.ts";
 import { type Issue, lastKept } from "../engine/resolve.ts";
 import type { Resolved } from "../engine/schema.ts";
 import { prepareExport } from "./render.ts";
-import { ffmpegProgress, hasHardwareH264, type Log, loudness, probeDuration, probeRate, probeSize, readJson, run, writeJson } from "./tools.ts";
+import { ffmpegProgress, hasHardwareH264, type Log, loudness, probeDuration, probeRate, probeSize, readJson, run, tempSibling, writeJson } from "./tools.ts";
 
 export type Section = { start: number; end: number; alpha: boolean };
 
@@ -29,6 +29,19 @@ export function sections(r: Resolved): Section[] {
     else out.push(next);
   });
   return out;
+}
+
+// The kept stretches of [0, total] after cutting out `remove` ranges.
+export function keptRanges(remove: [number, number][], total: number): [number, number][] {
+  const keep: [number, number][] = [];
+  let at = 0;
+  for (const [a, b] of [...remove].sort((x, y) => x[0] - y[0])) {
+    if (a > at) keep.push([at, Math.min(a, total)]);
+    at = Math.max(at, b);
+    if (at >= total) break;
+  }
+  if (at < total) keep.push([at, total]);
+  return keep;
 }
 
 // `preview`: one part only, to its own file. Every step is the final export's, limited to the part:
@@ -80,16 +93,11 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   // points and joined, in the same pass.
   const remove = (win ? rangesInWindow(r.remove ?? [], base, length) : [...(r.remove ?? [])]).sort((x, y) => x[0] - y[0]);
   const total = length;
-  const keep: [number, number][] = [];
-  let at = 0;
-  for (const [a, b] of remove) {
-    if (a > at) keep.push([at, a]);
-    at = Math.max(at, b);
-  }
-  if (at < total) keep.push([at, total]);
+  const keep = keptRanges(remove, total);
   const A = files.length + 1;
   let vOut = `[v${files.length}]`, aOut = `${A}:a`, graphFull = graph;
   if (remove.length) {
+    if (!keep.length) throw new Error("nothing left to render: remove covers the entire export");
     const k = keep.length;
     graphFull += `;${vOut}split=${k}${keep.map((_, i) => `[vs${i}]`).join("")};[${A}:a]asplit=${k}${keep.map((_, i) => `[as${i}]`).join("")}`;
     keep.forEach(([a, b], i) => {
@@ -104,15 +112,22 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   mkdirSync(join(dir, "renders"), { recursive: true });
   const hw = hasHardwareH264();
   let last = -1;
-  await ffmpegProgress([
-    ...(flat ? [] : stretch), "-i", original, ...inputs, ...stretch, "-i", audio,
-    "-filter_complex", graphFull, "-map", vOut, "-map", aOut,
-    ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
-    "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", out,
-  ], total, (f) => {
-    const pct = Math.floor(f * 100);
-    if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
-  }, log);
+  const tmp = tempSibling(out);
+  try {
+    await ffmpegProgress([
+      ...(flat ? [] : stretch), "-i", original, ...inputs, ...stretch, "-i", audio,
+      "-filter_complex", graphFull, "-map", vOut, "-map", aOut,
+      ...(hw ? ["-c:v", "h264_videotoolbox", "-b:v", w >= 3840 ? "45M" : "16M"] : ["-c:v", "libx264", "-crf", "17", "-preset", "fast"]),
+      "-pix_fmt", "yuv420p", "-r", `${num}/${den}`, "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart", "-shortest", tmp,
+    ], total, (f) => {
+      const pct = Math.floor(f * 100);
+      if (pct !== last) onStage(`Finishing ${pct}%`), (last = pct);
+    }, log);
+    renameSync(tmp, out);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
   onStage("Checking the export");
   const check = verifyExport(original, out, files, remove, win ? { length, seek: flat ? 0 : base } : undefined);
   writeJson(join(dir, preview ? `checks/${preview.file.replace(/\.mp4$/, "")}-check.json` : "checks/export-check.json"), { at: new Date().toISOString(), ...check });
@@ -120,9 +135,12 @@ export async function exportOverOriginal(projects: string, slug: string, onStage
   return out;
 }
 
-// One frame as 64x36 grey pixels, for comparing pictures cheaply.
-const thumb = (file: string, t: number) =>
-  spawnSync("ffmpeg", ["-v", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], { maxBuffer: 1 << 20 }).stdout as Buffer;
+// One frame as 64x36 grey pixels, for comparing pictures cheaply (null if ffmpeg failed).
+const thumb = (file: string, t: number): Buffer | null => {
+  const r = spawnSync("ffmpeg", ["-v", "error", "-ss", t.toFixed(3), "-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "rawvideo", "-"], { maxBuffer: 1 << 20 });
+  if (r.error || r.status !== 0 || !r.stdout?.length) return null;
+  return r.stdout as Buffer;
+};
 const differ = (a: Buffer, b: Buffer) => (a.length && a.length === b.length ? a.reduce((sum, x, k) => sum + Math.abs(x - b[k]), 0) / a.length : 255);
 
 // After an export: the same length as the original, every graphic where it should be, and the
@@ -132,25 +150,37 @@ export function verifyExport(original: string, out: string, files: { file: strin
   const issues: Issue[] = [];
   const cutOut = remove.reduce((sum, [x, y]) => sum + (y - x), 0);
   const [a, b] = [(part?.length ?? probeDuration(original)) - cutOut, probeDuration(out)];
-  if (Math.abs(a - b) > 0.15) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; expected ${a.toFixed(2)}s (the original less ${cutOut.toFixed(2)}s removed)` });
+  if (!Number.isFinite(a) || !Number.isFinite(b)) issues.push({ level: "error", message: `could not measure duration (expected ${a}s, got ${b}s)` });
+  else if (Math.abs(a - b) > 0.15) issues.push({ level: "error", message: `the export is ${b.toFixed(2)}s; expected ${a.toFixed(2)}s (the original less ${cutOut.toFixed(2)}s removed)` });
   // A time in the original, as it falls in the export after removals (null if it was removed).
   const mapped = (t: number) => (remove.some(([x, y]) => t >= x && t < y) ? null : t - remove.filter(([, y]) => y <= t).reduce((sum, [x, y]) => sum + (y - x), 0));
   // Same size as the original: a 4K master exports 4K for YouTube (2026-10-25).
   const [ow, oh] = probeSize(original), [ew, eh] = probeSize(out);
-  if (ow !== ew || oh !== eh) issues.push({ level: "error", message: `the export is ${ew}x${eh}; the original is ${ow}x${oh}` });
+  if (!Number.isFinite(ow) || !Number.isFinite(oh) || !Number.isFinite(ew) || !Number.isFinite(eh) || ow !== ew || oh !== eh)
+    issues.push({ level: "error", message: `the export is ${ew}x${eh}; the original is ${ow}x${oh}` });
   for (const { file, s } of files) {
     const mid = (s.start + s.end) / 2;
     const there = mapped(mid);
     if (there === null) continue;
     const final = thumb(out, there);
+    if (!final) {
+      issues.push({ level: "error", message: `could not read frame at ${there.toFixed(2)}s from the export` });
+      continue;
+    }
     if (s.alpha) {
       // A title over the picture: the export must differ from the original there.
-      if (differ(final, thumb(original, mid + (part?.seek ?? 0))) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
-    } else if (differ(final, thumb(file, mid - s.start)) > 10) {
-      issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
+      const orig = thumb(original, mid + (part?.seek ?? 0));
+      if (!orig) issues.push({ level: "error", message: `could not read frame at ${(mid + (part?.seek ?? 0)).toFixed(2)}s from the original` });
+      else if (differ(final, orig) < 1) issues.push({ level: "error", message: `no graphic visible at ${mid.toFixed(2)}s, where a title should sit over the picture` });
+    } else {
+      const rendered = thumb(file, mid - s.start);
+      if (!rendered) issues.push({ level: "error", message: `could not read frame at ${(mid - s.start).toFixed(2)}s from ${file}` });
+      else if (differ(final, rendered) > 10)
+        issues.push({ level: "error", message: `the graphic at ${s.start.toFixed(2)}s did not land where it was rendered (${mid.toFixed(2)}s looks different)` });
     }
   }
   const lufs = loudness(out);
-  if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
+  if (!Number.isFinite(lufs)) issues.push({ level: "error", message: "could not measure the export loudness" });
+  else if (lufs > -10 || lufs < -18) issues.push({ level: "warn", message: `loudness is ${lufs} LUFS; YouTube plays around -14` });
   return { issues, lufs, sections: files.length, size: `${ew}x${eh}` };
 }
