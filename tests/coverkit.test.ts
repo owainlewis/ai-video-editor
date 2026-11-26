@@ -1,10 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { coverPrompt, titleShift, uploadCover } from "../media/coverkit.ts";
-import { probeSize } from "../media/tools.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const openBrowserMock = vi.fn();
+vi.mock("@remotion/renderer", () => ({
+  openBrowser: (...args: unknown[]) => openBrowserMock(...args),
+}));
+
+import { coverKit, coverPrompt, grey, titleShift, topColour, uploadCover } from "../media/coverkit.ts";
+import { probeSize, ROOT } from "../media/tools.ts";
 
 describe("the Higgsfield cover prompt", () => {
   it("carries the title as written and names only the reel's own logos", () => {
@@ -89,5 +95,64 @@ describe("the cover's title under the grid's reel icon", () => {
 
   it("finds no title on a light cover", () => {
     expect(titleShift(Buffer.alloc(1080 * 1920, 240), 1080, 1920)).toBe(0);
+  });
+});
+
+describe("coverkit empty logos and ffmpeg error paths", () => {
+  const savedPath = process.env.PATH;
+  const tempDirs: string[] = [];
+  const tempFiles: string[] = [];
+
+  const makeTempDir = (prefix: string) => {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    tempDirs.push(dir);
+    return dir;
+  };
+
+  afterEach(() => {
+    openBrowserMock.mockReset();
+    if (savedPath === undefined) delete process.env.PATH;
+    else process.env.PATH = savedPath;
+    for (const f of tempFiles.splice(0)) rmSync(f, { force: true });
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("skips spawning Chrome when cover.logos is empty", async () => {
+    const coversDir = join(ROOT, "library", "covers");
+    const createdCoversDir = !existsSync(coversDir);
+    mkdirSync(coversDir, { recursive: true });
+    const cardName = `__test-portrait-${process.pid}`;
+    const cardPath = join(coversDir, `${cardName}.png`);
+    writeFileSync(cardPath, "fake-png");
+    tempFiles.push(cardPath);
+    if (createdCoversDir) tempDirs.push(coversDir);
+
+    const projectDir = makeTempDir("studio-coverkit-");
+    openBrowserMock.mockImplementation(() => {
+      throw new Error("should not open Chrome when logos is empty");
+    });
+
+    const out = await coverKit(projectDir, { title: "No Logos Here", image: cardName, logos: [] });
+    expect(openBrowserMock).not.toHaveBeenCalled();
+    expect(existsSync(join(out, "portrait.png"))).toBe(true);
+    expect(readFileSync(join(out, "prompt.txt"), "utf8")).toContain("No Logos Here");
+    expect(readFileSync(join(out, "prompt.txt"), "utf8")).toContain("Do not add any logo");
+  });
+
+  it("throws when ffmpeg is missing or exits non-zero in topColour and grey", () => {
+    // 1. Missing ffmpeg binary (spawnSync returns out.error = ENOENT).
+    const emptyBin = makeTempDir("studio-empty-bin-");
+    process.env.PATH = emptyBin;
+    expect(() => topColour("/tmp/does-not-matter.png")).toThrow(/ffmpeg/i);
+    expect(() => grey("/tmp/does-not-matter.png", "scale=10:10")).toThrow(/ffmpeg/i);
+
+    // 2. Failing ffmpeg binary (non-zero exit status).
+    const failBin = makeTempDir("studio-fail-bin-");
+    const fakeFfmpeg = join(failBin, "ffmpeg");
+    writeFileSync(fakeFfmpeg, `#!${process.execPath}\nprocess.stderr.write("corrupt input\\n");\nprocess.exit(1);\n`);
+    chmodSync(fakeFfmpeg, 0o755);
+    process.env.PATH = failBin;
+    expect(() => topColour("/tmp/does-not-matter.png")).toThrow(/corrupt input/);
+    expect(() => grey("/tmp/does-not-matter.png", "scale=10:10")).toThrow(/corrupt input/);
   });
 });

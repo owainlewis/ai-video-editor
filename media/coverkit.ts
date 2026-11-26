@@ -48,6 +48,7 @@ This is a tall 9:16 image. Extend the plain background to fill the frame. Keep t
 // them are white, so they need a dark ground: QuickLook flattened them onto white and Grok came out
 // a blank square, which the model then drew from memory (2026-11-13).
 async function logoTiles(logos: { id: string; src: string }[], out: string): Promise<void> {
+  if (!logos.length) return;
   const browser = await openBrowser("chrome", { logLevel: "error" });
   try {
     const page = await browser.newPage({ context: () => null, logLevel: "error", indent: false, pageIndex: 0, onBrowserLog: () => {}, onLog: () => {} } as never);
@@ -82,7 +83,7 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
     if (!src) throw new Error(`the cover's logo "${id}" is not in library/logos`);
     tiles.push({ id, src });
   }
-  await logoTiles(tiles, out);
+  if (tiles.length) await logoTiles(tiles, out);
   if (cover.backdrop) {
     const from = join(dir, cover.backdrop);
     if (!existsSync(from)) throw new Error(`the cover's backdrop ${cover.backdrop} is not in the project`);
@@ -102,15 +103,25 @@ export async function coverKit(dir: string, cover: NonNullable<EditPlan["cover"]
 export const UPLOAD = { width: 1080, height: 1920 };
 
 // The average colour of a strip along the top edge, as ffmpeg's hex (0xRRGGBB).
-function topColour(file: string): string {
+export function topColour(file: string): string {
   const out = spawnSync("ffmpeg", ["-v", "error", "-i", file, "-vf", "crop=iw:max(2\\,ih/100):0:0,scale=1:1:flags=area,format=rgb24", "-f", "rawvideo", "-"]);
+  if (out.error) throw new Error(`ffmpeg failed: ${out.error.message}`);
+  if (out.status !== 0) {
+    const detail = String(out.stderr ?? "").trim().slice(-2000);
+    throw new Error(`ffmpeg exited with ${out.status ?? out.signal ?? "unknown"}${detail ? `:\n${detail}` : ""}`);
+  }
   const [r = 0, g = 0, b = 0] = out.stdout ?? [];
   return `0x${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
 // The frame's lightness (0 to 255), one byte a pixel, row by row, after `filter`.
-function grey(src: string, filter: string): Buffer {
+export function grey(src: string, filter: string): Buffer {
   const out = spawnSync("ffmpeg", ["-v", "error", "-i", src, "-vf", `${filter},format=gray`, "-frames:v", "1", "-f", "rawvideo", "-"], { maxBuffer: 64 << 20 });
+  if (out.error) throw new Error(`ffmpeg failed: ${out.error.message}`);
+  if (out.status !== 0) {
+    const detail = String(out.stderr ?? "").trim().slice(-2000);
+    throw new Error(`ffmpeg exited with ${out.status ?? out.signal ?? "unknown"}${detail ? `:\n${detail}` : ""}`);
+  }
   return out.stdout ?? Buffer.alloc(0);
 }
 
