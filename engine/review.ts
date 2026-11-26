@@ -93,7 +93,7 @@ export const itemHash = (r: Resolved, index: number, said: string) => {
     title: s.title && { ...s.title, at: rel(s.title.at) },
     chip: s.chip && { ...s.chip, at: rel(s.chip.at) },
   }));
-  const look = { canvas: r.canvas, style: r.style, theme: r.theme, split: r.split, captions: r.captions, face: r.face, grade: r.grade };
+  const look = { canvas: r.canvas, style: r.style, theme: r.theme, palette: r.palette, hook: r.hook, split: r.split, captions: r.captions, face: r.face, grade: r.grade };
   return hash(stable({ look, run, visual: times(first.visual), said }));
 };
 
@@ -152,7 +152,10 @@ export const noteTime = (note: Note, words: Word[]) => {
 export const openNotes = (review: Review) => review.notes.filter((n) => n.status === "open");
 export const openChanges = (review: Review, items: Item[]) => items.filter((it) => review.items[it.id]?.status === "change" && !review.items[it.id]?.reply);
 
-const time = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")} (${t.toFixed(2)}s)`;
+const time = (t: number) => {
+  const tenths = Math.round(Math.max(0, t) * 10);
+  return `${Math.floor(tenths / 600)}:${((tenths % 600) / 10).toFixed(1).padStart(4, "0")} (${t.toFixed(2)}s)`;
+};
 
 // The open changes and notes, compact, for Claude to act on. Each has a key to answer under.
 export const formatFeedback = (review: Review, items: Item[], words: Word[]) => {
