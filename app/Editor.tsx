@@ -138,6 +138,10 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     skimming.current = true;
     pl.seekTo(Math.round(t * r.fps));
   };
+  // Turning skimming off puts the viewer back on the playhead.
+  useEffect(() => {
+    if (!skim) onSkim(null);
+  }, [skim]);
   // The viewer's box, fitted to the space, so the safe area sits on the picture.
   const screen = useRef<HTMLDivElement>(null);
   // ⌘1 to ⌘4 show and hide the library, the timeline, Claude and the inspector, even while typing.
@@ -243,6 +247,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
     if (!pl) return;
     const paused = () => shuttle.current.dir === 1 && ((shuttle.current = { dir: 0, speed: 1 }), setRate(1));
     const played = () => {
+      // Playing while skimming plays from the skimmed frame, as in Final Cut: it becomes the
+      // playhead, and the playhead follows playback again.
+      if (skimming.current) {
+        skimming.current = false;
+        playhead.set(pl.getCurrentFrame() / (p?.resolved?.fps ?? 30));
+      }
       if (shuttle.current.dir === -1) {
         clearInterval(shuttle.current.timer);
         shuttle.current = { dir: 0, speed: 1 };
