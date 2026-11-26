@@ -22,7 +22,7 @@
 //   npm run studio -- approve <slug>              copy a reel's export, image and caption to the approved folder (STUDIO_APPROVED)
 //   npm run studio -- unapprove <slug>            move them to the Trash again
 //   npm run studio -- approved                    approved reels, newest first, and this week's count
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { addClip, ingest, setStatus, slugFor } from "./media/ingest.ts";
 import { cleanProject } from "./media/auphonic.ts";
@@ -37,7 +37,7 @@ import { coverKit } from "./media/coverkit.ts";
 import { Edit } from "./engine/schema.ts";
 import { exportOverOriginal } from "./media/export.ts";
 import { LIBRARY_QC, runLibraryQc, runQc } from "./media/qc.ts";
-import { existsSync as exists, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { acquireExportLock } from "./media/lock.ts";
 import { brollFolder, describeLibrary, indexLibrary, searchLibrary } from "./media/broll.ts";
 import { checkSuggestions } from "./server/suggest.ts";
 import { frameSheets, scanCamera } from "./media/scan.ts";
@@ -223,17 +223,7 @@ async function main() {
         preview = pickPreview(resolved.parts ?? [], resolved.duration, ask);
       }
       // One export at a time: two at once overwrite each other's sections (2026-10-25).
-      const lock = join(dir, "build/export.lock");
-      if (exists(lock)) {
-        const pid = parseInt(readFileSync(lock, "utf8"), 10);
-        let alive = false;
-        try {
-          process.kill(pid, 0);
-          alive = true;
-        } catch {}
-        if (alive) throw new Error(`an export of ${slug} is already running (pid ${pid}); wait for it or stop it first`);
-      }
-      writeFileSync(lock, String(process.pid));
+      const release = acquireExportLock(dir, slug);
       try {
         // QC before anything renders: errors stop the export (--force to override).
         setStatus(dir, "Checking graphics");
@@ -241,13 +231,7 @@ async function main() {
         const errors = qc.issues.filter((i) => i.level === "error");
         for (const i of qc.issues) console.log(`  ${i.level === "error" ? "ERROR" : "warn "}  ${i.message}`);
         if (errors.length && !args.includes("--force")) throw new Error(`QC found ${errors.length} errors; fix them (npm run studio -- qc ${slug}) or render with --force`);
-      } catch (e) {
-        rmSync(lock, { force: true });
-        writeJson(join(dir, "status.json"), { stage: "Render failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
-        throw e;
-      }
-      setStatus(dir, "Rendering");
-      try {
+        setStatus(dir, "Rendering");
         // YouTube videos keep the original picture and only render the graphic sections; reels are
         // short and graphics-heavy, so every frame is rendered.
         const youtube = readJson<{ canvas?: string }>(join(dir, "edit.json")).canvas === "youtube";
@@ -264,7 +248,7 @@ async function main() {
         writeJson(join(dir, "status.json"), { stage: "Render failed", done: true, error: String((e as Error).message), at: new Date().toISOString() });
         throw e;
       } finally {
-        rmSync(lock, { force: true });
+        release();
       }
       return;
     }
