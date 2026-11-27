@@ -73,6 +73,29 @@ const move = (file: string, from: string, to: string) => {
   if (existsSync(join(from, "cut", cutName(file)))) renameSync(join(from, "cut", cutName(file)), join(to, "cut", cutName(file)));
 };
 
+// The newest version's number, 0 when there is none.
+export const latest = (project: string) => {
+  const all = files(project);
+  return all.length ? parse(all[all.length - 1]).n : 0;
+};
+
+const fileOf = (project: string, n: number) => files(project).find((f) => parse(f).n === n);
+
+// A version's plan and cut as text (no cut: null), or null when there is no such version.
+export function readVersion(project: string, n: number): { plan: string; cut: string | null } | null {
+  const file = fileOf(project, n);
+  return file ? { plan: readFileSync(join(dirOf(project), file), "utf8"), cut: read(join(dirOf(project), "cut", cutName(file))) } : null;
+}
+
+// Puts version `n` back as the current plan and cut, saved as a new version by `by`, so undo can
+// bring back what it replaced. Returns false when there is no such version or nothing changed.
+export function revertTo(project: string, n: number, by: string): boolean {
+  const file = fileOf(project, n);
+  if (!file) return false;
+  restore(project, dirOf(project), file);
+  return snapshot(project, by);
+}
+
 // Restores the previous version. Returns false when there is nothing to undo.
 export function undo(project: string): boolean {
   const all = files(project);

@@ -31,7 +31,7 @@ Routes are read from the hash in `main.tsx`:
 
 Also `clock(t)` and the types `Approval`, `ApprovalState`, `Issue`, `ChatMessage`, `Status`, `Asset`, `LibraryClip`, `Suggestion`, `Effect`, `Version`, `Take`, `Variants`, `BinClip`, `ProjectSummary`, `Project`, `Event`.
 
-The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `redo`, `render`, `parts`, `drop`, `place`, `chat`, `suggest`, `decide`, `stop`, `variants`, `variant-use`, `variant-clear`, `review`, `note`, `review-send`, `qc`, `mix`, `approve`, `unapprove`, `reveal`. `api.post` is typed by `engine/api.ts`: a wrong payload does not compile.
+The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `redo`, `revert`, `render`, `parts`, `drop`, `place`, `chat`, `suggest`, `decide`, `stop`, `variants`, `variant-use`, `variant-clear`, `review`, `note`, `review-send`, `qc`, `mix`, `approve`, `unapprove`, `reveal`. `api.post` is typed by `engine/api.ts`: a wrong payload does not compile.
 
 ### Components
 
@@ -42,6 +42,7 @@ The UI's `api.post` actions: `cut`, `shot`, `shot-start`, `shot-end`, `undo`, `r
 - `project.ts`: `useProject(slug)` loads a project and keeps it current. `playhead.tsx`: `playhead` (`get`, `set`, `subscribe`), `usePlayhead(select?)`, `Clock`. `Preflight.tsx` also exports `preflight(p)`, the lines of the sheet.
 - `Timeline`, `Inspector` and `Library`: props are in their files. `Editor` is the only parent. `NoInspector` is the inspector with nothing picked.
 - `Transport.tsx`: `Transport`, the viewer's own controls (play, a frame back and forward, the time, Voice or Mix, the frame's shape, the safe area, full screen); `useFit(el, aspect, key)`, the largest box of that shape inside `el`; `SafeArea`, a box over the picture from `SAFE` in `engine/qc.ts`; `usePlaying(player, key)`.
+- `Chat.tsx`: `Chat`, the Claude panel. Each note is one run: the note, Claude's steps folded to one line (open, with the time so far, while it works), its answer, the graphics and plan fields it changed (click one to open it on its settled frame), and Revert, which puts the plan back to the version before the note as a new version, so undo brings the note back. Reverting past later changes asks first. `runs.ts`: `groupChat(messages, working)` turns the chat into runs, `took(ms)`, `fieldName(field)`.
 - `film.ts`: the timeline's drawing maths and the `Strip` type. `stripTiles` (which frame of a clip's filmstrip each tile shows), `wavePath` (a waveform as an SVG path), `levelValue` (a clip's dB levels as 0 to 1).
 - Helpers: `previewShot`, `gist`, `toSentences`. Types: `PlanShot`, `Range`, `Item`.
 - Drag types: `CLIP` (`application/x-studio-clip`, a library or asset clip for the timeline) and `SOURCE` (`application/x-studio-source`, a bin clip for the cut).
@@ -75,7 +76,7 @@ Handled elsewhere:
 
 | Key | Where | Action |
 | --- | --- | --- |
-| Cmd/Ctrl+Enter | `Editor` chat box | Send the note |
+| Cmd/Ctrl+Enter | `Chat` note box | Send the note |
 | Enter | `Inspector` takes brief | Ask Claude for takes, unless Claude is working |
 | Space | Player in `Editor` and the large `Gallery` view | Play or pause |
 | Escape | `NewProject`, on `window` | Close the dialog, unless an upload is running |

@@ -6,11 +6,14 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { Run } from "../engine/changes.ts";
 import type { Word } from "../engine/schema.ts";
 import { readJson, ROOT, writeJson } from "../media/tools.ts";
 import { timeline } from "../media/bin.ts";
+import { latest } from "./history.ts";
 
-export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
+// Claude's last message on a note carries `run`: its time, and what it changed (engine/changes.ts).
+export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string; run?: Run };
 export type Selection = { start: number; end: number } | undefined;
 type ChatState = { session?: string; messages: ChatMessage[] };
 
@@ -55,7 +58,9 @@ export const isRunning = (slug: string) => running.has(slug);
 export const runningNotes = () => [...running.keys()];
 
 // `prompt` replaces the usual note context, for requests the editor makes itself (suggestions).
-export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: (ok?: boolean) => void = () => {}, prompt?: string) {
+// `onDone` runs when Claude stops, before its last message is written; given the plan's version
+// when the note started, it may return what the note changed, which goes on that message.
+export function ask(projects: string, slug: string, note: string, selection: Selection, playhead: number, emit: (m: ChatMessage | { role: "status"; text: string }) => void, onDone: (ok: boolean, from: number) => Omit<Run, "ms" | "from"> | void = () => {}, prompt?: string) {
   if (running.has(slug)) throw new Error("Claude is still working on the last note");
   const project = join(projects, slug);
   const state = loadChat(project);
@@ -69,6 +74,8 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
     emit(m);
   };
   add({ role: "user", text: note, at: now() });
+  const started = Date.now();
+  const from = latest(project);
 
   const args = ["-p", request, "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
     "--allowedTools", "Read", "Edit", "Write", "Glob", "Grep", "Bash(npm run studio:*)", "Bash(npm run studio -- *)", "Bash(npm run typecheck)", "Bash(npm test)", "Bash(npx vitest:*)",
@@ -78,6 +85,7 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
   emit({ role: "status", text: "working" });
 
   let buffer = "";
+  let result: string | undefined;
   p.stdout.on("data", (chunk: Buffer) => {
     buffer += chunk.toString();
     const lines = buffer.split("\n");
@@ -95,7 +103,8 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
         for (const c of ev.message?.content ?? []) {
           if (c.type === "tool_use") add({ role: "tool", text: describeTool(c.name ?? "", c.input ?? {}), at: now() });
         }
-      if (ev.type === "result") add({ role: "claude", text: ev.result?.trim() || (ev.is_error ? "Something went wrong." : "Done."), at: now() });
+      // Held until Claude stops, so the note's changes go on the same message.
+      if (ev.type === "result") result = ev.result?.trim() || (ev.is_error ? "Something went wrong." : "Done.");
     }
   });
   let err = "";
@@ -105,18 +114,21 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
     if (finished) return;
     finished = true;
     running.delete(slug);
-    if (!ok) {
-      try {
-        add({ role: "claude", text: failureMessage || "Claude Code failed.", at: now() });
-      } catch {}
-    }
+    let done: Omit<Run, "ms" | "from"> = {};
     try {
-      saveChat(project, state);
-    } catch {}
-    try {
-      onDone(ok);
+      done = onDone(ok, from) ?? {};
     } catch {
       // Never block returning the UI to idle if post-run hooks fail.
+    }
+    const run: Run = { ms: Date.now() - started, ...(from ? { from } : {}), ...done };
+    const last: string[] = [...(result ? [result] : []), ...(!ok ? [failureMessage || "Claude Code failed."] : [])];
+    if (!last.length) last.push("Done.");
+    try {
+      last.forEach((text, k) => add({ role: "claude", text, at: now(), ...(k === last.length - 1 ? { run } : {}) }));
+    } catch {
+      try {
+        saveChat(project, state);
+      } catch {}
     }
     emit({ role: "status", text: "idle" });
   };
@@ -130,6 +142,14 @@ export function ask(projects: string, slug: string, note: string, selection: Sel
       : `Stopped (${err.trim().split("\n").pop() || `exit ${code}`}).`;
     finish(ok, msg);
   });
+}
+
+// Notes the revert on every run that started on version `from`, so the panel says so.
+export function markReverted(project: string, from: number, version: number) {
+  const state = loadChat(project);
+  let hit = false;
+  for (const m of state.messages) if (m.run?.from === from && m.run.to) (m.run.reverted = version), (hit = true);
+  if (hit) saveChat(project, state);
 }
 
 export function stop(slug: string) {
@@ -154,6 +174,9 @@ function describeTool(name: string, input: Record<string, unknown>): string {
     const line = String(input.command ?? "").replace(/^npm run studio -- /, "").split("\n")[0];
     return `Ran ${line.length > 70 ? line.slice(0, 70) + "…" : line}`;
   }
+  const short = (s: unknown) => (String(s ?? "").length > 50 ? String(s).slice(0, 50) + "…" : String(s ?? ""));
+  if (name === "Grep") return `Searched for "${short(input.pattern)}"`;
+  if (name === "Glob") return `Looked for ${short(input.pattern)}`;
   return name;
 }
 

@@ -10,7 +10,7 @@ import { resolveProject, useLogo } from "../media/project.ts";
 import { Edit } from "../engine/schema.ts";
 import { ask, promptFor } from "../server/agent.ts";
 import { listAssets } from "../server/assets.ts";
-import { redo, redoable, snapshot, undo, versions } from "../server/history.ts";
+import { latest, readVersion, redo, redoable, revertTo, snapshot, undo, versions } from "../server/history.ts";
 import { dropBroll } from "../server/insert.ts";
 import { finishSend, loadReview, saveNote, startSend } from "../server/review.ts";
 import { serveFile, startServer } from "../server/index.ts";
@@ -83,6 +83,23 @@ describe("version history", () => {
     redo(dir);
     expect(readFileSync(join(dir, "cut.json"), "utf8")).toBe('{"segments":[2]}');
     expect(snapshot(dir, "edit")).toBe(false);
+  });
+  it("reverts to a version as a new change, which undo takes back", () => {
+    const dir = project();
+    snapshot(dir, "edit");
+    writeFileSync(join(dir, "edit.json"), '{"v":2}');
+    snapshot(dir, "claude");
+    writeFileSync(join(dir, "edit.json"), '{"v":3}');
+    snapshot(dir, "edit");
+    expect(latest(dir)).toBe(3);
+    expect(readVersion(dir, 1)).toEqual({ plan: '{"v":1}', cut: null });
+    expect(readVersion(dir, 9)).toBeNull();
+    expect(revertTo(dir, 1, "revert")).toBe(true);
+    expect(readFileSync(join(dir, "edit.json"), "utf8")).toBe('{"v":1}');
+    expect(versions(dir).map((v) => [v.n, v.by])).toEqual([[1, "edit"], [2, "claude"], [3, "edit"], [4, "revert"]]);
+    undo(dir);
+    expect(readFileSync(join(dir, "edit.json"), "utf8")).toBe('{"v":3}');
+    expect(revertTo(dir, 9, "revert")).toBe(false);
   });
 });
 

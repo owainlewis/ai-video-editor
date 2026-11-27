@@ -30,6 +30,8 @@ export const Actions = {
   stop: none,
   undo: none,
   redo: none,
+  // Puts the plan and cut back to version `from`, as a new version (a note's Revert in the chat).
+  revert: z.object({ from: z.number().int().min(1) }),
   cut: z.object({ cut: Cut }),
   // `force`: export with QC errors, plan warnings or items not yet approved. Owain's call only.
   render: z

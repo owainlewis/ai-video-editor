@@ -5,10 +5,9 @@ import { type Beat, beatAt, reelBeats } from "../engine/beats";
 import { deleteRange, type Levels, rippleDelete, splitAt, wholeCut } from "../engine/cut";
 import type { CutPlan, Resolved, ResolvedShot } from "../engine/schema";
 import { noteTime } from "../engine/review";
-import { api, type ChatMessage, clock, type Issue, type Project, type Suggestion } from "./api";
+import { api, clock, type Project } from "./api";
 import { BeatBar } from "./Beats";
-import { Clock, playhead, usePlayhead } from "./playhead";
-import { ask } from "./dialog";
+import { playhead, usePlayhead } from "./playhead";
 import { Preflight } from "./Preflight";
 import { ApprovalBadge, useApproval } from "./Approval";
 import { useProject } from "./project";
@@ -34,6 +33,7 @@ import { component } from "./Gallery";
 import { Inspector, NoInspector } from "./Inspector";
 import { SafeArea, Transport, useFit } from "./Transport";
 import { Library } from "./Library";
+import { Chat } from "./Chat";
 import { type Range, Timeline } from "./Timeline";
 
 // The player plays the light preview copies, not the 4K master. `mix`: the mixed sound (voice,
@@ -498,6 +498,12 @@ export const Editor: React.FC<{ slug: string }> = ({ slug }) => {
         )}
         <Chat
           slug={slug}
+          r={r}
+          newest={p.versions?.at(-1)?.n ?? 0}
+          onOpen={(id, t) => {
+            if (r?.shots.find((s) => s.id === id)?.visual) setPicked(id);
+            seek(t);
+          }}
           messages={chat}
           working={working}
           selection={selection}
@@ -576,143 +582,3 @@ export const Shell: React.FC<{ title: string; kind?: string; badge?: React.React
     {children}
   </div>
 );
-
-const Chat: React.FC<{
-  slug: string;
-  messages: ChatMessage[];
-  working: boolean;
-  selection: Range | null;
-  words: { text: string; start: number }[];
-  note: string;
-  setNote: (n: string) => void;
-  issues: Issue[];
-  suggestions: Suggestion[];
-  onSeek: (t: number) => void;
-  onClear: () => void;
-}> = ({ slug, messages, working, selection, words, note, setNote, issues, suggestions, onSeek, onClear }) => {
-  const pending = suggestions.filter((s) => s.status === "pending");
-  const [failed, setFailed] = useState<Record<string, string>>({});
-  // Rejecting asks why; the reason goes with the suggestion, so the next round learns from it.
-  const decide = async (id: string, accept: boolean) => {
-    const note = accept ? "" : await ask({ title: "Reject this suggestion?", body: "Say why if you like. It helps the next round.", placeholder: "Too busy, wrong moment, not what I said…", ok: "Reject", optional: true });
-    if (note === null) return;
-    return api
-      .post(slug, "decide", { id, accept, note })
-      .then(() => setFailed((f) => ({ ...f, [id]: "" })))
-      .catch((e) => setFailed((f) => ({ ...f, [id]: String(e.message) })));
-  };
-  const [showChecks, setShowChecks] = useState(false);
-  const errorCount = issues.filter((i) => i.level === "error").length;
-  const warnCount = issues.length - errorCount;
-  const [error, setError] = useState("");
-  const list = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    list.current?.scrollTo(0, list.current.scrollHeight);
-  }, [messages.length, working]);
-
-  const said = selection ? words.filter((w) => w.start >= selection.start - 0.05 && w.start < selection.end).map((w) => w.text).join(" ") : "";
-  const send = async () => {
-    if (!note.trim() || working) return;
-    setError("");
-    try {
-      await api.post(slug, "chat", { note, selection: selection && { start: selection.start, end: selection.end }, playhead: playhead.get() });
-      setNote("");
-    } catch (e) {
-      setError(String((e as Error).message));
-    }
-  };
-
-  return (
-    <aside className="chat">
-      <div className="panel-bar suggest-bar">
-        <b>Claude</b>
-        <span className="spacer" />
-        {pending.length > 0 && <span className="muted small">{pending.length} to review</span>}
-        <button onClick={() => api.post(slug, "suggest").catch((e) => setError(String(e.message)))} disabled={working}>
-          Suggest graphics
-        </button>
-      </div>
-      {pending.length > 0 && (
-        <div className="drafts">
-          {pending.map((d) => (
-            <div key={d.id} className="draft-card">
-              <button className="quiet when" onClick={() => onSeek(d.start + 0.05)}>
-                {clock(d.start)} · {d.visual.kind} ({d.layout})
-              </button>
-              <p>{d.reason}</p>
-              {failed[d.id] && <p className="error small">{failed[d.id]}</p>}
-              <div className="row">
-                <button className="small" onClick={() => decide(d.id, false)}>
-                  Reject
-                </button>
-                <button className="small primary" onClick={() => decide(d.id, true)}>
-                  Accept
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="messages" ref={list}>
-        {messages.length === 0 && !working && (
-          <p className="hint">
-            <b>Tell Claude what to change</b>
-            Drag on the timeline to select a stretch, or just park the playhead, then write a note. Press M to leave a note for the review instead.
-          </p>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.role}`}>
-            {m.text}
-          </div>
-        ))}
-        {working && <div className="msg tool">Claude is working…</div>}
-      </div>
-      {issues.length > 0 && (
-        <div className="checks">
-          <button className="small" onClick={() => setShowChecks((v) => !v)} title="What the plan's checks found">
-            {errorCount > 0 && <span className="n error">{errorCount} error{errorCount > 1 ? "s" : ""}</span>}
-            {warnCount > 0 && <span className="n warn">{warnCount} warning{warnCount > 1 ? "s" : ""}</span>}
-            <span className="muted">{showChecks ? "Hide" : "Show"}</span>
-          </button>
-          {showChecks && issues.map((i, k) => <p key={k} className={`${i.level} small`}>{i.message}</p>)}
-        </div>
-      )}
-      <div className="compose">
-        {selection ? (
-          <div className="chip">
-            <span>
-              {selection.label ? `${selection.label}, ` : ""}
-              {clock(selection.start)} to {clock(selection.end)}
-              {said ? `: "${said.length > 90 ? said.slice(0, 90) + "…" : said}"` : ""}
-            </span>
-            <button onClick={onClear} title="Clear the selection">×</button>
-          </div>
-        ) : (
-          <div className="chip muted">At <Clock />. Drag on the timeline to select a section.</div>
-        )}
-        <div className="box">
-          <textarea
-            id="chat-note"
-            value={note}
-            placeholder="What should change?"
-            onChange={(e) => setNote(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
-            }}
-          />
-          <div className="row">
-            <span className="muted small">{working ? "Claude is working" : "⌘↩ to send"}</span>
-            {working ? (
-              <button className="small" onClick={() => api.post(slug, "stop")}>Stop</button>
-            ) : (
-              <button className="primary small" onClick={send} disabled={!note.trim()}>
-                Send
-              </button>
-            )}
-          </div>
-        </div>
-        {error && <p className="error small">{error}</p>}
-      </div>
-    </aside>
-  );
-};

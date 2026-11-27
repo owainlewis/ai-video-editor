@@ -12,8 +12,9 @@ import { createServer as createVite } from "vite";
 import { resolveProject } from "../media/project.ts";
 import { liveStatus, slugFor } from "../media/ingest.ts";
 import { readJson, ROOT, safePath, writeJson } from "../media/tools.ts";
-import { ask, isRunning, loadChat, runningNotes, stop, stopAll } from "./agent.ts";
-import { redo, redoable, snapshot, undo, versions } from "./history.ts";
+import { ask, isRunning, loadChat, markReverted, runningNotes, stop, stopAll } from "./agent.ts";
+import { latest, readVersion, redo, redoable, revertTo, snapshot, undo, versions } from "./history.ts";
+import { planChanges } from "../engine/changes.ts";
 import { type ActionData, type ActionName, Actions, isAction } from "../engine/api.ts";
 import { finishSend, loadReview, saveNote, setItem, startSend } from "./review.ts";
 import { qcState } from "../media/qc.ts";
@@ -606,6 +607,23 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
     if (!parsed.success) return send(res, 400, { error: parsed.error.issues.map((i) => `${i.path.join(".") || action}: ${i.message}`).join("; ") });
     const emit = (m: Parameters<Parameters<typeof ask>[5]>[0]) => broadcast({ type: "chat", slug, message: m });
     const changed = () => broadcast({ type: "plan", slug });
+    // A note is done: save what Claude did as one version and say what changed since `from`, the
+    // version it started on, for the chat panel's list under the note.
+    const settle = (from: number) => {
+      snapshot(dir, "claude");
+      changed();
+      const to = latest(dir);
+      if (!from || to === from) return {};
+      const a = readVersion(dir, from);
+      const b = readVersion(dir, to);
+      if (!a || !b) return { to };
+      try {
+        const changes = planChanges(JSON.parse(a.plan), JSON.parse(b.plan));
+        return { to, changes: a.cut === b.cut ? changes : [{ type: "plan" as const, field: "cut" }, ...changes] };
+      } catch {
+        return { to };
+      }
+    };
     const idle = () => {
       if (!liveStatus(dir)?.done && existsSync(join(dir, "status.json"))) throw Object.assign(new Error("a job is already running"), { code: 409 });
     };
@@ -618,10 +636,7 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
     // Each action's work. What it returns is the response; nothing means { ok: true }.
     const handlers: { [K in ActionName]: (input: ActionData<K>) => unknown } = {
       chat: ({ note, selection, playhead }) => {
-        ask(projects, slug, note, selection && selection.end > selection.start ? selection : undefined, playhead, emit, () => {
-          snapshot(dir, "claude");
-          changed();
-        });
+        ask(projects, slug, note, selection && selection.end > selection.start ? selection : undefined, playhead, emit, (_ok, from) => settle(from));
       },
       suggest: () => {
         ask(projects, slug, "Suggest graphics for this video", undefined, 0, emit, changed, SUGGEST(slug));
@@ -664,6 +679,14 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
       stop: () => stop(slug),
       undo: () => ({ ok: undo(dir) }),
       redo: () => ({ ok: redo(dir) }),
+      revert: ({ from }) => {
+        if (isRunning(slug)) throw Object.assign(new Error("Claude is still working on a note"), { code: 409 });
+        if (!readVersion(dir, from)) throw Object.assign(new Error(`no version ${from}`), { code: 404 });
+        const ok = revertTo(dir, from, "revert");
+        if (ok) markReverted(dir, from, latest(dir));
+        changed();
+        return { ok };
+      },
       // The editor's cut edits (split, trim, ripple delete, move, add a clip) write the whole cut,
       // which is saved as a version like any change to the plan.
       cut: ({ cut }) => {
@@ -736,10 +759,9 @@ export async function startServer(port = 4747, opts: { projects?: string } = {})
         if (isRunning(slug)) throw Object.assign(new Error("Claude is still working on the last note"), { code: 409 });
         const sent = startSend(dir, slug, plan(), timeline(dir).words);
         if (!sent) throw Object.assign(new Error("nothing to send: no open notes or changes"), { code: 400 });
-        ask(projects, slug, `Review: ${sent.count} note${sent.count === 1 ? "" : "s"} to work through`, undefined, 0, emit, () => {
+        ask(projects, slug, `Review: ${sent.count} note${sent.count === 1 ? "" : "s"} to work through`, undefined, 0, emit, (_ok, from) => {
           finishSend(dir);
-          snapshot(dir, "claude");
-          changed();
+          return settle(from);
         }, sent.prompt);
         changed();
       },

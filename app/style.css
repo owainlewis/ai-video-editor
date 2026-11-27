@@ -353,6 +353,42 @@ kbd { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 3p
 .msg.user { align-self: flex-end; background: var(--raise); }
 .msg.claude { align-self: flex-start; padding-left: 0; padding-right: 0; }
 .msg.tool { align-self: flex-start; color: var(--faint); font-size: 12px; padding: 0; }
+/* One note to Claude: the note, its steps folded to one line, the answer, what changed. */
+.run { display: flex; flex-direction: column; gap: 6px; }
+.run + .run { padding-top: 10px; border-top: 1px solid var(--line); }
+.run .msg.claude { padding-top: 2px; padding-bottom: 0; }
+.steps { align-self: stretch; font-size: 12px; color: var(--faint); }
+.steps .fold { padding: 2px 0; gap: 6px; color: var(--faint); font-size: 12px; }
+.steps .fold:hover:not(:disabled) { background: transparent; color: var(--ink-2); }
+.steps .caret { display: inline-block; font-size: 9px; transition: transform 0.12s; }
+.steps .caret.open { transform: rotate(90deg); }
+.steps ol { list-style: none; margin: 2px 0 0 4px; padding: 0 0 0 10px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.steps li { line-height: 1.45; overflow-wrap: anywhere; }
+.steps li.now { color: var(--ink-2); }
+.steps li.now::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; border: 1.5px solid var(--line-2); border-top-color: var(--ink-2); vertical-align: -1px; animation: spin 0.8s linear infinite; }
+.run.live .fold { color: var(--ink-2); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.changes { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.changes .label { font-size: 11px; color: var(--faint); }
+.changes ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.changes li + li { border-top: 1px solid var(--line); }
+.changes li > button, .changes li > .row-body, .changes li.plan { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 9px; font-size: 12px; text-align: left; border-radius: 0; color: var(--ink); }
+.changes li > button:hover:not(:disabled) { background: var(--raise); }
+.changes .sign { width: 8px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.changes li.added .sign { color: var(--ink); }
+.changes .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--line-2); }
+.changes .swatch.app { background: var(--clip-app); }
+.changes .swatch.page { background: var(--clip-page); }
+.changes .swatch.card { background: var(--clip-card); }
+.changes .swatch.diagram { background: var(--clip-diagram); }
+.changes .swatch.code { background: var(--clip-code); }
+.changes .kind { color: var(--faint); flex: none; }
+.changes .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes .at { color: var(--faint); font-variant-numeric: tabular-nums; flex: none; }
+.changes li.removed .what { color: var(--faint); text-decoration: line-through; }
+.run .revert { align-self: flex-start; padding: 2px 0; color: var(--faint); font-size: 12px; }
+.run .revert:hover:not(:disabled) { background: transparent; color: var(--ink); text-decoration: underline; }
+.run .reverted { font-size: 12px; color: var(--faint); }
 .checks { padding: 8px 12px 0; max-height: 190px; overflow-y: auto; flex: none; border-top: 1px solid var(--line); }
 .checks > button { padding: 4px 6px; gap: 8px; }
 .checks .n { font-variant-numeric: tabular-nums; }

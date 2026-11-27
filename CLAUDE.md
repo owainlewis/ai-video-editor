@@ -119,6 +119,7 @@ Owain's own shots live in one library for every project, in the folder `STUDIO_B
 
 - **Review:** the Review button, or M at any moment to write a note. See "Review before render".
 - **Inspector:** click a graphic on the timeline (or in the Graphics tab) to edit its big words on screen (hit word, title, header, beats, a card's own title), its layout, where it starts and ends, or remove it. Everything else on a graphic goes through Claude. Saved through `POST /api/projects/<slug>/shot`, which puts the plan back if the change adds an error.
+- **Chat:** each note is one run: your steps fold to one line, then your closing sentence, then the graphics you changed (he clicks one to open it), then Revert for that note alone. So end on what you changed, in plain words; the list shows where.
 - **Library tab:** click a card to put it at the playhead. The library is `styles/library.json`; Owain takes a card out (or adds it back from Removed) in the gallery, on the card opened large. A catalog card in neither list is retired and shows nowhere.
 - **Script tab:** select words and cut them; Tighten proposes retakes, fillers and long pauses (`engine/tighten.ts`) to strike in one go.
 - **Beats (reels):** the reel cut into beats of about 2 s, one at every change on screen (`engine/beats.ts`). Step with ← and →; each lands on the beat's settled frame.
