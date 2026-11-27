@@ -9,8 +9,8 @@ The local API behind the editor. It serves the UI through Vite, serves project f
 ### Modules
 
 - `index.ts`: `startServer(port = 4747)` returns `{ url, close }`. `serveFile(root, req, res, prefix = "")` serves a file with byte ranges and returns false if it did not. `media/qc.ts` uses it too.
-- `agent.ts`: `ask(projects, slug, note, selection, playhead, emit, onDone?, prompt?)`, `stop`, `isRunning`, `loadChat`, `promptFor`, types `ChatMessage` and `Selection`.
-- `history.ts`: `snapshot(project, by)`, `undo`, `redo`, `versions`, `redoable`, type `Version`.
+- `agent.ts`: `ask(projects, slug, note, selection, playhead, emit, onDone?, prompt?)`, `stop`, `isRunning`, `loadChat`, `promptFor`, types `ChatMessage` and `Selection`. `onDone(ok, from)` runs when Claude stops, given the version the note started on; what it returns goes on Claude's last message as `run` (`engine/changes.ts`, `Run`: time taken, versions `from` and `to`, and `planChanges` between them). Claude's answer is written when the run ends, not when its result arrives, so it carries the run.
+- `history.ts`: `snapshot(project, by)`, `undo`, `redo`, `versions`, `redoable`, `latest`, `readVersion(project, n)`, `revertTo(project, n, by)`, type `Version`.
 - `insert.ts`: plan edits that roll back on new errors: `insertAt`, `placeOver`, `dropBroll`, `moveShotStart`, `moveShotEnd`, `editShot`, `placeCard`.
 - `assets.ts`: `listAssets(dir, slug)`, `saveAsset(dir, name, req)`, type `Asset`.
 - `suggest.ts`: `loadSuggestions`, `checkSuggestions`, `decide`, `SUGGEST`, type `Suggestion`.
@@ -58,6 +58,7 @@ API paths are split on `/` and compared by position. Extra trailing segments are
 | POST | `/api/projects/<slug>/stop` | Stops the Claude run. |
 | POST | `/api/projects/<slug>/undo` | Returns `{ ok }`, false when there is nothing to undo. |
 | POST | `/api/projects/<slug>/redo` | Returns `{ ok }`, false when there is nothing to redo. |
+| POST | `/api/projects/<slug>/revert` | `{ from }`. Puts version `from` back as a new version (`by` "revert"). 409 while Claude works, 404 for no such version. |
 | POST | `/api/projects/<slug>/cut` | `{ cut }`. Validates and saves `cut.json`. |
 | POST | `/api/projects/<slug>/render` | `{ part?, from?, to?, force? }`. Starts a render job. |
 | POST | `/api/projects/<slug>/qc` | Starts a QC job that keeps unchanged graphics' results. |

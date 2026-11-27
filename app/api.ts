@@ -7,7 +7,8 @@ import type { Item, Review } from "../engine/review";
 import type { CutPlan, Resolved, Word } from "../engine/schema";
 
 export type { ApprovalState, Issue };
-export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string };
+// Claude's last message on a note carries `run`: its time and what it changed (engine/changes.ts).
+export type ChatMessage = { role: "user" | "claude" | "tool"; text: string; at: string; run?: import("../engine/changes").Run };
 export type Status = { stage: string; done: boolean; error?: string } | null;
 export type Asset = { path: string; name: string; kind: "video" | "image"; thumb: string; duration?: number };
 export type LibraryClip = { id: string; duration: number; description: string; tags: string[]; thumb: string };
